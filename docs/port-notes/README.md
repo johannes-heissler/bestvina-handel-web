@@ -15,11 +15,13 @@ in `docs/`.
 
 ## Status
 
+✅ approved · 🔍 ported, decisions awaiting review · ✍️ note awaiting review
+
 | #   | Module                                     | C# files                                     | Note | Port | Tests |
 | --- | ------------------------------------------ | -------------------------------------------- | ---- | ---- | ----- |
 | 0   | Scaffold                                   | –                                            | –    | ✅   | ✅    |
 | 1   | [Helpers](01-helpers.md)                   | `Helpers/*`                                  | ✅   | ✅   | ✅    |
-| 2   | Math value types                           | `Matrix3x3`, `VectorHelpers`, Unity types    |      |      |       |
+| 2   | [Math value types](02-math.md)             | `Matrix3x3`, `VectorHelpers`, Unity types    | 🔍   | ✅   | ✅    |
 | 3   | Curves, points, geodesics                  | `GeometricObjects_Abstract/*`                |      |      |       |
 | 4   | Surfaces, homeomorphisms                   | `GeometricObjects_Abstract/*`                |      |      |       |
 | 5   | Graph                                      | QuikGraph, `GraphHelpers`                    |      |      |       |
