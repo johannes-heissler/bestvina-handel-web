@@ -2,7 +2,7 @@
 
 **C# source:** `Assets/Scripts/Helpers/` (8 files, 756 lines)
 **Target:** `src/util/` (plus pieces routed to later modules)
-**Status:** ✍️ waiting for review
+**Status:** ✅ approved 2026-09-24 (Q1: yes, see [design/embedding.md](../design/embedding.md); Q2, Q3: as recommended)
 
 ## Summary
 

@@ -12,18 +12,19 @@ The code is split into layers. **A layer may only import from the layers above i
 enforces the most important rule: nothing outside `render/` and `ui/` may import three.js or rendering/UI
 code.
 
-| Folder          | Contents                                                                            | C# origin                                                                                |
-| --------------- | ----------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
-| `src/util/`     | Generic helpers: iteration, strings, numbers, words with cancellation. No geometry. | `Helpers/EnumerableHelpers`, `StringHelpers`, `NumberHelpers`                            |
-| `src/math/`     | Value types: `Complex`, `Vec3`, `Mat3`, `Rect`, `Color`.                            | `Helpers/Matrix3x3`, `VectorHelpers`, Unity `Vector3`/`Color`, `System.Numerics.Complex` |
-| `src/geometry/` | Surfaces, points, curves, geodesics, homeomorphisms, tangent vectors.               | `GeometricObjects_Abstract/*`, `Helpers/Tangent*`                                        |
-| `src/graph/`    | A small undirected multigraph, used for the fibred surface's graph.                 | QuikGraph, `Helpers/GraphHelpers`                                                        |
-| `src/fibred/`   | Junctions, strips, edge paths, gates, and the `FibredSurface` moves.                | `FibredSurfaces/*`                                                                       |
-| `src/examples/` | Construction of surfaces and example maps from parameters.                          | `Surfaces_Explicit/SurfaceGenerator`                                                     |
-| `src/render/`   | three.js scene: curves as ribbons/tubes, surfaces as meshes, picking.               | `GeometricObjects_Visualization/*`, `Kamera/*`                                           |
-| `src/ui/`       | Svelte components: menus, algorithm history, graph-map editor.                      | `UIElements/*`, `Tooltip/*`                                                              |
+| Folder           | Contents                                                                                                                  | C# origin                                                                                |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| `src/util/`      | Generic helpers: iteration, strings, numbers, words with cancellation. No geometry.                                       | `Helpers/EnumerableHelpers`, `StringHelpers`, `NumberHelpers`                            |
+| `src/math/`      | Value types: `Complex`, `Vec3`, `Mat3`, `Rect`, `Color`.                                                                  | `Helpers/Matrix3x3`, `VectorHelpers`, Unity `Vector3`/`Color`, `System.Numerics.Complex` |
+| `src/geometry/`  | Surfaces, points, curves, geodesics, homeomorphisms, tangent vectors.                                                     | `GeometricObjects_Abstract/*`, `Helpers/Tangent*`                                        |
+| `src/graph/`     | A small undirected multigraph, used for the fibred surface's graph.                                                       | QuikGraph, `Helpers/GraphHelpers`                                                        |
+| `src/fibred/`    | Junctions, strips, edge paths, combinatorial maps (g and μ), gates, and the `FibredSurface` moves.                        | `FibredSurfaces/*`                                                                       |
+| `src/examples/`  | Construction of surfaces and example maps from parameters.                                                                | `Surfaces_Explicit/SurfaceGenerator`                                                     |
+| `src/embedding/` | Layout: derives vertex positions and edge curves from the combinatorics (see [design/embedding.md](design/embedding.md)). | new, replaces the curves stored on strips                                                |
+| `src/render/`    | three.js scene: curves as ribbons/tubes, surfaces as meshes, picking.                                                     | `GeometricObjects_Visualization/*`, `Kamera/*`                                           |
+| `src/ui/`        | Svelte components: menus, algorithm history, graph-map editor.                                                            | `UIElements/*`, `Tooltip/*`                                                              |
 
-Everything from `util/` to `examples/` is **headless**: plain TypeScript that runs in Node without a
+Everything from `util/` to `embedding/` is **headless**: plain TypeScript that runs in Node without a
 browser. That keeps the mathematical core fully unit-testable.
 
 ## State and mutation
