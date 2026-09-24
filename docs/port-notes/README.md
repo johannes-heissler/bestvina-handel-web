@@ -15,14 +15,14 @@ in `docs/`.
 
 ## Status
 
-| #   | Module                                     | C# files                                     | Note      | Port | Tests |
-| --- | ------------------------------------------ | -------------------------------------------- | --------- | ---- | ----- |
-| 0   | Scaffold                                   | –                                            | –         | ✅   | ✅    |
-| 1   | [Helpers](01-helpers.md)                   | `Helpers/*`                                  | ✍️ review |      |       |
-| 2   | Math value types                           | `Matrix3x3`, `VectorHelpers`, Unity types    |           |      |       |
-| 3   | Curves, points, geodesics                  | `GeometricObjects_Abstract/*`                |           |      |       |
-| 4   | Surfaces, homeomorphisms                   | `GeometricObjects_Abstract/*`                |           |      |       |
-| 5   | Graph                                      | QuikGraph, `GraphHelpers`                    |           |      |       |
-| 6   | Junctions, strips, edge paths, gates       | `FibredSurfaces/{Junction,Strip,EdgePath,…}` |           |      |       |
-| 7+  | One note per `FibredSurface` move          | `FibredSurfaces/FibredSurface*.cs`           |           |      |       |
-| …   | Suggestion system, examples, rendering, UI |                                              |           |      |       |
+| #   | Module                                     | C# files                                     | Note | Port | Tests |
+| --- | ------------------------------------------ | -------------------------------------------- | ---- | ---- | ----- |
+| 0   | Scaffold                                   | –                                            | –    | ✅   | ✅    |
+| 1   | [Helpers](01-helpers.md)                   | `Helpers/*`                                  | ✅   | ✅   | ✅    |
+| 2   | Math value types                           | `Matrix3x3`, `VectorHelpers`, Unity types    |      |      |       |
+| 3   | Curves, points, geodesics                  | `GeometricObjects_Abstract/*`                |      |      |       |
+| 4   | Surfaces, homeomorphisms                   | `GeometricObjects_Abstract/*`                |      |      |       |
+| 5   | Graph                                      | QuikGraph, `GraphHelpers`                    |      |      |       |
+| 6   | Junctions, strips, edge paths, gates       | `FibredSurfaces/{Junction,Strip,EdgePath,…}` |      |      |       |
+| 7+  | One note per `FibredSurface` move          | `FibredSurfaces/FibredSurface*.cs`           |      |      |       |
+| …   | Suggestion system, examples, rendering, UI |                                              |      |      |       |

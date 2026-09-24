@@ -219,3 +219,15 @@ it once the geometry is ported and tested._
 - `number.test.ts`: `gcd`, `lcm` (including overflow → throws), `mod` with negative arguments, `geometricMean`.
 - `strings.test.ts`: `formatSI` across the prefixes and boundaries (999, 1000, 0.001), `ordinal` for 1–4, 11–13,
   21, 111–113, `truncateEnd`/`truncateMiddle`.
+
+---
+
+## Port (done)
+
+Ported to `src/util/`: `iter.ts`, `words.ts`, `number.ts`, `strings.ts`, each with a test file.
+
+Deviation from the proposal above: following Q1, `words.ts` has **no `SignedLetter` type**. Letters are
+arbitrary values compared with `===`, and every function takes the letter's `inverse` as a parameter. For
+side-crossing words this means that μ uses oriented edges of G₀ as letters (see
+[design/embedding.md](../design/embedding.md)), just as g uses oriented strips. `reduceWord` and `isReduced`
+were added for pulling tight.
