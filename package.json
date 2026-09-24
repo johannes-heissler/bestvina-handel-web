@@ -1,0 +1,30 @@
+{
+  "name": "bestvina-handel-web",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Interactive visualization of the Bestvina–Handel algorithm for surface homeomorphisms, in the browser.",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "test": "vitest",
+    "test:run": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "check": "tsc --noEmit && eslint . && vitest run"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "eslint": "^10.11.0",
+    "prettier": "^3.9.9",
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.70.1",
+    "vite": "^8.3.1",
+    "vitest": "^5.0.1"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}
