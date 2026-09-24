@@ -24,6 +24,11 @@ export default tseslint.config(
     },
   },
   {
+    // Tests may assert that an element exists.
+    files: ["src/**/*.test.ts"],
+    rules: { "@typescript-eslint/no-non-null-assertion": "off" },
+  },
+  {
     files: ["src/render/**/*.ts", "src/ui/**/*.ts", "src/main.ts"],
     rules: { "no-restricted-imports": "off" },
   },
