@@ -52,23 +52,37 @@ export function polygonSingularities(fs: FibredSurface, tt: TrainTrack = trainTr
 }
 
 /**
- * Replaces the artificial puncture p by the orbit Q of the singularity q:
- *
- * 1. **Blow up** the junctions of Q into their infinitesimal polygons: G₀ has a junction per switch there, the
- *    polygon's infinitesimal branches as new strips, and g₀ is g with the infinitesimal branches inserted at the
- *    turns at Q (from g_τ). This is a spine of Σ ∖ ({p} ∪ Q) with a train-track map of the same growth (the thesis,
- *    § "The goal").
- * 2. **Fill in p:** delete one infinitesimal branch ε of q's polygon. Its other side is p's face, whose boundary word
- *    reads ε β; with p filled in, ε β bounds a disk, so ε is replaced by β⁻¹ in all images. The faces of p and q merge,
- *    and the result is a spine of Σ ∖ Q with a carrying map of the same f̂.
+ * Replaces the artificial puncture p by the orbit Q of the singularity q: {@link blowUpOrbit}, then
+ * {@link fillPuncture} with the first infinitesimal branch of q's polygon.
  *
  * The result has no periphery (Q is a single orbit of punctures), and its μ is reset to the identity onto a copy,
  * since the surface is now punctured differently. Continuing the algorithm finds the efficient representative on
- * Σ ∖ Q; by the thesis there is one with growth < λ, so the growth drops strictly.
+ * Σ ∖ Q (see port note 15 for what that implies for the growth).
+ */
+export function replacePunctureBySingularity(fs: FibredSurface, q: Singularity): FibredSurface {
+  const blownUp = blowUpOrbit(fs, q);
+  const epsilon = blownUp.polygons.get(q.junction)?.[0];
+  if (epsilon === undefined) throw new Error(`${q.junction} has no infinitesimal polygon`);
+  return fillPuncture(blownUp.surface, epsilon);
+}
+
+/** The result of {@link blowUpOrbit}. */
+export interface BlownUp {
+  /** G₀ with g₀; its periphery consists of the polygons of Q. */
+  readonly surface: FibredSurface;
+  /** For each junction of Q, the strips of G₀ that form its polygon. */
+  readonly polygons: ReadonlyMap<Vertex, readonly Edge[]>;
+}
+
+/**
+ * Blows up the junctions of the orbit Q into their infinitesimal polygons (the thesis, § "The goal"): G₀ has a
+ * junction per switch there and the polygon's infinitesimal branches as new strips, and g₀ is g with the
+ * infinitesimal branches inserted at the turns at Q (read off g_τ). This is a spine of Σ ∖ ({p} ∪ Q) with a
+ * train-track map of the same growth; the polygons form its periphery.
  *
  * @throws Error if a junction outside Q is mapped into Q (not supported yet).
  */
-export function replacePunctureBySingularity(fs: FibredSurface, q: Singularity): FibredSurface {
+export function blowUpOrbit(fs: FibredSurface, q: Singularity): BlownUp {
   const tt = trainTrack(fs);
   const inQ = new Set(q.orbit);
   for (const v of fs.graph.vertices)
@@ -77,14 +91,11 @@ export function replacePunctureBySingularity(fs: FibredSurface, q: Singularity):
         `The junction ${v} outside the orbit of ${q.junction} is mapped into it; not supported yet`,
       );
 
-  // Step 1: G₀.
   const graph = new RibbonGraph();
   const vertexOf = new Map<Vertex, Vertex>(); // junction outside Q, or switch at Q → vertex of G₀
   for (const v of fs.graph.vertices) if (!inQ.has(v)) vertexOf.set(v, graph.addVertex(v.name, v.color));
-  for (const s of tt.graph.vertices) {
-    const junction = tt.junctionOf.get(s) as Vertex;
-    if (inQ.has(junction)) vertexOf.set(s, graph.addVertex(s.name, s.color));
-  }
+  for (const s of tt.graph.vertices)
+    if (inQ.has(tt.junctionOf.get(s) as Vertex)) vertexOf.set(s, graph.addVertex(s.name, s.color));
   const endVertex = (e: OrientedEdge) =>
     vertexOf.get(inQ.has(e.source) ? (tt.switchOf.get(e) as Vertex) : e.source) as Vertex;
 
@@ -95,15 +106,20 @@ export function replacePunctureBySingularity(fs: FibredSurface, q: Singularity):
       graph.addEdge(endVertex(e.forward), endVertex(e.backward), { name: e.name, color: e.color }),
     );
   const atQ = (branch: Edge) => inQ.has(tt.junctionOf.get(branch.source) as Vertex);
+  const polygons = new Map<Vertex, Edge[]>(q.orbit.map((v) => [v, []]));
   for (const branch of tt.graph.edges)
-    if (tt.kind.get(branch) === "infinitesimal" && atQ(branch))
-      edgeOf.set(
-        branch,
-        graph.addEdge(vertexOf.get(branch.source) as Vertex, vertexOf.get(branch.target) as Vertex, {
+    if (tt.kind.get(branch) === "infinitesimal" && atQ(branch)) {
+      const edge = graph.addEdge(
+        vertexOf.get(branch.source) as Vertex,
+        vertexOf.get(branch.target) as Vertex,
+        {
           name: branch.name,
           color: branch.color,
-        }),
+        },
       );
+      edgeOf.set(branch, edge);
+      polygons.get(tt.junctionOf.get(branch.source) as Vertex)?.push(edge);
+    }
   const strip = new Map([...tt.realBranch].map(([e, branch]) => [branch, e]));
   const orient = (x: OrientedEdge): OrientedEdge => {
     const edge = edgeOf.get(strip.get(x.edge) ?? x.edge) as Edge;
@@ -129,27 +145,35 @@ export function replacePunctureBySingularity(fs: FibredSurface, q: Singularity):
     g0.setImage(edge.forward, EdgePath.from(tt.gTau.image(branch.forward).letters.filter(keep).map(orient)));
   }
 
-  // Step 2: fill in p by deleting an infinitesimal branch ε of q's polygon.
-  const epsilonBranch = tt.graph.edges.find(
-    (b) => tt.kind.get(b) === "infinitesimal" && tt.junctionOf.get(b.source) === q.junction,
-  );
-  if (epsilonBranch === undefined) throw new Error(`${q.junction} has no infinitesimal polygon`);
-  const epsilon = edgeOf.get(epsilonBranch) as Edge;
-  // The boundary word of p is the one that contains strips; the other side of ε is the polygon of q.
-  const isStrip = (x: OrientedEdge) => [...tt.realBranch.keys()].some((e) => edgeOf.get(e) === x.edge);
-  const puncture = graph
+  const surface = new FibredSurface({ graph, g: g0, peripheral: [...polygons.values()].flat() });
+  surface.onError = fs.onError;
+  return { surface, polygons };
+}
+
+/**
+ * Fills in the puncture p of a blown-up surface by deleting the strip ε of a polygon. Its other side is p's face
+ * (p is the only puncture whose boundary word contains non-peripheral strips), whose boundary word reads ε β.
+ * With p filled in, ε β bounds a disk, so ε ≃ β⁻¹, and ε is replaced by β⁻¹ in all images: the homotopy
+ * equivalence that collapses the disk of p onto the rest of its boundary. The faces of p and of ε's polygon merge.
+ *
+ * Returns a new fibred surface on the same graph (without ε), without periphery and with μ reset.
+ */
+export function fillPuncture(fs: FibredSurface, epsilon: Edge): FibredSurface {
+  const puncture = fs.graph
     .boundaryWords()
-    .find((w) => w.letters.some((x) => x.edge === epsilon) && w.letters.some(isStrip));
-  if (puncture === undefined) throw new Error("The branch ε doesn't lie on the boundary of p");
+    .find(
+      (w) => w.letters.some((x) => x.edge === epsilon) && w.letters.some((x) => !fs.peripheral.has(x.edge)),
+    );
+  if (puncture === undefined) throw new Error(`${epsilon} doesn't lie on the boundary of the puncture`);
   const k = puncture.letters.findIndex((x) => x.edge === epsilon);
   const x = puncture.at(k) as OrientedEdge;
-  const beta = puncture.slice(k + 1).concat(puncture.slice(0, k)); // B = x β
+  const beta = puncture.slice(k + 1).concat(puncture.slice(0, k)); // the boundary word is x β
   const forwardImage = x.isForward ? beta.inverse : beta; // x ≃ β⁻¹
-  g0.substituteInImages((e) => (e === epsilon ? forwardImage : undefined));
-  graph.removeEdge(epsilon);
-  g0.forgetEdge(epsilon);
+  fs.g.substituteInImages((e) => (e === epsilon ? forwardImage : undefined));
+  fs.graph.removeEdge(epsilon);
+  fs.g.forgetEdge(epsilon);
 
-  const result = new FibredSurface({ graph, g: g0 });
+  const result = new FibredSurface({ graph: fs.graph, g: fs.g });
   result.onError = fs.onError;
   return result;
 }
