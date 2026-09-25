@@ -23,7 +23,7 @@ in `docs/`.
 | 1   | [Helpers](01-helpers.md)                                       | `Helpers/*`                                         | ✅   | ✅   | ✅    |
 | 2   | [Math value types](02-math.md)                                 | `Matrix3x3`, `VectorHelpers`, Unity types           | 🔍   | ✅   | ✅    |
 | 5   | [Ribbon graph](05-graph.md)                                    | QuikGraph, `GraphHelpers`, cyclic order in `Strip`  | 🔍   | ✅   | ✅    |
-| 6   | [Edge paths and combinatorial maps](06-edge-paths-and-maps.md) | `EdgePath`, `Strip.EdgePath`, `TransitionMatrix`, … | ✍️   |      |       |
+| 6   | [Edge paths and combinatorial maps](06-edge-paths-and-maps.md) | `EdgePath`, `Strip.EdgePath`, `TransitionMatrix`, … | ✅   | ✅   | ✅    |
 | 7+  | One note per `FibredSurface` move                              | `FibredSurfaces/FibredSurface*.cs`                  |      |      |       |
 | 3   | Curves, points, geodesics                                      | `GeometricObjects_Abstract/*`                       |      |      |       |
 | 4   | Surfaces, homeomorphisms                                       | `GeometricObjects_Abstract/*`                       |      |      |       |

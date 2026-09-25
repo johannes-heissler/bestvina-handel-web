@@ -16,6 +16,7 @@
  * @module
  */
 import { Color } from "../math/color";
+import { EdgePath } from "./edge-path";
 import { invertName } from "./names";
 
 /** A vertex (junction). Its star is stored in the graph. */
@@ -210,18 +211,28 @@ export class RibbonGraph {
   /**
    * All boundary words, each starting at its first oriented edge in the order of {@link orientedEdges}.
    * Together they contain every oriented edge exactly once.
+   *
+   * With `subgraph`, the boundary words of the subgraph consisting of these edges, i.e. with the cyclic
+   * orders restricted to the subgraph (the C# `BoundaryWords(subgraphEdges)`).
    */
-  boundaryWords(): OrientedEdge[][] {
+  boundaryWords(subgraph?: ReadonlySet<Edge>): EdgePath[] {
+    const inSubgraph = (e: OrientedEdge) => subgraph === undefined || subgraph.has(e.edge);
+    // σ restricted to the subgraph: the next edge in the cyclic order that belongs to the subgraph.
+    const nextInSubgraph = (e: OrientedEdge) => {
+      let f = this.next(e);
+      while (!inSubgraph(f)) f = this.next(f);
+      return f;
+    };
     const visited = new Set<OrientedEdge>();
-    const words: OrientedEdge[][] = [];
-    for (const start of this.orientedEdges) {
+    const words: EdgePath[] = [];
+    for (const start of this.orientedEdges.filter(inSubgraph)) {
       if (visited.has(start)) continue;
       const word: OrientedEdge[] = [];
-      for (let e = start; !visited.has(e); e = this.nextAlongBoundary(e)) {
+      for (let e = start; !visited.has(e); e = nextInSubgraph(e.reversed)) {
         visited.add(e);
         word.push(e);
       }
-      words.push(word);
+      words.push(EdgePath.from(word));
     }
     return words;
   }

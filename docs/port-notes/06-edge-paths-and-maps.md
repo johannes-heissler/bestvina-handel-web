@@ -6,7 +6,7 @@
 `Gate.cs` (edge cycles, gates), `EdgePoint.cs`
 **Target:** `src/graph/edge-path.ts`, `src/graph/combinatorial-map.ts`, `src/graph/path-parser.ts`,
 `src/fibred/gates.ts`
-**Status:** ✍️ **proposal, not ported yet.** Q1 needs your decision.
+**Status:** ✅ approved 2026-09-25 with **decision C2** for Q1 (see below), and ported.
 
 ## What the C# code does
 
@@ -84,7 +84,12 @@ class EdgePath {
 
 All algorithms (moves, transition matrices, gates, parsing results) work only on this.
 
-### 2. 🔍 Q1: what happens to named paths and conjugations?
+### 2. Q1: what happens to named paths and conjugations?
+
+> **Decision (2026-09-25): C2.** The moves break named paths and conjugations anyway, so they are not kept. The parser still accepts
+> them and expands them right away. Two additions: the map is shown exactly as typed until the first move changes it
+> (UI module), and later, display-only detection of powers and conjugates such as `(ab)³` or `w^u` in any path (a UI
+> feature, independent of the core).
 
 They're a display feature that the C# code carries through all moves. Options:
 
@@ -169,3 +174,32 @@ problem. A property test checks that parsing a printed path gives the same path.
 - Gates: a hand-computed example, plus the C# `FindGates` results exported from an example run (golden test).
 - Parser: every syntax from `ParseMap`, conjugation `^` and `°`, parentheses, inverse `'`, definitions, error
   positions, and the parse(print(p)) = p property.
+
+---
+
+## Port (done)
+
+| File                             | Contents                                                                                                                                                                                                                                            |
+| -------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `src/graph/edge-path.ts`         | Flat immutable `EdgePath`: inverse (cached), `concat`, `concatReduced`, `slice`, `reduced`, `cyclicallyReduced`, `substitute`, `count`, `equals`, `isRotationOf`, `key`, continuity                                                                 |
+| `src/graph/combinatorial-map.ts` | `CombinatorialMap`: images, `fromEdgeImages` (infers vertex images), `after` (composition), `substituteInImages`, `copy` along a `GraphCopy`, `transitionMatrix`, `totalLength`, `checkContinuity`, `boundaryWordReport` / `preservesBoundaryWords` |
+| `src/graph/transition-matrix.ts` | `TransitionMatrix` with explicit row and column edges and dense entries                                                                                                                                                                             |
+| `src/graph/path-parser.ts`       | `parseEdgePath` (recursive descent, same syntax as C#) and `parseMap` (all C# entry formats)                                                                                                                                                        |
+| `src/fibred/gates.ts`            | `findGates` via Dgᴺ, with the optional grouping of junctions                                                                                                                                                                                        |
+
+Also changed: `RibbonGraph.boundaryWords(subgraph?)` now returns `EdgePath`s and supports subgraphs (restricted
+cyclic orders).
+
+**Deviations from the proposal:** pre- and postcomposition are not separate methods; they are `h.after(g)` and
+`g.after(h)`, and the fibred surface decides which one replaces g. `EdgePoint` is ported with the
+inefficiencies (next modules), where it is used.
+
+**Two more C# bugs fixed in `parseMap`:** definitions are processed in the order they appear (C# iterated an
+unordered `HashSet`, so a definition using another one could fail at random), and a definition name with
+an uppercase letter no longer crashes (C# lowercased the key and then looked up the lowercased key in the original
+dictionary).
+
+**Tests:** 35 in `edge-path.test.ts`, `path-parser.test.ts`, `combinatorial-map.test.ts` and `gates.test.ts`. Among them: the
+torus map a ↦ ab, b ↦ bab (transition matrix, boundary word preserved, gates {a}, {b}, {A, B}), a μ-like map
+between two different graphs, associativity of composition, the continuity checks, error positions of the
+parser, and parse(print(p)) = p for 100 random paths.

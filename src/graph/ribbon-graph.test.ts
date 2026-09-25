@@ -10,7 +10,7 @@ function normalizedBoundaryWords(graph: RibbonGraph): string[] {
   return graph
     .boundaryWords()
     .map((word) => {
-      const letters = word.map((e) => e.name);
+      const letters = word.letters.map((e) => e.name);
       const rotations = letters.map((_, i) => [...letters.slice(i), ...letters.slice(0, i)].join(""));
       return rotations.sort()[0] as string;
     })
