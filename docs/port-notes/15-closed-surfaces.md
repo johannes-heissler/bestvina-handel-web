@@ -2,8 +2,8 @@
 
 **Source:** not in the C# code. This is the thesis, § "Closed surfaces and cutting" (`8 RestOfAlg/50ClosedSurface.tex`),
 which the author wrote to be easier to follow than the original paper.
-**Target:** `src/fibred/moves/fill-puncture.ts` (the shortcut), `src/fibred/singular-leaves.ts` (stages 1–2 of the cutting)
-**Status:** 🔍 **implemented as a shortcut** (see below; the author's confirmation of the equivalence is pending). Stages 1–2 of the cutting are implemented too; stages 3–5 are on hold.
+**Target:** `src/fibred/singular-leaves.ts`, `src/fibred/strands.ts`, `src/fibred/cut-along-leaf.ts`, `src/fibred/moves/cut-closed-surface.ts` (cutting); `src/fibred/moves/fill-puncture.ts` (shortcut)
+**Status:** 🔍 **both routes implemented** and agreeing on the author's example: the thesis's cutting move (`cut-closed-surface.ts`) and the shortcut (`fill-puncture.ts`).
 
 ## The problem
 
@@ -110,3 +110,56 @@ implement the case of a single puncture p, and give a clear error for several.
 `src/fibred/singular-leaves.test.ts` (4 tests), on the closed-surface example: the two sides of each arc stack to the same width, there are 15
 prongs, every traced prong is a train path (real and infinitesimal branches alternating, width positions inside the branches), and f maps
 prongs to prongs (the test above).
+
+## Update (2026-09-25): both routes
+
+The author's review of the shortcut: it is clever, but λ can rise first (it does: 4.48–13.18 on the example right after
+filling in p), so the decrease of λ is only guaranteed by the argument of the cutting move, and it might not always apply.
+Decision: **implement both.** The full trace of the shortcut is in [docs/examples/closed-genus-2.md](../examples/closed-genus-2.md).
+
+### Answers to the questions about the shortcut
+
+- **ε doesn't need to be fixed by g₀.** On the example it never is (the polygon at v2 is rotated, the others have period 2).
+  Filling in p is the homotopy equivalence that collapses the disk of p through its free edge ε (ε ↦ β⁻¹); g₀ extends over
+  that disk because g₀(B) is conjugate to B. Exactly the faces of p and q merge; all other polygons stay.
+- **Where the shortcut can fail:** with several genuine punctures, the other side of ε may be a different puncture. Only
+  polygon branches that border p may be used then.
+
+### The cutting move, implemented
+
+1. **Positions of the image strands** (`strands.ts`): f maps the arc of each switch s to the arc of g_τ(s) by h ↦ c_s + h/λ.
+   The offsets c_s come from the prong corners (which f maps to prong corners), propagated along the branches. The lower edge
+   of each image strip is then traced like a leaf. Checked: every strand runs along g_τ of its branch, and the strands tile
+   every branch without gaps.
+2. **The slits** (`cut-along-leaf.ts`): L through n real branches (ending on the arc right after a real branch), and
+   f⁻ʲ[L] = the preimage prong traced to length ℓ(L)/λʲ, for j < P, the period of the prong.
+3. **The cut:** subdivide the real branches where preimage slits end, split the pieces at the slit heights, and split each
+   switch arc where both sides are cut. g′ follows the image strands. **One subtlety:** heights are measured from the bottom
+   of the arc where a traversal starts. For infinitesimal branches (which leave a switch to the left) that is the
+   rectangle's top, so the image is flipped when exactly one of source and target branch is infinitesimal.
+   Checked for every prong and n = 1, 2, 3: g′ is continuous, the switch equation holds at every new switch, and **the growth
+   of g′ is exactly λ** (the cut doesn't change f).
+4. **Prolonging L** (Q2): n is increased until the boundary word of p is a circle attached at a single switch; the candidate
+   prongs are tried in turn (`cutClosedSurface`).
+5. **Removing B** (Lemma "Removing an almost peripheral subgraph"): B's branches are deleted from all images, and B is
+   contracted into its attachment switch.
+6. **Filling the other singularities (new).** The infinitesimal polygons of the singularities that were not cut bound
+   **disks**, not punctures, so τ′ ∖ B is not yet a spine of Σ ∖ Q (on the example χ was −7 instead of −3). Each such disk
+   is filled in by deleting one polygon branch ε, replaced by the rest of the polygon reversed. The thesis leaves this step
+   implicit.
+
+### Results on the example
+
+| q      | L                                    | after removing B | after the algorithm                |
+| ------ | ------------------------------------ | ---------------- | ---------------------------------- |
+| v2     | 16 real branches                     | λ = 4.2282       | λ = 4.2121 (4 junctions, 7 strips) |
+| v3     | 18 real branches                     | λ = 4.2921       | λ = 4.2121 (3 junctions, 7 strips) |
+| v4     | 18 real branches                     | λ = 4.2921       | λ = 4.2121 (3 junctions, 7 strips) |
+| v0, v1 | no cut found within 30 real branches |                  |                                    |
+
+- **With the cutting, λ drops right away** (below 4.3152 directly after removing B), as the Lemma says. With the shortcut it
+  first rises.
+- **Both routes end at the same λ ≈ 4.2121**, for every choice.
+- For v0 and v1, the number of switches of valence > 2 along p's boundary plateaus (at 7–9) within 30 branches. That is where the
+  thesis's refinement (take the preimage leaf that first comes within the smallest infinitesimal width of the boundary) or
+  longer leaves would be needed. Not implemented yet.
