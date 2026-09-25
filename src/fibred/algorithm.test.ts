@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { runAlgorithm } from "./algorithm";
+import { classify, runAlgorithm } from "./algorithm";
 import { FibredSurface } from "./fibred-surface";
 import { inefficiencies } from "./moves/inefficiency";
 import { perronFrobenius } from "./perron-frobenius";
@@ -41,5 +41,30 @@ describe("runAlgorithm", () => {
     runAlgorithm(fs);
     expect(fs.checkIntegrity()).toEqual([]);
     expect(growth(fs)).toBeLessThanOrEqual(before + 1e-9);
+  });
+});
+
+describe("classify", () => {
+  it("recognizes the three types", () => {
+    expect(classify(FibredSurface.fromText([["a", "b", "A", "B"]], "a -> a b, b -> b a b"))).toMatchObject({
+      kind: "pseudo-Anosov",
+    });
+    expect(classify(FibredSurface.fromText([["a", "b", "A", "B"]], "a -> b, b -> A"))).toEqual({
+      kind: "finite order",
+      order: 4,
+    });
+    const reducible = FibredSurface.fromText(
+      [["a", "b", "A", "B", "c", "d", "C", "D"]],
+      "a -> a b, b -> b a b",
+    );
+    expect(classify(reducible).kind).toBe("reducible");
+    reducible.ignoreReducible = true;
+    expect(classify(reducible).kind).toBe("pseudo-Anosov");
+  });
+
+  it("stops the algorithm at a reduction unless it is ignored", () => {
+    const fs = FibredSurface.fromText([["a", "b", "A", "B", "c", "d", "C", "D"]], "a -> a b B b, b -> b a b");
+    expect(runAlgorithm(fs)).toEqual(["pull tight"]);
+    expect(classify(fs).kind).toBe("reducible");
   });
 });

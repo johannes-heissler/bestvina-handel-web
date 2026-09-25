@@ -19,6 +19,7 @@ import {
 } from "./moves/inefficiency";
 import { loosePositions, pullTight } from "./moves/pull-tight";
 import { perronFrobenius } from "./perron-frobenius";
+import { finiteOrder, type ReductionCandidate, reductionCandidates } from "./moves/reducibility";
 import {
   defaultStripToRemove,
   removeValenceOneJunction,
@@ -54,6 +55,9 @@ export function nextStep(fs: FibredSurface): Step | undefined {
   const [v] = valenceOneJunctions(fs);
   if (v !== undefined)
     return { kind: "remove valence-1 junction", apply: () => removeValenceOneJunction(fs, v) };
+  // The algorithm stops at a graph automorphism (finite order) and, unless told to ignore it, at a reduction.
+  if (finiteOrder(fs) !== undefined) return undefined;
+  if (!fs.ignoreReducible && reductionCandidates(fs).length > 0) return undefined;
   if (valenceTwoJunctions(fs).length > 0)
     return { kind: "remove valence-2 junctions", apply: () => removeAllValenceTwoJunctions(fs) };
   const [group] = peripheralInefficiencies(fs);
@@ -62,6 +66,29 @@ export function nextStep(fs: FibredSurface): Step | undefined {
   const [p] = inefficiencies(fs);
   if (p !== undefined) return { kind: "remove inefficiency", apply: () => removeInefficiency(fs, p) };
   return undefined;
+}
+
+/** What the algorithm has found out about the mapping class. */
+export type Classification =
+  | { readonly kind: "finite order"; readonly order: number }
+  | { readonly kind: "reducible"; readonly candidates: readonly ReductionCandidate[] }
+  | { readonly kind: "pseudo-Anosov"; readonly growth: number }
+  | { readonly kind: "undecided" };
+
+/**
+ * The classification at the current state: finite order if g is a graph automorphism; reducible if an invariant proper
+ * subgraph contains essential strips (unless ignored); pseudo-Anosov if no step applies anymore and the growth is > 1
+ * (checking that τ is a filling train track with cusps everywhere is a separate question, see `train-track.ts`);
+ * otherwise undecided.
+ */
+export function classify(fs: FibredSurface): Classification {
+  const order = finiteOrder(fs);
+  if (order !== undefined) return { kind: "finite order", order };
+  const candidates = fs.ignoreReducible ? [] : reductionCandidates(fs);
+  if (candidates.length > 0) return { kind: "reducible", candidates };
+  if (nextStep(fs) !== undefined) return { kind: "undecided" };
+  const { growth } = perronFrobenius(fs, { essentialOnly: true });
+  return growth > 1 + 1e-9 ? { kind: "pseudo-Anosov", growth } : { kind: "undecided" };
 }
 
 /**

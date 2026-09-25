@@ -52,6 +52,12 @@ export class FibredSurface {
   /** Set once the fibred surface has been converted into a train track. */
   isTrainTrack = false;
   /**
+   * Set after a reduction: G is then a spine of a subsurface of the original surface, and μ describes its embedding
+   * (as an inclusion). μ then no longer maps boundary words of G to boundary words of G₀; they map to the reduction
+   * curves instead, so that check is skipped.
+   */
+  isSubsurface = false;
+  /**
    * Receives messages about inconsistent states that a move detected but could recover from (the C#
    * `OnError` event). Defaults to `console.error`; the UI shows them to the user.
    */
@@ -108,6 +114,7 @@ export class FibredSurface {
     });
     result.ignoreReducible = this.ignoreReducible;
     result.isTrainTrack = this.isTrainTrack; // the C# Copy() forgot this flag
+    result.isSubsurface = this.isSubsurface;
     result.onError = this.onError;
     return { copy: result, correspondence: graphCopy };
   }
@@ -244,11 +251,12 @@ export class FibredSurface {
           );
     }
 
-    for (const b of this.mu.boundaryWordReport())
-      if (b.matchedIndex < 0)
-        problems.push(
-          `μ maps the boundary word ${b.word} to ${b.image.toString() || "(empty)"}, which is not a boundary word of G₀`,
-        );
+    if (!this.isSubsurface)
+      for (const b of this.mu.boundaryWordReport())
+        if (b.matchedIndex < 0)
+          problems.push(
+            `μ maps the boundary word ${b.word} to ${b.image.toString() || "(empty)"}, which is not a boundary word of G₀`,
+          );
     return problems;
   }
 
