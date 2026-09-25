@@ -3,13 +3,13 @@
  * step applied with its default choices (the C# `ApplyNextSuggestion` / `BestvinaHandelAlgorithm`).
  *
  * The typed suggestion system for the UI (port note 07) will offer the same steps with their options.
- * Not ported yet: absorbing into the periphery, detecting finite order and reducibility, and converting into
- * a train track.
+ * (Converting into a train track is not a step: τ is always derived from G, see `train-track.ts`.)
  *
  * @module
  */
 import type { FibredSurface } from "./fibred-surface";
 import type { Edge, OrientedEdge } from "../graph/ribbon-graph";
+import { absorbIntoPeriphery, needsAbsorbing } from "./moves/absorb-periphery";
 import { collapseSubforest, invariantSubforests, isPeripheryFriendlyForest } from "./moves/collapse-forest";
 import {
   inefficiencies,
@@ -33,6 +33,7 @@ export type StepKind =
   | "collapse invariant subforest"
   | "pull tight"
   | "remove valence-1 junction"
+  | "absorb into periphery"
   | "remove valence-2 junctions"
   | "fold peripheral inefficiency"
   | "remove inefficiency";
@@ -55,6 +56,7 @@ export function nextStep(fs: FibredSurface): Step | undefined {
   const [v] = valenceOneJunctions(fs);
   if (v !== undefined)
     return { kind: "remove valence-1 junction", apply: () => removeValenceOneJunction(fs, v) };
+  if (needsAbsorbing(fs)) return { kind: "absorb into periphery", apply: () => absorbIntoPeriphery(fs) };
   // The algorithm stops at a graph automorphism (finite order) and, unless told to ignore it, at a reduction.
   if (finiteOrder(fs) !== undefined) return undefined;
   if (!fs.ignoreReducible && reductionCandidates(fs).length > 0) return undefined;

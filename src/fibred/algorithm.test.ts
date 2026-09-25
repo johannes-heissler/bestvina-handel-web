@@ -44,6 +44,25 @@ describe("runAlgorithm", () => {
   });
 });
 
+describe("absorbing into the periphery in the algorithm", () => {
+  it("absorbs first, then stops at the reduction", () => {
+    // A twice-punctured torus (the faces a b A B s p S and P); only the puncture inside p is peripheral. The curve
+    // around the rose encloses both punctures, and {a, b} is invariant, so the map is reducible.
+    const fs = FibredSurface.fromText(
+      [["a", "b", "A", "B", "s", "p", "S"], ["P"]],
+      "a -> a b, b -> b a b, s -> a b A B s p, p -> p",
+      ["p"],
+    );
+    expect(runAlgorithm(fs)).toEqual(["absorb into periphery"]);
+    const classification = classify(fs);
+    expect(classification.kind).toBe("reducible");
+    if (classification.kind === "reducible")
+      expect(classification.candidates.map((c) => [...c.preserved].map((e) => e.name).sort())).toEqual([
+        ["a", "b"],
+      ]);
+  });
+});
+
 describe("classify", () => {
   it("recognizes the three types", () => {
     expect(classify(FibredSurface.fromText([["a", "b", "A", "B"]], "a -> a b, b -> b a b"))).toMatchObject({
