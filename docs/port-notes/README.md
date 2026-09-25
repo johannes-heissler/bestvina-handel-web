@@ -25,7 +25,8 @@ in `docs/`.
 | 5   | [Ribbon graph](05-graph.md)                                       | QuikGraph, `GraphHelpers`, cyclic order in `Strip`      | 🔍   | ✅   | ✅    |
 | 6   | [Edge paths and combinatorial maps](06-edge-paths-and-maps.md)    | `EdgePath`, `Strip.EdgePath`, `TransitionMatrix`, …     | ✅   | ✅   | ✅    |
 | 7   | [`FibredSurface` core and suggestions](07-fibred-surface-core.md) | `FibredSurface.cs`, names, periphery, suggestion system | 🔍   | ✅   | ✅    |
-| 8+  | One note per `FibredSurface` move                                 | `FibredSurfaces/FibredSurface*.cs`                      |      |      |       |
+| 8   | [Transition matrix, growth, weights](08-perron-frobenius.md)      | `FibredSurfaceTransitionMatrixAndWeights.cs`            | 🔍   | ✅   | ✅    |
+| 9+  | One note per `FibredSurface` move                                 | `FibredSurfaces/FibredSurface*.cs`                      |      |      |       |
 | 3   | Curves, points, geodesics                                         | `GeometricObjects_Abstract/*`                           |      |      |       |
 | 4   | Surfaces, homeomorphisms                                          | `GeometricObjects_Abstract/*`                           |      |      |       |
 | …   | Embedding layer, suggestion system, examples, rendering, UI       |                                                         |      |      |       |
