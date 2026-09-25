@@ -2,8 +2,8 @@
 
 **Source:** not in the C# code. This is the thesis, § "Closed surfaces and cutting" (`8 RestOfAlg/50ClosedSurface.tex`),
 which the author wrote to be easier to follow than the original paper.
-**Target:** `src/fibred/singular-leaves.ts` (stages 1–2, done), then `src/fibred/moves/cut-along-leaf.ts` (stages 3–5)
-**Status:** stages 1–2 🔍 implemented; stages 3–5 ✍️ **plan, with open questions**
+**Target:** `src/fibred/moves/fill-puncture.ts` (the shortcut), `src/fibred/singular-leaves.ts` (stages 1–2 of the cutting)
+**Status:** 🔍 **implemented as a shortcut** (see below; the author's confirmation of the equivalence is pending). Stages 1–2 of the cutting are implemented too; stages 3–5 are on hold.
 
 ## The problem
 
@@ -49,7 +49,48 @@ has an infinitesimal triangle, and the puncture has one cusp (tested in port not
 is exactly an initial part of the prong from the image singularity. If the heights, the 180° rotation or the cyclic orders at the
 switches were wrong anywhere, this would fail.
 
-## Open questions
+## Decisions (2026-09-25)
+
+- **Q1:** the user chooses q. The suggestion system will list the singularities sorted by their period
+  (`polygonSingularities` already sorts them).
+- **Q2:** the proposal (prolong, cut, check combinatorially; take the preimage leaf that first comes within the smallest
+  infinitesimal width of the boundary) was accepted, for the case that the cutting is implemented.
+- **Q3:** single puncture first; the detection (`hasOneCuspPuncture`) is written so it can be generalized.
+
+## 🔍 The shortcut: fill in p directly
+
+While preparing stages 3–5, a much shorter route to the same end result came up.
+
+1. **Blow up the orbit Q of q.** As in the thesis (§ "The goal"), replace each junction of Q by its infinitesimal polygon: G₀
+   has a junction per switch there, the polygon's infinitesimal branches as new strips, and g₀ is g with the infinitesimal
+   branches inserted at the turns at Q (read off g_τ). This is a spine of Σ ∖ ({p} ∪ Q) with a train-track map for the
+   same f̂ and the same growth λ.
+2. **Fill in p.** Every infinitesimal branch ε of q's polygon has the polygon on one side and p's face on the other (p is the
+   only real boundary word). So p's boundary word reads ε β. With p filled in, ε β bounds a disk, so ε ≃ β⁻¹ in Σ ∖ Q.
+   Delete ε and replace it by β⁻¹ in all images: the homotopy equivalence G₀ → G₀ ∖ ε. The faces of p and q merge, and the
+   result is a spine of Σ ∖ Q with a carrying map of the **same** f̂. No periphery is needed, since Q is a single orbit.
+3. **Run the algorithm again.** It finds the efficient representative of f̂ on Σ ∖ Q. The thesis's cutting move shows that some
+   representative on Σ ∖ Q has growth < λ. Since the efficient representative minimizes the growth among the carrying
+   maps of the class, the growth also drops strictly on this route, and the end result is the same classification of
+   the same mapping class on Σ ∖ Q.
+
+**What we'd lose compared to the cutting:** the intermediate picture. The cutting keeps the half-translation structure (the
+same f̂ and λ) until B is removed, which is nice to _visualize_. The shortcut reruns the algorithm from a non-efficient map.
+
+**Question to the author:** do you agree that this is equivalent? If so, stages 3–5 are only needed for visualizing the cut,
+and could wait.
+
+**μ after the move:** the surface is punctured differently (Σ ∖ Q instead of Σ ∖ {p}), so μ is reset to the identity onto
+a copy of the new graph. The embedding layer must therefore build a polygon model for an arbitrary reference spine G₀
+(for example by collapsing a maximal tree into a rose). It needs that anyway for surfaces given by boundary words.
+
+### Result on the example
+
+For each of the 5 choices of q, the new graph is consistent (`checkIntegrity`), g preserves the boundary words, and
+χ = 2 − 4 − |Q|. After running the algorithm again, **λ drops from ≈ 4.3152 to ≈ 4.2121**. The map is efficient, and the new
+puncture is no π-singularity.
+
+## Former open questions
 
 **Q1: Which singularity q and which prong?** The thesis allows any vertex with at least 3 gates and an infinitesimal polygon, with the
 periods k (g^k(v) = v) and l (g^{kl} doesn't rotate the polygon). My default would be a vertex with the smallest kl, since that means
