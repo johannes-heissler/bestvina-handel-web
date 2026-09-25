@@ -47,18 +47,90 @@ export function isPeripheryFriendlyForest(
 
 /**
  * The maximal invariant subforests that are periphery-friendly: orbits of single edges that are forests,
- * keeping only those not contained in another one (the C# `GetInvariantSubforests`).
+ * keeping only those not contained in another one (the C# `GetInvariantSubforests`), in the order of their first
+ * edge.
+ *
+ * Computing the orbit of every edge separately (as C# does) takes quadratic time, which matters on the large graphs
+ * that the closed-surface cut produces. Instead: two edges whose orbits contain each other have the same orbit, so
+ * the orbits are computed per strongly connected component of the relation "f occurs in g(e)", in reverse
+ * topological order. An orbit that is not a periphery-friendly forest makes every orbit containing it fail too, so
+ * orbit sets are only built while they can still be forests (at most V − 1 edges).
  */
 export function invariantSubforests(fs: FibredSurface): Set<Edge>[] {
-  let forests: Set<Edge>[] = [];
-  for (const edge of fs.graph.edges) {
-    if (forests.some((forest) => forest.has(edge))) continue;
-    const orbit = orbitOfEdge(fs, edge);
-    if (!isPeripheryFriendlyForest(fs, orbit)) continue;
-    forests = forests.filter((forest) => ![...forest].every((e) => orbit.has(e)));
-    forests.push(orbit);
+  const edges = fs.graph.edges;
+  const successors = (e: Edge) => [...new Set(fs.g.image(e.forward).letters.map((x) => x.edge))];
+  const components = stronglyConnectedComponents(edges, successors); // successors come first
+  const componentOf = new Map<Edge, number>();
+  components.forEach((component, i) => component.forEach((e) => componentOf.set(e, i)));
+
+  const orbits: (Set<Edge> | undefined)[] = []; // undefined: not a periphery-friendly forest
+  components.forEach((component, i) => {
+    const later = new Set(component.flatMap(successors).map((f) => componentOf.get(f) as number));
+    later.delete(i);
+    if ([...later].some((j) => orbits[j] === undefined)) return void orbits.push(undefined);
+    const orbit = new Set(component);
+    for (const j of later) for (const e of orbits[j] as Set<Edge>) orbit.add(e);
+    const possible = orbit.size < fs.graph.vertexCount && isPeripheryFriendlyForest(fs, orbit);
+    orbits.push(possible ? orbit : undefined);
+  });
+
+  const forests = orbits.filter((o): o is Set<Edge> => o !== undefined).sort((a, b) => b.size - a.size);
+  const maximal: Set<Edge>[] = [];
+  for (const forest of forests)
+    if (!maximal.some((m) => [...forest].every((e) => m.has(e)))) maximal.push(forest);
+  const position = new Map(edges.map((e, i) => [e, i]));
+  const first = (forest: Set<Edge>) => Math.min(...[...forest].map((e) => position.get(e) as number));
+  return maximal.sort((a, b) => first(a) - first(b));
+}
+
+/**
+ * Tarjan's algorithm (iterative, so deep graphs don't overflow the stack): the strongly connected components, each
+ * listed after all components reachable from it.
+ */
+function stronglyConnectedComponents<T>(nodes: readonly T[], successors: (node: T) => readonly T[]): T[][] {
+  const index = new Map<T, number>();
+  const low = new Map<T, number>();
+  const onStack = new Set<T>();
+  const stack: T[] = [];
+  const components: T[][] = [];
+  let counter = 0;
+  for (const root of nodes) {
+    if (index.has(root)) continue;
+    const work: { node: T; next: readonly T[]; i: number }[] = [];
+    const open = (node: T) => {
+      index.set(node, counter);
+      low.set(node, counter++);
+      stack.push(node);
+      onStack.add(node);
+      work.push({ node, next: successors(node), i: 0 });
+    };
+    open(root);
+    while (work.length > 0) {
+      const frame = work.at(-1) as { node: T; next: readonly T[]; i: number };
+      if (frame.i < frame.next.length) {
+        const w = frame.next[frame.i++] as T;
+        if (!index.has(w)) open(w);
+        else if (onStack.has(w))
+          low.set(frame.node, Math.min(low.get(frame.node) as number, index.get(w) as number));
+        continue;
+      }
+      work.pop();
+      const parent = work.at(-1);
+      if (parent !== undefined)
+        low.set(parent.node, Math.min(low.get(parent.node) as number, low.get(frame.node) as number));
+      if (low.get(frame.node) === index.get(frame.node)) {
+        const component: T[] = [];
+        let w: T;
+        do {
+          w = stack.pop() as T;
+          onStack.delete(w);
+          component.push(w);
+        } while (w !== frame.node);
+        components.push(component);
+      }
+    }
   }
-  return forests;
+  return components;
 }
 
 /** The possible centres of a component: its junctions, by decreasing valence (the C# default order). */

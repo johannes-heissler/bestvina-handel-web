@@ -80,12 +80,20 @@ export function removeValenceTwoJunction(fs: FibredSurface, v: Vertex, removed?:
   fs.removeJunction(v);
 }
 
-/** The C# choice: a strip in the pre-periphery, otherwise the one with the larger width. */
-function defaultStripToRemove(fs: FibredSurface, s0: OrientedEdge, s1: OrientedEdge): OrientedEdge {
+/**
+ * The C# choice of the strip to remove at a valence-2 junction: a strip in the pre-periphery, otherwise the one
+ * with the larger Perron–Frobenius width. Pass `widths` to reuse them when removing several junctions (computing them
+ * is the expensive part on large graphs).
+ */
+export function defaultStripToRemove(
+  fs: FibredSurface,
+  s0: OrientedEdge,
+  s1: OrientedEdge,
+  widths: ReadonlyMap<Edge, number> = perronFrobenius(fs, { essentialOnly: true }).widths,
+): OrientedEdge {
   const prePeriphery = fs.prePeriphery();
   if (prePeriphery.has(s0.edge)) return s0;
   if (prePeriphery.has(s1.edge)) return s1;
-  const { widths } = perronFrobenius(fs, { essentialOnly: true });
   const width = (e: Edge) => widths.get(e) ?? 0;
   return width(s0.edge) > width(s1.edge) ? s0 : s1;
 }

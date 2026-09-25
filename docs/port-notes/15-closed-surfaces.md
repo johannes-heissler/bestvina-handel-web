@@ -163,3 +163,32 @@ Decision: **implement both.** The full trace of the shortcut is in [docs/example
 - For v0 and v1, the number of switches of valence > 2 along p's boundary plateaus (at 7–9) within 30 branches. That is where the
   thesis's refinement (take the preimage leaf that first comes within the smallest infinitesimal width of the boundary) or
   longer leaves would be needed. Not implemented yet.
+
+## Update: prolonging further, filling the polygons, performance
+
+- **Uncut polygons are junctions again** (confirmed by the author: the thesis treats them as junctions implicitly; a slip
+  in its last section). After deleting one branch of such a polygon, the rest of the polygon is collapsed, so the original
+  junction comes back.
+- **The search** (`cutOptions`): each candidate prong is traced once to find where it first comes within ε (the narrowest
+  infinitesimal width) of p's boundary. From one lap before that point to three laps after it, cuts are tried (a lap is the
+  length of p's boundary word). The options are sorted by the length of L. `circleDefects` gives the switches along p that
+  still have valence > 2, for showing the progress in the UI.
+- **All five singularities work.** The prongs of v0 and v1 first come within ε after 175 to 425 real branches, and the cut succeeds
+  about one lap later (190 branches):
+
+  | q      | shortest L   | time (search, cut, algorithm) | result                             |
+  | ------ | ------------ | ----------------------------- | ---------------------------------- |
+  | v2     | 16 branches  | 0.2 s                         | λ ≈ 4.2121, 4 junctions, 7 strips  |
+  | v3, v4 | 18 branches  | 2.3 s                         | λ ≈ 4.2121, 3 junctions, 7 strips  |
+  | v0, v1 | 190 branches | 7–8 s                         | λ ≈ 4.2121, 7 junctions, 11 strips |
+
+- **A bug found by the large cuts:** `subdivide` read the image of the new junction after changing the graph. That is wrong
+  when the split letter is the subdivided strip itself, reversed. Fixed, with a regression test.
+- **Performance.** After the cut at v0, the graph has 673 junctions, and the algorithm took about 150 s. Three fixes brought it to about
+  1.5 s:
+  1. the Perron–Frobenius widths for choosing the strip to remove at valence-2 junctions are computed once per batch, instead of
+     once per junction (that was 136 s);
+  2. `invariantSubforests` computes the orbits per strongly connected component of the relation "f occurs in g(e)" instead of
+     per edge, and stops building an orbit as soon as it can't be a forest (30 s → milliseconds);
+  3. the algorithm collapses all maximal invariant subforests at once when their union is still a periphery-friendly forest
+     (197 steps → 18).

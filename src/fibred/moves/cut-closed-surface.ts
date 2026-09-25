@@ -121,15 +121,16 @@ export interface CutOption {
 /**
  * For each candidate prong, the shortest L that makes B a circle attached at one switch, sorted by that length.
  *
- * To avoid cutting for every length, each prong is traced once: a cut can only separate a thin ring along p's
- * boundary once L has come closer to the boundary than the widest infinitesimal branch (at the corners of the
- * boundary, the switch next to the boundary keeps an infinitesimal branch otherwise). From there, cuts are tried for
- * a few laps around p's boundary (the thesis: once L is within ε of the boundary it runs parallel to all of it).
+ * To avoid cutting for every length, each prong is traced once to find where it first comes within ε (the width of the
+ * narrowest infinitesimal branch) of the boundary: from there it runs parallel to all of p's boundary (the thesis), so
+ * a cut succeeds about one lap later. Cuts are tried from one lap before that point to three laps after it.
  */
 export function cutOptions(tt: TrainTrack, candidates: readonly Prong[], maxRealBranches = 500): CutOption[] {
   const widths = tt.widths as ReadonlyMap<Edge, number>;
   const infinitesimal = tt.graph.edges.filter((e) => tt.kind.get(e) === "infinitesimal");
-  const threshold = Math.max(...infinitesimal.map((e) => widths.get(e) as number));
+  // ε, the width of the narrowest infinitesimal branch: once L is closer than ε to the boundary, it runs parallel to
+  // all of it (the thesis). At corners with wider infinitesimal branches, success can come a little earlier.
+  const ε = Math.min(...infinitesimal.map((e) => widths.get(e) as number));
   const lap = tt
     .boundaryWords()
     .filter((b) => !b.infinitesimal)
@@ -143,16 +144,17 @@ export function cutOptions(tt: TrainTrack, candidates: readonly Prong[], maxReal
       continue; // the leaf runs into a singularity
     }
     let realIndex = 0;
-    let first: number | undefined;
+    let firstWithinε: number | undefined;
     L.path.forEach((x, k) => {
       if (tt.kind.get(x.edge) !== "real") return;
       realIndex++;
       const w = widths.get(x.edge) as number;
       const y = L.heights[k] as number;
-      if (first === undefined && Math.min(y, w - y) < threshold) first = realIndex;
+      if (firstWithinε === undefined && Math.min(y, w - y) < ε) firstWithinε = realIndex;
     });
-    if (first === undefined) continue;
-    for (let count = first; count <= Math.min(maxRealBranches, first + 3 * lap); count++) {
+    if (firstWithinε === undefined) continue;
+    const from = Math.max(1, firstWithinε - lap);
+    for (let count = from; count <= Math.min(maxRealBranches, firstWithinε + 3 * lap); count++) {
       let ct: CutTrack;
       try {
         ct = cut(tt, slitsForProng(tt, prong, count));

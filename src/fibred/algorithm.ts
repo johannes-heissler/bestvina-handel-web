@@ -9,7 +9,8 @@
  * @module
  */
 import type { FibredSurface } from "./fibred-surface";
-import { collapseSubforest, invariantSubforests } from "./moves/collapse-forest";
+import type { Edge, OrientedEdge } from "../graph/ribbon-graph";
+import { collapseSubforest, invariantSubforests, isPeripheryFriendlyForest } from "./moves/collapse-forest";
 import {
   inefficiencies,
   peripheralInefficiencies,
@@ -17,7 +18,9 @@ import {
   removePeripheralInefficiency,
 } from "./moves/inefficiency";
 import { loosePositions, pullTight } from "./moves/pull-tight";
+import { perronFrobenius } from "./perron-frobenius";
 import {
+  defaultStripToRemove,
   removeValenceOneJunction,
   removeValenceTwoJunction,
   valenceOneJunctions,
@@ -41,9 +44,12 @@ export interface Step {
 
 /** The next step with its default choices, or `undefined` if none applies (the map is efficient). */
 export function nextStep(fs: FibredSurface): Step | undefined {
-  const [forest] = invariantSubforests(fs);
-  if (forest !== undefined)
-    return { kind: "collapse invariant subforest", apply: () => collapseSubforest(fs, forest) };
+  const forests = invariantSubforests(fs);
+  if (forests.length > 0)
+    return {
+      kind: "collapse invariant subforest",
+      apply: () => collapseSubforest(fs, forestsToCollapse(fs, forests)),
+    };
   if (loosePositions(fs).size > 0) return { kind: "pull tight", apply: () => pullTight(fs) };
   const [v] = valenceOneJunctions(fs);
   if (v !== undefined)
@@ -77,8 +83,20 @@ export function runAlgorithm(fs: FibredSurface, maxSteps = 20 * fs.graph.edgeCou
 
 /** Removes valence-2 junctions one by one, stopping when an invariant subforest appears (as in C#). */
 function removeAllValenceTwoJunctions(fs: FibredSurface): void {
+  // The widths only decide which of the two strips is removed; computing them once for the batch is enough.
+  const { widths } = perronFrobenius(fs, { essentialOnly: true });
   for (let [v] = valenceTwoJunctions(fs); v !== undefined; [v] = valenceTwoJunctions(fs)) {
-    removeValenceTwoJunction(fs, v);
+    const [s0, s1] = fs.graph.star(v) as [OrientedEdge, OrientedEdge];
+    removeValenceTwoJunction(fs, v, defaultStripToRemove(fs, s0, s1, widths));
     if (invariantSubforests(fs).length > 0) return;
   }
+}
+
+/**
+ * The union of all maximal invariant subforests, if it is still a periphery-friendly forest (then they can be
+ * collapsed at once); otherwise the first one.
+ */
+function forestsToCollapse(fs: FibredSurface, forests: readonly Set<Edge>[]): Set<Edge> {
+  const union = new Set(forests.flatMap((f) => [...f]));
+  return isPeripheryFriendlyForest(fs, union) ? union : (forests[0] as Set<Edge>);
 }

@@ -42,4 +42,14 @@ describe("closed surfaces: cutting along a singular leaf (the thesis's move)", (
     expect(inefficiencies(surface)).toEqual([]);
     expect(growth(surface)).toBeCloseTo(4.212077, 5);
   });
+
+  it("reaches the same growth when cutting at the singularity v3 (period 2)", { timeout: 30_000 }, () => {
+    const v3 = original.graph.vertices.find((v) => v.name === "v3")!;
+    const [option] = cutOptions(tt, prongsOfOrbit(tt, v3));
+    expect(option?.realBranches).toBe(18);
+    const { surface } = cutClosedSurface(tt, option!);
+    expect(surface.checkIntegrity()).toEqual([]);
+    runAlgorithm(surface);
+    expect(growth(surface)).toBeCloseTo(4.212077, 5);
+  });
 });
