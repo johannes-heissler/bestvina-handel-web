@@ -1,0 +1,231 @@
+/**
+ * Folding strips and initial segments of strips (the C# `FibredSurfaceFoldingInitialSegments` and
+ * `MovementForFolding`). See the thesis, § "Folding and isotopy".
+ *
+ * @module
+ */
+import { EdgePath } from "../../graph/edge-path";
+import type { OrientedEdge } from "../../graph/ribbon-graph";
+import { EdgePoint } from "../edge-point";
+import type { FibredSurface } from "../fibred-surface";
+import { isCyclicInterval } from "../fibred-surface";
+import { isotopeJunction } from "./isotopy";
+import { subdivide } from "./subdivide";
+
+/** Maps forward-normalized edge points from before a move to after it (see {@link subdivide}). */
+export type PointTransform = (point: EdgePoint) => EdgePoint;
+
+/**
+ * Folds the strip b into its neighbour a in the cyclic order at their common source: afterwards only a is left,
+ * and the targets of a and b are one junction. Requires g(a) = g(b) and μ(a) = μ(b) (use an isotopy first,
+ * see {@link foldInitialSegments}), and t(a) ≠ t(b) (folding two strips with the same ends would change χ).
+ *
+ * - The strip ends at t(b) move to t(a) as one block next to ā: before ā if b = σ(a), after ā if a = σ(b). This is
+ *   the cyclic order around the folded pair (the C# `StarAtFoldedVertex`).
+ * - g: every letter b becomes a, and junctions mapped to t(b) are mapped to t(a).
+ * - μ: unchanged, since μ(a) = μ(b).
+ */
+export function foldPair(fs: FibredSurface, a: OrientedEdge, b: OrientedEdge): PointTransform {
+  if (a.source !== b.source || a.edge === b.edge) throw new Error(`${a} and ${b} can't be folded`);
+  const bAfterA = fs.graph.next(a) === b;
+  if (!bAfterA && fs.graph.next(b) !== a) throw new Error(`${a} and ${b} are not adjacent at ${a.source}`);
+  if (!fs.g.image(a).equals(fs.g.image(b))) throw new Error(`g(${a}) ≠ g(${b})`);
+  if (!fs.mu.image(a).equals(fs.mu.image(b))) throw new Error(`μ(${a}) ≠ μ(${b}); isotope first`);
+  const [T, U] = [a.target, b.target];
+  if (T === U)
+    throw new Error(`${a} and ${b} have the same ends; folding them would change the Euler characteristic`);
+
+  // Move the ends at U (except those of b) to T, in the order that starts right after b̄.
+  const block = fs.graph.starFrom(b.reversed).filter((x) => x.edge !== b.edge);
+  let previous = a.reversed;
+  for (const x of block) {
+    fs.graph.reattach(x, T, bAfterA ? { before: a.reversed } : { after: previous });
+    previous = x;
+  }
+
+  const aAsImageOfB = EdgePath.of(b.isForward ? a : a.reversed);
+  fs.g.substituteInImages((x) => (x === b.edge ? aAsImageOfB : undefined));
+  for (const v of fs.graph.vertices) if (fs.g.vertexImage(v) === U) fs.g.setVertexImage(v, T);
+  fs.removeStrip(b.edge);
+  fs.removeJunction(U);
+
+  const length = fs.g.image(a).length;
+  return (point) => {
+    if (point.edge.edge !== b.edge) return point;
+    const indexAlongB = b.isForward ? point.index : length - point.index;
+    return new EdgePoint(a, indexAlongB).normalized(fs);
+  };
+}
+
+/** The strips of `edges` in their cyclic order at the common source, which must be a contiguous block. */
+export function inCyclicOrder(fs: FibredSurface, edges: readonly OrientedEdge[]): OrientedEdge[] {
+  const source = edges[0]?.source;
+  if (source === undefined || edges.some((e) => e.source !== source))
+    throw new Error("The strips to fold must start at the same junction");
+  const star = fs.graph.star(source);
+  const set = new Set(edges);
+  if (!isCyclicInterval(star, set))
+    throw new Error(`The strips ${edges.join(", ")} are not adjacent at ${source}`);
+  const first = star.find((e) => set.has(e) && !set.has(fs.graph.previous(e)));
+  return first === undefined ? [...star] : fs.graph.starFrom(first).filter((e) => set.has(e));
+}
+
+/**
+ * Folds strips with equal g- and μ-images into `kept`, which stays. The strips must be adjacent at their source;
+ * they are folded into `kept` one neighbour at a time.
+ */
+export function foldEdges(
+  fs: FibredSurface,
+  edges: readonly OrientedEdge[],
+  kept: OrientedEdge,
+): PointTransform {
+  const ordered = inCyclicOrder(fs, edges);
+  const k = ordered.indexOf(kept);
+  if (k === -1) throw new Error(`${kept} is not among the strips to fold`);
+  const transforms: PointTransform[] = [];
+  for (let i = k - 1; i >= 0; i--) transforms.push(foldPair(fs, kept, ordered[i] as OrientedEdge));
+  for (let i = k + 1; i < ordered.length; i++)
+    transforms.push(foldPair(fs, kept, ordered[i] as OrientedEdge));
+  return (point) => transforms.reduce((p, t) => t(p), point);
+}
+
+/** The result of {@link foldInitialSegments}. */
+export interface FoldResult {
+  /** The strip that the folded initial segments became. */
+  readonly folded: OrientedEdge;
+  readonly transform: PointTransform;
+}
+
+/**
+ * Folds the initial segments of length `i` (in g) of the strips `edges`, which start at the same junction v, are
+ * adjacent there, and whose images agree in the first `i` letters.
+ *
+ * 1. Strips with longer images are subdivided after i letters (the new junction first placed at μ(v), before
+ *    the first side crossing).
+ * 2. **Isotopy:** the folded segment will have μ = c, a path in G₀ from μ(v). For a subdivided strip, the new
+ *    junction is moved along c, so μ(e₁) = c and μ(e₂) = c̄ μ(e) (reduced). For a strip that is folded completely,
+ *    its target is moved along μ(e)⁻¹ c, which also changes the other strips at that junction. (These are the
+ *    partial-partial, partial-full and full-full cases of the thesis.)
+ * 3. The segments, now with equal g- and μ-images, are folded into the segment of `kept`.
+ *
+ * @param c The μ-image of the folded segment; see {@link foldOptions} for good choices. Defaults to the longest
+ *   common prefix of the μ-images, which needs no isotopy of junctions for partial folds.
+ * @throws Error if a strip that is folded completely is a loop whose μ-image is not c (moving its target would
+ *   also move its source; not supported yet).
+ */
+export function foldInitialSegments(
+  fs: FibredSurface,
+  edges: readonly OrientedEdge[],
+  i: number,
+  options: { c?: EdgePath; kept?: OrientedEdge } = {},
+): FoldResult {
+  const v = edges[0]?.source;
+  if (v === undefined || i < 1) throw new Error("Nothing to fold");
+  const prefix = fs.g.image(edges[0] as OrientedEdge).slice(0, i);
+  for (const e of edges)
+    if (fs.g.image(e).length < i || !fs.g.image(e).slice(0, i).equals(prefix))
+      throw new Error(`g(${e}) doesn't start with ${prefix}`);
+  inCyclicOrder(fs, edges); // checks adjacency before anything changes
+  const c = options.c ?? commonPrefix(edges.map((e) => fs.mu.image(e)));
+  if (c.source !== undefined && c.source !== fs.mu.vertexImage(v))
+    throw new Error(`${c} doesn't start at μ(${v})`);
+  for (const e of edges)
+    if (fs.g.image(e).length === i && e.target === v && !fs.mu.image(e).equals(c))
+      throw new Error(
+        `Folding the loop ${e.edge} completely would need an isotopy of both its ends (not supported yet)`,
+      );
+
+  const transforms: PointTransform[] = [];
+  const full = edges.filter((e) => fs.g.image(e).length === i);
+  // For each strip end at v, the strip end at v that it currently corresponds to (subdividing replaces the
+  // end at the target of a strip by the second part).
+  const segments = new Map<OrientedEdge, OrientedEdge>(edges.map((e) => [e, e]));
+  // The split points, followed through the subdivisions (each one lengthens the images of the others).
+  const splitPoints = new Map(
+    edges.filter((e) => !full.includes(e)).map((e) => [e, new EdgePoint(e, i).normalized(fs)]),
+  );
+  for (const [e, point] of splitPoints) {
+    const atV = segments.get(e) as OrientedEdge;
+    if (atV.edge !== point.edge.edge)
+      throw new Error(`The initial segments of both ends of ${e.edge} overlap; they can't be folded`);
+    // Subdivide so that the part at v has an empty μ-image, then move the new junction along c.
+    const { first, second, junction, transform } = subdivide(
+      fs,
+      point.edge.edge,
+      point.index,
+      atV.isForward ? 0 : fs.mu.image(atV.edge.forward).length,
+    );
+    transforms.push(transform);
+    for (const [key, value] of segments)
+      if (value.edge === first) segments.set(key, value.isForward ? first.forward : second.backward);
+    for (const [key, p] of splitPoints) splitPoints.set(key, transform(p));
+    isotopeJunction(fs, junction, c);
+  }
+  for (const e of full) {
+    const gamma = fs.mu.image(e).inverse.concat(c).reduced(); // move t(e) so that μ(e) becomes c
+    isotopeJunction(fs, e.target, gamma);
+  }
+
+  const kept = segments.get(options.kept ?? (edges[0] as OrientedEdge)) as OrientedEdge;
+  transforms.push(foldEdges(fs, [...segments.values()], kept));
+  return { folded: kept, transform: (point) => transforms.reduce((p, t) => t(p), point) };
+}
+
+/** A way to fold initial segments, and how many side crossings (the length of μ) there are afterwards. */
+export interface FoldOption {
+  /** The strip whose μ-image determines c. */
+  readonly preferred: OrientedEdge;
+  /** c = the first `l` letters of μ(preferred). */
+  readonly l: number;
+  readonly c: EdgePath;
+  /** The total length of μ after the fold (the C# "badness"). */
+  readonly sideCrossings: number;
+}
+
+/**
+ * The possible choices of c for {@link foldInitialSegments}: the prefixes of the μ-images of the strips (the C#
+ * `MovementForFolding` with preferred edge and l), sorted by the number of side crossings afterwards, then
+ * preferring strips in the middle of the block. Each option is evaluated on a copy of the surface.
+ */
+export function foldOptions(fs: FibredSurface, edges: readonly OrientedEdge[], i: number): FoldOption[] {
+  const ordered = inCyclicOrder(fs, edges);
+  const seen = new Set<string>();
+  const options: { option: FoldOption; centrality: number }[] = [];
+  for (const [position, preferred] of ordered.entries()) {
+    const mu = fs.mu.image(preferred);
+    for (let l = mu.length; l >= 0; l--) {
+      const c = mu.slice(0, l);
+      if (seen.has(c.key)) continue;
+      seen.add(c.key);
+      const { copy, correspondence } = fs.copyWithCorrespondence();
+      try {
+        foldInitialSegments(copy, edges.map(correspondence.orient), i, {
+          c, // c lives in G₀, which the copy shares
+          kept: correspondence.orient(preferred),
+        });
+      } catch {
+        continue; // e.g. an unsupported loop fold
+      }
+      options.push({
+        option: { preferred, l, c, sideCrossings: copy.mu.totalLength() },
+        centrality: Math.abs(position - (ordered.length - 1) / 2),
+      });
+    }
+  }
+  return options
+    .sort((x, y) => x.option.sideCrossings - y.option.sideCrossings || x.centrality - y.centrality)
+    .map((x) => x.option);
+}
+
+/** The longest common prefix of the paths. */
+function commonPrefix(paths: readonly EdgePath[]): EdgePath {
+  const [first, ...rest] = paths;
+  if (first === undefined) return EdgePath.EMPTY;
+  let length = first.length;
+  for (const p of rest) {
+    let k = 0;
+    while (k < length && k < p.length && p.at(k) === first.at(k)) k++;
+    length = k;
+  }
+  return first.slice(0, length);
+}

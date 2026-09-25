@@ -14,7 +14,7 @@ import { CombinatorialMap } from "../graph/combinatorial-map";
 import { EdgePath } from "../graph/edge-path";
 import { fromBoundaryWords } from "../graph/from-boundary-words";
 import { parseMap } from "../graph/path-parser";
-import type { Edge, RibbonGraph, StarPosition, Vertex } from "../graph/ribbon-graph";
+import type { Edge, GraphCopy, RibbonGraph, StarPosition, Vertex } from "../graph/ribbon-graph";
 import { firstDuplicate } from "../util/iter";
 import {
   EDGE_COLORS,
@@ -94,6 +94,11 @@ export class FibredSurface {
    * changes it; μ of the copy maps into the same G₀.
    */
   copy(): FibredSurface {
+    return this.copyWithCorrespondence().copy;
+  }
+
+  /** Like {@link copy}, and also returns how the strips and junctions of the copy correspond to the original. */
+  copyWithCorrespondence(): { copy: FibredSurface; correspondence: GraphCopy } {
     const graphCopy = this.graph.copy();
     const result = new FibredSurface({
       graph: graphCopy.graph,
@@ -104,7 +109,7 @@ export class FibredSurface {
     result.ignoreReducible = this.ignoreReducible;
     result.isTrainTrack = this.isTrainTrack; // the C# Copy() forgot this flag
     result.onError = this.onError;
-    return result;
+    return { copy: result, correspondence: graphCopy };
   }
 
   // ─── Creating and removing strips and junctions ─────────────────────────────────────────────
