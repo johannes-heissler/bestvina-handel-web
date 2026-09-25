@@ -28,7 +28,8 @@ in `docs/`.
 | 8   | [Transition matrix, growth, weights](08-perron-frobenius.md)      | `FibredSurfaceTransitionMatrixAndWeights.cs`                     | 🔍   | ✅   | ✅    |
 | 9   | [Valence-1 and valence-2 junctions](09-valence-one-and-two.md)    | `FibredSurfaceValence1and2Junctions.cs`                          | 🔍   | ✅   | ✅    |
 | 10  | [Pulling tight, moving junctions](10-pull-tight-and-isotopy.md)   | `FibredSurfacePullingTight.cs`, `FibredSurfaceMovingVertices.cs` | 🔍   | ✅   | ✅    |
-| 11+ | One note per `FibredSurface` move                                 | `FibredSurfaces/FibredSurface*.cs`                               |      |      |       |
+| 11  | [Collapsing invariant subforests](11-collapse-subforests.md)      | `FibredSurfaceCollapseSubforests.cs`                             | 🔍   | ✅   | ✅    |
+| 12+ | One note per `FibredSurface` move                                 | `FibredSurfaces/FibredSurface*.cs`                               |      |      |       |
 | 3   | Curves, points, geodesics                                         | `GeometricObjects_Abstract/*`                                    |      |      |       |
 | 4   | Surfaces, homeomorphisms                                          | `GeometricObjects_Abstract/*`                                    |      |      |       |
 | …   | Embedding layer, suggestion system, examples, rendering, UI       |                                                                  |      |      |       |
