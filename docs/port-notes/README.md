@@ -31,7 +31,8 @@ in `docs/`.
 | 11  | [Collapsing invariant subforests](11-collapse-subforests.md)                        | `FibredSurfaceCollapseSubforests.cs`                                                  | 🔍   | ✅   | ✅    |
 | 12  | [Subdivision and folding](12-subdivision-and-folding.md)                            | `FibredSurfaceFoldingInitialSegments.cs`, `MovementForFolding`, `EdgePoint.cs`        | 🔍   | ✅   | ✅    |
 | 13  | [Inefficiencies, algorithm without interaction](13-inefficiencies-and-algorithm.md) | `Inefficiency.cs`, `…EssentialInefficiencies.cs`, `…PeripheralInefficiencies.cs`      | 🔍   | ✅   | ✅    |
-| 14+ | Periphery, reducibility, finite order, train tracks, point pushes, suggestions      | `…AbsorbingIntoPeriphery.cs`, `…Reduction.cs`, `…TrainTracks.cs`, `PointPushes.cs`, … |      |      |       |
+| 14  | [The train track τ](14-train-track.md)                                              | `FibredSurfaceTrainTracks.cs` (new design)                                            | 🔍   | ✅   | ✅    |
+| 15+ | Periphery, reducibility, finite order, train tracks, point pushes, suggestions      | `…AbsorbingIntoPeriphery.cs`, `…Reduction.cs`, `…TrainTracks.cs`, `PointPushes.cs`, … |      |      |       |
 | 3   | Curves, points, geodesics                                                           | `GeometricObjects_Abstract/*`                                                         |      |      |       |
 | 4   | Surfaces, homeomorphisms                                                            | `GeometricObjects_Abstract/*`                                                         |      |      |       |
 | …   | Embedding layer, suggestion system, examples, rendering, UI                         |                                                                                       |      |      |       |
