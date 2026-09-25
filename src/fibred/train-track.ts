@@ -48,6 +48,11 @@ export interface TrainTrack {
    * ones (the thesis, § "Assigning widths and lengths on τ"). Only defined if λ > 1.
    */
   readonly widths: ReadonlyMap<Edge, number> | undefined;
+  /**
+   * Lengths of all branches: the Perron–Frobenius lengths on the real branches (so that the length of g_τ(e) is λ
+   * times the length of e), 0 on the infinitesimal ones.
+   */
+  readonly lengths: ReadonlyMap<Edge, number>;
   /** The boundary words of τ with their cusps. */
   boundaryWords(): TrackBoundaryWord[];
 }
@@ -183,6 +188,9 @@ export function trainTrack(fs: FibredSurface): TrainTrack {
   const widths =
     pf.growth > 1 + 1e-9 ? branchWidths(tau, gTau, kind, realBranch, pf.widths, pf.growth) : undefined;
 
+  const lengths = new Map<Edge, number>(tau.edges.map((branch) => [branch, 0]));
+  for (const [strip, branch] of realBranch) lengths.set(branch, pf.lengths.get(strip) ?? 0);
+
   const boundaryWords = (): TrackBoundaryWord[] =>
     tau.boundaryWords().map((word) => {
       const letters = word.letters;
@@ -203,6 +211,7 @@ export function trainTrack(fs: FibredSurface): TrainTrack {
     junctionOf,
     growth: pf.growth,
     widths,
+    lengths,
     boundaryWords,
   };
 }
