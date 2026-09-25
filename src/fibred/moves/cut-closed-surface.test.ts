@@ -1,9 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { closedGenus2OneCusp } from "../../examples/maps";
 import { runAlgorithm } from "../algorithm";
+import { cut, slitsForProng } from "../cut-along-leaf";
 import { perronFrobenius } from "../perron-frobenius";
 import { trainTrack } from "../train-track";
-import { cutClosedSurface, prongsOfOrbit } from "./cut-closed-surface";
+import { circleDefects, cutClosedSurface, cutOptions, prongsOfOrbit } from "./cut-closed-surface";
 import { inefficiencies } from "./inefficiency";
 import { pullTight } from "./pull-tight";
 
@@ -20,9 +21,13 @@ describe("closed surfaces: cutting along a singular leaf (the thesis's move)", (
   });
 
   it("prolongs L until the boundary of p is a circle attached at one switch, and removes it", () => {
-    const result = cutClosedSurface(tt, prongsOfOrbit(tt, v2));
-    expect(result).toBeDefined();
-    const { surface, realBranches } = result!;
+    const [option] = cutOptions(tt, prongsOfOrbit(tt, v2));
+    expect(option).toBeDefined();
+    expect(circleDefects(cut(tt, slitsForProng(tt, option!.prong, option!.realBranches)))).toHaveLength(1); // only the attachment switch
+    expect(
+      circleDefects(cut(tt, slitsForProng(tt, option!.prong, option!.realBranches - 1)))!.length,
+    ).toBeGreaterThan(1);
+    const { surface, realBranches } = cutClosedSurface(tt, option!);
     expect(realBranches).toBe(16);
     expect(surface.checkIntegrity()).toEqual([]);
     expect(surface.g.preservesBoundaryWords()).toBe(true);

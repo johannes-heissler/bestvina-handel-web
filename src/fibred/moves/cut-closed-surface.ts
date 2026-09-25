@@ -6,11 +6,12 @@
  * @module
  */
 import { EdgePath } from "../../graph/edge-path";
-import type { OrientedEdge, Vertex } from "../../graph/ribbon-graph";
-import { cut, type CutTrack, slitsForProng } from "../cut-along-leaf";
+import type { Edge, OrientedEdge, Vertex } from "../../graph/ribbon-graph";
+import { cut, type CutTrack, slitsForProng, traceProngThroughBranches } from "../cut-along-leaf";
 import { FibredSurface } from "../fibred-surface";
 import { imageProng, type Prong, prongs } from "../singular-leaves";
 import type { TrainTrack } from "../train-track";
+import { collapseSubforest } from "./collapse-forest";
 
 /**
  * The boundary word of p in the cut track: the one that contains a real branch and runs along no slit (the sides
@@ -59,6 +60,7 @@ export function removeAlmostPeripheralCircle(ct: CutTrack, word: EdgePath, v: Ve
   const disks = graph
     .boundaryWords()
     .filter((w) => w.letters.every((x) => ct.kind.get(x.edge) === "infinitesimal"));
+  const remnants = new Set<Edge>();
   for (const disk of disks) {
     const [x] = disk.letters as [OrientedEdge];
     const rest = disk.slice(1);
@@ -66,8 +68,13 @@ export function removeAlmostPeripheralCircle(ct: CutTrack, word: EdgePath, v: Ve
     g.substituteInImages((e) => (e === x.edge ? forwardImage : undefined));
     graph.removeEdge(x.edge);
     g.forgetEdge(x.edge);
+    for (const y of rest) remnants.add(y.edge);
   }
-  return new FibredSurface({ graph, g });
+  // The rest of each such polygon is a path of infinitesimal strips; collapsing it turns the polygon back into
+  // the junction it came from (the thesis treats these polygons as junctions implicitly).
+  const surface = new FibredSurface({ graph, g });
+  if (remnants.size > 0) collapseSubforest(surface, remnants);
+  return surface;
 }
 
 /** The result of {@link cutClosedSurface}. */
@@ -77,7 +84,7 @@ export interface ClosedSurfaceCut {
   /** The prong that was cut along, and through how many real branches. */
   readonly prong: Prong;
   readonly realBranches: number;
-  /** The cut track before removing B (for display). */
+  /** The cut track. Its graph and carrying map are reused (and changed) by `surface`. */
   readonly cut: CutTrack;
 }
 
@@ -96,28 +103,82 @@ export function prongsOfOrbit(tt: TrainTrack, junction: Vertex): Prong[] {
 }
 
 /**
- * Cuts along the prongs in `candidates`, prolonging L one real branch at a time up to `maxRealBranches`, until the
- * boundary word of p is a circle attached at one switch (the author's proposal for the Lemma on prolonging L, whose
- * proof is only sketched in the thesis), then removes it. Tries the prongs in the given order, each up to the
- * maximum length. Returns `undefined` if no prong reaches the goal.
+ * The switches along the boundary word of p that still have valence > 2, i.e. where the cut hasn't yet separated
+ * a thin ring along p's boundary; empty when B is a circle attached at one switch plus that one switch. For showing
+ * the progress while L is prolonged. `undefined` if p's boundary word can't be identified.
  */
-export function cutClosedSurface(
-  tt: TrainTrack,
-  candidates: readonly Prong[],
-  maxRealBranches = 40,
-): ClosedSurfaceCut | undefined {
-  for (let count = 1; count <= maxRealBranches; count++)
-    for (const prong of candidates) {
+export function circleDefects(ct: CutTrack): Vertex[] | undefined {
+  const word = punctureWord(ct);
+  return word?.letters.map((x) => x.target).filter((s) => ct.graph.valence(s) > 2);
+}
+
+/** A way to cut: along `prong` through `realBranches` real branches, after which B is a circle attached at one switch. */
+export interface CutOption {
+  readonly prong: Prong;
+  readonly realBranches: number;
+}
+
+/**
+ * For each candidate prong, the shortest L that makes B a circle attached at one switch, sorted by that length.
+ *
+ * To avoid cutting for every length, each prong is traced once: a cut can only separate a thin ring along p's
+ * boundary once L has come closer to the boundary than the widest infinitesimal branch (at the corners of the
+ * boundary, the switch next to the boundary keeps an infinitesimal branch otherwise). From there, cuts are tried for
+ * a few laps around p's boundary (the thesis: once L is within ε of the boundary it runs parallel to all of it).
+ */
+export function cutOptions(tt: TrainTrack, candidates: readonly Prong[], maxRealBranches = 500): CutOption[] {
+  const widths = tt.widths as ReadonlyMap<Edge, number>;
+  const infinitesimal = tt.graph.edges.filter((e) => tt.kind.get(e) === "infinitesimal");
+  const threshold = Math.max(...infinitesimal.map((e) => widths.get(e) as number));
+  const lap = tt
+    .boundaryWords()
+    .filter((b) => !b.infinitesimal)
+    .reduce((n, b) => n + b.word.length, 0);
+  const options: CutOption[] = [];
+  for (const prong of candidates) {
+    let L;
+    try {
+      L = traceProngThroughBranches(tt, prong, maxRealBranches);
+    } catch {
+      continue; // the leaf runs into a singularity
+    }
+    let realIndex = 0;
+    let first: number | undefined;
+    L.path.forEach((x, k) => {
+      if (tt.kind.get(x.edge) !== "real") return;
+      realIndex++;
+      const w = widths.get(x.edge) as number;
+      const y = L.heights[k] as number;
+      if (first === undefined && Math.min(y, w - y) < threshold) first = realIndex;
+    });
+    if (first === undefined) continue;
+    for (let count = first; count <= Math.min(maxRealBranches, first + 3 * lap); count++) {
       let ct: CutTrack;
       try {
         ct = cut(tt, slitsForProng(tt, prong, count));
       } catch {
-        continue; // e.g. the leaf runs into a singularity
+        continue;
       }
       const word = punctureWord(ct);
-      const v = word === undefined ? undefined : attachmentSwitch(ct, word);
-      if (word !== undefined && v !== undefined)
-        return { surface: removeAlmostPeripheralCircle(ct, word, v), prong, realBranches: count, cut: ct };
+      if (word !== undefined && attachmentSwitch(ct, word) !== undefined) {
+        options.push({ prong, realBranches: count });
+        break;
+      }
     }
-  return undefined;
+  }
+  return options.sort((a, b) => a.realBranches - b.realBranches);
+}
+
+/** Carries out a cut option: cuts, removes B, and returns the fibred surface on Σ ∖ Q. */
+export function cutClosedSurface(tt: TrainTrack, option: CutOption): ClosedSurfaceCut {
+  const ct = cut(tt, slitsForProng(tt, option.prong, option.realBranches));
+  const word = punctureWord(ct);
+  const v = word === undefined ? undefined : attachmentSwitch(ct, word);
+  if (word === undefined || v === undefined) throw new Error("This cut doesn't make p's boundary a circle");
+  return {
+    surface: removeAlmostPeripheralCircle(ct, word, v),
+    prong: option.prong,
+    realBranches: option.realBranches,
+    cut: ct,
+  };
 }

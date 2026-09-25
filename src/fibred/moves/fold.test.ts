@@ -46,6 +46,15 @@ describe("subdivide", () => {
     expect([...fs.peripheral].map(String).sort()).toEqual(["b1+", "b1-", "b2"]);
   });
 
+  it("maps the new junction correctly when the split letter is the strip itself, reversed", () => {
+    // g(b) = b a B: the letter after the split point 2 is B = b̄. The new junction must go to the start of B in the old
+    // graph (the end of b), not to the new junction, where b̄ starts after the subdivision.
+    const fs = torus("a -> a, b -> b a B");
+    const { junction } = subdivide(fs, edge(fs, "b").edge, 2);
+    expect(fs.g.vertexImage(junction)).not.toBe(junction);
+    expect(fs.g.checkContinuity()).toEqual([]); // (the map is not geometric, so only continuity is checked)
+  });
+
   it("rejects indices at the ends", () => {
     const fs = torus("a -> a b, b -> b a b");
     expect(() => subdivide(fs, edge(fs, "a").edge, 0)).toThrow();

@@ -42,6 +42,11 @@ export function subdivide(fs: FibredSurface, e: Edge, gIndex: number, muIndex = 
   if (!(muIndex >= 0 && muIndex <= muImage.length))
     throw new Error(`Can't split μ(${e}) at ${muIndex}: it has ${muImage.length} letters`);
   const oldImages = new Map(fs.graph.edges.map((x) => [x, fs.g.image(x.forward)]));
+  // The images of the new junction, read off before the graph changes: the letter at gIndex may be e or ē itself,
+  // whose start moves to the new junction below. (Its replacement e₁ e₂ or ē₂ ē₁ starts where it started before.)
+  const gImageOfJunction = (gImage.at(gIndex) as OrientedEdge).source;
+  const muImageOfJunction =
+    muIndex === 0 ? fs.mu.vertexImage(e.source) : (muImage.at(muIndex - 1) as OrientedEdge).target;
 
   const [firstName, secondName] = segmentNames(fs, e.name.toLowerCase());
   const w = fs.addJunction();
@@ -54,16 +59,13 @@ export function subdivide(fs: FibredSurface, e: Edge, gIndex: number, muIndex = 
   e.name = firstName;
   if (fs.peripheral.has(e)) fs.peripheral.add(second);
 
-  fs.g.setVertexImage(w, (gImage.at(gIndex) as OrientedEdge).source);
+  fs.g.setVertexImage(w, gImageOfJunction);
   fs.g.setImage(e.forward, gImage.slice(0, gIndex));
   fs.g.setImage(second.forward, gImage.slice(gIndex));
   const firstThenSecond = EdgePath.of(e.forward, second.forward);
   fs.g.substituteInImages((x) => (x === e ? firstThenSecond : undefined));
 
-  fs.mu.setVertexImage(
-    w,
-    muIndex === 0 ? fs.mu.vertexImage(e.source) : (muImage.at(muIndex - 1) as OrientedEdge).target,
-  );
+  fs.mu.setVertexImage(w, muImageOfJunction);
   fs.mu.setImage(e.forward, muImage.slice(0, muIndex));
   fs.mu.setImage(second.forward, muImage.slice(muIndex));
 
