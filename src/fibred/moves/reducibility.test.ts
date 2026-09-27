@@ -43,8 +43,10 @@ describe("reducibility", () => {
     const candidate = reductionCandidates(fs).find((c) => c.preserved.size === 2)!;
     reduceToSubgraph(fs, candidate.preserved);
     expect(names(fs.graph.edges)).toEqual(["a", "b"]);
-    expect(fs.isSubsurface).toBe(true);
+    expect(fs.reductionCurves.map(String)).toEqual(["a b A B"]); // the curve separating the two handles
     expect(fs.checkIntegrity()).toEqual([]);
+    fs.reductionCurves.length = 0; // without the curve, the boundary word of the handle is unaccounted for
+    expect(fs.checkIntegrity()).toHaveLength(1);
     expect(perronFrobenius(fs, { essentialOnly: false }).growth).toBeCloseTo(
       ((1 + Math.sqrt(5)) / 2) ** 2,
       9,

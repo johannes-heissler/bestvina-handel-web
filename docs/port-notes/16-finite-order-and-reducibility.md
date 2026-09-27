@@ -35,9 +35,11 @@ periphery P instead of the subgraph.
    reduction to the complement.
 3. **Delete everything else.**
 
-The result is a fibred surface for a **subsurface** of the original surface. μ still records its embedding (as an inclusion), but
-the boundary words of G are now mapped to the reduction curves, not to boundary words of G₀. So `FibredSurface` has a new flag
-**`isSubsurface`**, which switches off that part of the integrity check.
+The result is a fibred surface for a **subsurface** of the original surface. μ still records its embedding (as an inclusion),
+but the boundary words of G that aren't punctures are now mapped to the reduction curves. These are recorded in
+**`FibredSurface.reductionCurves`** (cyclically reduced closed paths in G₀), and the integrity check accepts μ(boundary word) =
+a boundary word of G₀ or a reduction curve, in either orientation. (A first version had a boolean `isSubsurface` that switched
+the check off.)
 
 ## In the algorithm
 

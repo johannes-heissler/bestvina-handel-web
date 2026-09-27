@@ -52,11 +52,11 @@ export class FibredSurface {
   /** Set once the fibred surface has been converted into a train track. */
   isTrainTrack = false;
   /**
-   * Set after a reduction: G is then a spine of a subsurface of the original surface, and μ describes its embedding
-   * (as an inclusion). μ then no longer maps boundary words of G to boundary words of G₀; they map to the reduction
-   * curves instead, so that check is skipped.
+   * The reduction curves of the reductions so far, as cyclically reduced closed paths in G₀. After a reduction, G is a
+   * spine of a subsurface of the original surface (μ still describes its embedding), and μ maps each boundary word of
+   * G either to a boundary word of G₀ (a puncture) or to one of these curves, in either orientation.
    */
-  isSubsurface = false;
+  readonly reductionCurves: EdgePath[] = [];
   /**
    * Receives messages about inconsistent states that a move detected but could recover from (the C#
    * `OnError` event). Defaults to `console.error`; the UI shows them to the user.
@@ -114,7 +114,7 @@ export class FibredSurface {
     });
     result.ignoreReducible = this.ignoreReducible;
     result.isTrainTrack = this.isTrainTrack; // the C# Copy() forgot this flag
-    result.isSubsurface = this.isSubsurface;
+    result.reductionCurves.push(...this.reductionCurves);
     result.onError = this.onError;
     return { copy: result, correspondence: graphCopy };
   }
@@ -251,13 +251,28 @@ export class FibredSurface {
           );
     }
 
-    if (!this.isSubsurface)
-      for (const b of this.mu.boundaryWordReport())
-        if (b.matchedIndex < 0)
-          problems.push(
-            `μ maps the boundary word ${b.word} to ${b.image.toString() || "(empty)"}, which is not a boundary word of G₀`,
-          );
+    for (const b of this.mu.boundaryWordReport(undefined, this.peripheralCurvesOfG0()))
+      if (b.matchedIndex < 0)
+        problems.push(
+          `μ maps the boundary word ${b.word} to ${b.image.toString() || "(empty)"}, which is neither a boundary word of G₀ nor a reduction curve`,
+        );
     return problems;
+  }
+
+  /** The boundary words of G₀ and the reduction curves in both orientations: what μ may map boundary words of G to. */
+  private peripheralCurvesOfG0(): EdgePath[] {
+    return [...this.spine0.boundaryWords(), ...this.reductionCurves.flatMap((c) => [c, c.inverse])];
+  }
+
+  /**
+   * Records the closed path `curve` in G₀ as a reduction curve, unless it is (a rotation of) a boundary word of G₀ or
+   * of a recorded curve, in either orientation.
+   */
+  addReductionCurve(curve: EdgePath): void {
+    const reduced = curve.cyclicallyReduced();
+    if (reduced.isEmpty) return;
+    if (this.peripheralCurvesOfG0().some((c) => c.cyclicallyReduced().isRotationOf(reduced))) return;
+    this.reductionCurves.push(reduced);
   }
 
   /** Reports an inconsistency through {@link onError} (the C# `HandleInconsistentBehavior`). */

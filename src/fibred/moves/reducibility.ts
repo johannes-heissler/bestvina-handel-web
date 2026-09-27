@@ -150,8 +150,8 @@ export function componentOrbits(fs: FibredSurface, edges: ReadonlySet<Edge>): Se
  * Reduces to the invariant subgraph `preserved` (the C# `ReduceToSubgraph`, "Reduce to subgraph"): prepares the reduction,
  * keeps one component C of it, and replaces g by the first return map g^k on C if g permutes k components.
  *
- * The result is a fibred surface for a subsurface of the original surface (`isSubsurface`): μ still records the
- * embedding.
+ * The result is a fibred surface for a subsurface of the original surface: μ still records the embedding, and the
+ * boundary words of the component that aren't punctures are recorded as reduction curves.
  *
  * @param choose Picks the component to keep among the components of `preserved` (by default the first one).
  */
@@ -167,7 +167,7 @@ export function reduceToSubgraph(
   const k = (orbits.find((orbit) => orbit.includes(component)) as Set<Edge>[]).length;
   if (k > 1) replaceByPower(fs.g, k); // before deleting the components that g maps C to
   restrictTo(fs, component);
-  fs.isSubsurface = true;
+  for (const word of fs.graph.boundaryWords()) fs.addReductionCurve(fs.mu.imageOfPath(word));
 }
 
 /** Deletes everything outside the subgraph `edges` (which g must map into itself). */
