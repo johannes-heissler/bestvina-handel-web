@@ -365,6 +365,16 @@ export class RibbonGraph {
   }
 
   /**
+   * Reverses the orientation of the edge `e` in place: its forward orientation now runs the other way. The
+   * embedding doesn't change; in the stars, `e.forward` and `e.backward` swap places.
+   */
+  invertEdge(e: Edge): void {
+    const swap = (x: OrientedEdge) => (x.edge !== e ? x : x.reversed);
+    for (const v of new Set([e.source, e.target])) this.stars.set(v, this.starOf(v).map(swap));
+    [e._source, e._target] = [e._target, e._source];
+  }
+
+  /**
    * Replaces the cyclic order at `v`. `star` must be a permutation of the current star.
    *
    * @throws Error otherwise.

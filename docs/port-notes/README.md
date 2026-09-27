@@ -36,7 +36,8 @@ in `docs/`.
 | 16  | [Finite order and reducibility](16-finite-order-and-reducibility.md)                | `FibredSurfaceReduction.cs`, `FiniteOrderSuggestion`                             | 🔍   | ✅             | ✅    |
 | 17  | [Absorbing into the periphery](17-absorbing-into-periphery.md)                      | `FibredSurfaceAbsorbingIntoPeriphery.cs`                                         | 🔍   | ✅             | ✅    |
 | 18  | [The suggestion system and the autopilot](18-suggestions.md)                        | `FibredSurfaceAlgorithmSuggestionSystem.cs`                                      | 🔍   | ✅             | ✅    |
-| 19+ | Folding loops, examples, point pushes                                               | `SurfaceGenerator.cs`, `PointPushes.cs`, …                                       |      |                |       |
+| 19  | [Model surfaces, gallery, presets, map editing](19-models-and-examples.md)          | `SurfaceGenerator.cs` (combinatorial part), `MainMenu` presets                   | 🔍   | ✅             | ✅    |
+| 20+ | Geometry, embedding, rendering, UI, point pushes                                    | `GeometricObjects_*`, `UIElements/*`, `PointPushes.cs`                           |      |                |       |
 | 3   | Curves, points, geodesics                                                           | `GeometricObjects_Abstract/*`                                                    |      |                |       |
 | 4   | Surfaces, homeomorphisms                                                            | `GeometricObjects_Abstract/*`                                                    |      |                |       |
 | …   | Embedding layer, suggestion system, examples, rendering, UI                         |                                                                                  |      |                |       |

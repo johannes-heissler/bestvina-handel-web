@@ -61,3 +61,41 @@ export function fromBoundaryWords(words: readonly (readonly string[])[]): Ribbon
     );
   return graph;
 }
+
+/**
+ * The ribbon graph with the given stars: one vertex per list, whose cyclic order is the list of oriented edge
+ * names starting there ("a" is the edge a, "A" its inverse, so "A" in a star means that a ends there). For a
+ * polygon model, the star of the single vertex of G₀ is the polygon word read counterclockwise.
+ *
+ * @example `fromStars([["a", "A", "b", "B"]])` is a rose with two petals around two punctures of the plane.
+ * @throws Error if an oriented edge is missing or occurs twice.
+ */
+export function fromStars(stars: readonly (readonly string[])[]): RibbonGraph {
+  const vertexOfName = new Map<string, number>();
+  stars.forEach((star, i) =>
+    star.forEach((name) => {
+      if (vertexOfName.has(name)) throw new Error(`The oriented edge ${name} occurs more than once`);
+      vertexOfName.set(name, i);
+    }),
+  );
+  const graph = new RibbonGraph();
+  const vertices = stars.map(() => graph.addVertex());
+  const oriented = new Map<string, OrientedEdge>();
+  for (const [name, i] of vertexOfName) {
+    if (!isForwardName(name)) continue;
+    const j = vertexOfName.get(invertName(name));
+    if (j === undefined) throw new Error(`The oriented edge ${invertName(name)} occurs in no star`);
+    const edge = graph.addEdge(vertices[i] as Vertex, vertices[j] as Vertex, { name });
+    oriented.set(name, edge.forward);
+    oriented.set(invertName(name), edge.backward);
+  }
+  for (const name of vertexOfName.keys())
+    if (!oriented.has(name)) throw new Error(`The oriented edge ${invertName(name)} occurs in no star`);
+  stars.forEach((star, i) =>
+    graph.setStar(
+      vertices[i] as Vertex,
+      star.map((name) => oriented.get(name) as OrientedEdge),
+    ),
+  );
+  return graph;
+}
