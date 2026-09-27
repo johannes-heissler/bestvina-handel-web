@@ -35,10 +35,14 @@ import { perronFrobenius } from "./perron-frobenius";
 import { prongs } from "./singular-leaves";
 import { trainTrack } from "./train-track";
 
-/** A fold choice by name: keep the strip `preferred`, and fold along c, a path in G₀ written as text. */
+/**
+ * A fold choice by name: keep the strip `preferred`, and fold along c, a path in G₀ written as text; for a loop folded
+ * completely, first move its junction along `move` (also a path in G₀).
+ */
 export interface FoldRef {
   readonly preferred: string;
   readonly c: string;
+  readonly move?: string;
 }
 
 /** A point of a strip by name: the point between the letters `index − 1` and `index` of g(strip). */
@@ -225,15 +229,23 @@ function edges(fs: FibredSurface, names: readonly string[]): Set<Edge> {
 
 /** A fold option by name (see {@link FoldRef}). */
 export function foldRef(option: FoldOption): FoldRef {
-  return { preferred: option.preferred.name, c: option.c.toString() };
+  const ref = { preferred: option.preferred.name, c: option.c.toString() };
+  return option.move === undefined ? ref : { ...ref, move: option.move.toString() };
 }
 
 /** The fold choice that picks the option `ref` (or the default, the first option). */
 function foldChoice(fs: FibredSurface, ref: FoldRef | undefined): FoldChoice {
   if (ref === undefined) return (options) => options[0] as FoldOption;
-  const c = ref.c === "" ? EdgePath.EMPTY : parseEdgePath(ref.c, nameTable(fs.spine0));
+  const path = (text: string) => (text === "" ? EdgePath.EMPTY : parseEdgePath(text, nameTable(fs.spine0)));
+  const c = path(ref.c);
+  const move = path(ref.move ?? "");
   return (options) => {
-    const option = options.find((o) => o.preferred.name === ref.preferred && o.c.key === c.key);
+    const option = options.find(
+      (o) =>
+        o.preferred.name === ref.preferred &&
+        o.c.key === c.key &&
+        (o.move ?? EdgePath.EMPTY).key === move.key,
+    );
     if (option === undefined) throw new Error(`The fold (${ref.preferred}, ${ref.c}) is not possible`);
     return option;
   };

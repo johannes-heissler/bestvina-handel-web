@@ -389,7 +389,12 @@ function foldVariants<
   });
   return options.map(({ ref, sideCrossings }) => ({
     move: { ...move, fold: ref },
-    label: ["Keep ", { strip: ref.preferred }, `, fold along c = ${ref.c || "(empty)"}`],
+    label: [
+      ...(ref.move ? [`Move the junction along ${ref.move}, `] : []),
+      "keep ",
+      { strip: ref.preferred },
+      `, fold along c = ${ref.c || "(empty)"}`,
+    ],
     rating: sideCrossings,
   }));
 }

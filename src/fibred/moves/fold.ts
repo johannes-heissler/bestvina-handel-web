@@ -5,7 +5,7 @@
  * @module
  */
 import { EdgePath } from "../../graph/edge-path";
-import type { OrientedEdge } from "../../graph/ribbon-graph";
+import type { OrientedEdge, Vertex } from "../../graph/ribbon-graph";
 import { EdgePoint } from "../edge-point";
 import type { FibredSurface } from "../fibred-surface";
 import { isCyclicInterval } from "../fibred-surface";
@@ -108,16 +108,20 @@ export interface FoldResult {
  *    partial-partial, partial-full and full-full cases of the thesis.)
  * 3. The segments, now with equal g- and μ-images, are folded into the segment of `kept`.
  *
+ * A loop at v that is folded completely can't have its target moved alone (that also moves its source). Instead, v
+ * itself can first be moved along a path γ (`move`), which conjugates the loop's μ to γ̄ μ(e) γ and puts γ̄ in front
+ * of the other strips at v; c must then equal the loop's new μ-image.
+ *
  * @param c The μ-image of the folded segment; see {@link foldOptions} for good choices. Defaults to the longest
  *   common prefix of the μ-images, which needs no isotopy of junctions for partial folds.
- * @throws Error if a strip that is folded completely is a loop whose μ-image is not c (moving its target would
- *   also move its source; not supported yet).
+ * @param move A path in G₀ from μ(v) along which v is moved first (only needed for loops folded completely).
+ * @throws Error if a strip that is folded completely is a loop whose μ-image (after the move) is not c.
  */
 export function foldInitialSegments(
   fs: FibredSurface,
   edges: readonly OrientedEdge[],
   i: number,
-  options: { c?: EdgePath; kept?: OrientedEdge } = {},
+  options: { c?: EdgePath; kept?: OrientedEdge; move?: EdgePath } = {},
 ): FoldResult {
   const v = edges[0]?.source;
   if (v === undefined || i < 1) throw new Error("Nothing to fold");
@@ -126,13 +130,14 @@ export function foldInitialSegments(
     if (fs.g.image(e).length < i || !fs.g.image(e).slice(0, i).equals(prefix))
       throw new Error(`g(${e}) doesn't start with ${prefix}`);
   inCyclicOrder(fs, edges); // checks adjacency before anything changes
+  if (options.move !== undefined) isotopeJunction(fs, v, options.move);
   const c = options.c ?? commonPrefix(edges.map((e) => fs.mu.image(e)));
   if (c.source !== undefined && c.source !== fs.mu.vertexImage(v))
     throw new Error(`${c} doesn't start at μ(${v})`);
   for (const e of edges)
     if (fs.g.image(e).length === i && e.target === v && !fs.mu.image(e).equals(c))
       throw new Error(
-        `Folding the loop ${e.edge} completely would need an isotopy of both its ends (not supported yet)`,
+        `Folding the loop ${e.edge} completely needs μ(${e}) = ${c}; move ${v} first so that it is`,
       );
 
   const transforms: PointTransform[] = [];
@@ -173,8 +178,10 @@ export function foldInitialSegments(
 
 /** A way to fold initial segments, and how many side crossings (the length of μ) there are afterwards. */
 export interface FoldOption {
-  /** The strip whose μ-image determines c. */
+  /** The strip whose μ-image determines c (and that is kept). */
   readonly preferred: OrientedEdge;
+  /** For a loop folded completely: the path along which its junction is moved first (see {@link foldInitialSegments}). */
+  readonly move?: EdgePath;
   /** c = the first `l` letters of μ(preferred). */
   readonly l: number;
   readonly c: EdgePath;
@@ -186,9 +193,15 @@ export interface FoldOption {
  * The possible choices of c for {@link foldInitialSegments}: the prefixes of the μ-images of the strips (the C#
  * `MovementForFolding` with preferred edge and l), sorted by the number of side crossings afterwards, then
  * preferring strips in the middle of the block. Each option is evaluated on a copy of the surface.
+ *
+ * If a loop is folded completely, c is its μ-image after moving the junction v along some γ; the candidates for γ are
+ * the prefixes of the μ-images of the strips at v (port note 12, Q1: compute the move and rate it like the others).
  */
 export function foldOptions(fs: FibredSurface, edges: readonly OrientedEdge[], i: number): FoldOption[] {
   const ordered = inCyclicOrder(fs, edges);
+  const v = (edges[0] as OrientedEdge).source;
+  const fullLoop = edges.find((e) => fs.g.image(e).length === i && e.target === v);
+  if (fullLoop !== undefined) return loopFoldOptions(fs, edges, i, fullLoop);
   const seen = new Set<string>();
   const options: { option: FoldOption; centrality: number }[] = [];
   for (const [position, preferred] of ordered.entries()) {
@@ -215,6 +228,41 @@ export function foldOptions(fs: FibredSurface, edges: readonly OrientedEdge[], i
   return options
     .sort((x, y) => x.option.sideCrossings - y.option.sideCrossings || x.centrality - y.centrality)
     .map((x) => x.option);
+}
+
+/** {@link foldOptions} when the loop `loop` is folded completely: one option per move γ of its junction. */
+function loopFoldOptions(
+  fs: FibredSurface,
+  edges: readonly OrientedEdge[],
+  i: number,
+  loop: OrientedEdge,
+): FoldOption[] {
+  const v = loop.source;
+  const seen = new Set<string>();
+  const options: FoldOption[] = [];
+  for (const x of fs.graph.star(v)) {
+    const mu = fs.mu.image(x);
+    for (let l = 0; l <= mu.length; l++) {
+      const move = mu.slice(0, l);
+      if (seen.has(move.key)) continue;
+      seen.add(move.key);
+      const { copy, correspondence } = fs.copyWithCorrespondence();
+      isotopeJunction(copy, correspondence.vertexMap.get(v) as Vertex, move);
+      const c = copy.mu.image(correspondence.orient(loop));
+      try {
+        foldInitialSegments(copy, edges.map(correspondence.orient), i, {
+          c,
+          kept: correspondence.orient(loop),
+        });
+      } catch {
+        continue; // e.g. two loops with different μ-images after the move
+      }
+      options.push({ preferred: loop, move, l: c.length, c, sideCrossings: copy.mu.totalLength() });
+    }
+  }
+  return options.sort(
+    (x, y) => x.sideCrossings - y.sideCrossings || (x.move?.length ?? 0) - (y.move?.length ?? 0),
+  );
 }
 
 /** The longest common prefix of the paths. */

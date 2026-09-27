@@ -75,6 +75,12 @@ such choices, so there's always the option c = μ(loop) if the loop is the prefe
 case either (it moved curves, which wasn't correct for μ). _Is that restriction acceptable for now, or do you know
 a good general rule for this case?_
 
+**Answer (2026-09-27): don't forbid it, compute the vertex move.** `foldInitialSegments` takes an optional `move`: a path γ in G₀
+along which v is moved first (`isotopeJunction`). That conjugates the loop's μ to γ̄ μ(e) γ and puts γ̄ in front of the other strips
+at v; c is then the loop's new μ-image. `foldOptions` tries every γ that is a prefix of the μ-image of a strip at v and rates
+each option by μ's length afterwards, like the other options (γ = ∅ first on ties). `FoldOption.move` and `FoldRef.move`
+carry the choice; the suggestion label says "Move the junction along γ".
+
 ## Tests
 
 `src/fibred/moves/fold.test.ts` (11 tests), on the torus rose with g(a) = a b, g(b) = a b b:

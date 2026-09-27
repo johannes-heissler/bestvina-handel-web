@@ -75,10 +75,22 @@ describe("folding initial segments", () => {
   it("offers the choices of μ for the folded segment", () => {
     const fs = make();
     const options = foldOptions(fs, [edge(fs, "a"), edge(fs, "b")], 2);
-    // a is folded completely and is a loop, so only c = μ(a) works without moving both of its ends.
-    expect(options.map((o) => [String(o.preferred), o.l, String(o.c), o.sideCrossings])).toEqual([
-      ["a", 1, "a", 3],
-    ]);
+    // a is folded completely and is a loop, so c is μ(a) after moving the junction along some γ (port note 12, Q1).
+    // The best option doesn't move it.
+    expect(options.map((o) => [String(o.move), String(o.c), o.sideCrossings])[0]).toEqual(["", "a", 3]);
+    expect(options.map((o) => String(o.c))).toContain("b a B"); // moved along b
+    const ratings = options.map((o) => o.sideCrossings);
+    expect(ratings).toEqual(ratings.toSorted((x, y) => x - y));
+    for (const o of options) {
+      const copy = fs.copy(); // shares G₀, where c and γ live
+      foldInitialSegments(copy, [edge(copy, "a"), edge(copy, "b")], 2, {
+        c: o.c,
+        kept: edge(copy, "a"),
+        ...(o.move && { move: o.move }),
+      });
+      expect(copy.checkIntegrity()).toEqual([]);
+      expect(copy.mu.totalLength()).toBe(o.sideCrossings);
+    }
   });
 
   it("folds a full and a partial strip (the partial-full case)", () => {

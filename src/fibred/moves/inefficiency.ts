@@ -124,8 +124,12 @@ export function removeInefficiencyStep(
 
   const options = foldOptions(fs, edgesToFold, i);
   if (options.length === 0) throw new Error(`No supported way to fold ${edgesToFold.join(", ")}`);
-  const { c, preferred } = choose(options);
-  const { transform } = foldInitialSegments(fs, edgesToFold, i, { c, kept: preferred });
+  const { c, preferred, move } = choose(options);
+  const { transform } = foldInitialSegments(fs, edgesToFold, i, {
+    c,
+    kept: preferred,
+    ...(move && { move }),
+  });
 
   const next = inefficiencyAt(fs, transform(point));
   if (next === undefined || next.order !== p.order - 1)
@@ -203,6 +207,6 @@ export function removePeripheralInefficiency(
   const i = sharedPrefix(edges.map((e) => fs.g.image(e).letters)).length;
   const options = foldOptions(fs, edges, i);
   if (options.length === 0) throw new Error(`No supported way to fold ${edges.join(", ")}`);
-  const { c, preferred } = choose(options);
-  foldInitialSegments(fs, edges, i, { c, kept: preferred });
+  const { c, preferred, move } = choose(options);
+  foldInitialSegments(fs, edges, i, { c, kept: preferred, ...(move && { move }) });
 }
