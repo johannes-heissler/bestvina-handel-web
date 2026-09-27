@@ -260,47 +260,127 @@ function planeChart(model: PlaneModel, spine: Spine): Chart {
 // ─── Ribbon graphs ──────────────────────────────────────────────────────────────────────────
 
 /**
- * A ribbon graph drawn as its fibred surface: a disk per vertex on a circle, a half-band (stub) per edge end, and the
- * half-bands glued pairwise at their ends (your idea: one rectangle per oriented edge, glued in the middle).
+ * A ribbon graph drawn as its fibred surface: a disk per vertex, and a band per edge. The edges of a spanning tree are
+ * drawn as real bands; each child disk sits in the direction of its parent's port, with its star rotated so that the
+ * band leaves it straight back towards the parent (a tree can be drawn this way with any cyclic orders). The other
+ * edges are half-bands glued at their labelled ends (your rectangles, glued in the middle), except loops whose two ends
+ * are neighbours in the cyclic order: those are drawn as petals (e.g. a peripheral circle).
  */
 function ribbonChart(spine: Spine): Chart {
-  const vertices = spine.graph.vertices;
-  const count = vertices.length;
-  const spread = count === 1 ? 0 : 0.62;
-  const r = count === 1 ? 0.32 : Math.min(0.2, (1.6 * Math.sin(Math.PI / count)) / 3);
-  const stub = r * 0.9;
+  const graph = spine.graph;
+  const vertices = graph.vertices;
+  const root = vertices.reduce(
+    (best, v) => (graph.valence(v) > graph.valence(best) ? v : best),
+    vertices[0] as Vertex,
+  );
+
+  // A breadth-first spanning tree, with the angle of every port and the position of every disk (in units of the radius).
+  const angle = new Map<OrientedEdge, number>();
+  const center = new Map<Vertex, Complex>([[root, Complex.ZERO]]);
+  const treeEdges = new Set<Edge>();
+  // Loops whose ends are neighbours in the star, with the end that comes first counterclockwise.
+  const petals = new Map<Edge, OrientedEdge>();
+  for (const e of graph.edges)
+    if (e.isLoop && graph.star(e.source).length > 2) {
+      if (graph.next(e.forward) === e.backward) petals.set(e, e.forward);
+      else if (graph.next(e.backward) === e.forward) petals.set(e, e.backward);
+    }
+  const setAngles = (first: OrientedEdge, firstAngle: number) => {
+    const star = graph.starFrom(first);
+    star.forEach((x, k) => angle.set(x, firstAngle + (2 * Math.PI * k) / star.length));
+  };
+  setAngles(graph.star(root)[0] as OrientedEdge, Math.PI / 2);
+  const BAND = 3.2; // distance between the centres of neighbouring disks, in radii
+  for (let queue = [root]; queue.length > 0;) {
+    const u = queue.shift() as Vertex;
+    for (const x of graph.star(u)) {
+      const v = x.target;
+      if (center.has(v)) continue;
+      treeEdges.add(x.edge);
+      const theta = angle.get(x) as number;
+      center.set(v, (center.get(u) as Complex).add(Complex.fromPolar(BAND, theta)));
+      setAngles(x.reversed, theta + Math.PI);
+      queue.push(v);
+    }
+  }
+
+  // Scale everything into the unit disk.
+  const stubLength = 0.9;
+  const extent = Math.max(...[...center.values()].map((c) => c.abs() + 1 + stubLength), 1);
+  const r = 0.9 / extent;
+  const shift = [...center.values()].reduce((sum, c) => sum.add(c), Complex.ZERO).scale(-1 / center.size);
+  const position = (v: Vertex) => (center.get(v) as Complex).add(shift).scale(r);
+
   const regions = new Map<Vertex, Region>();
   const ports = new Map<OrientedEdge, Port>();
+  const bands = new Map<Edge, Band>();
   const decorations: Decoration[] = [];
-  vertices.forEach((w, i) => {
-    const c = Complex.fromPolar(spread, Math.PI / 2 + (2 * Math.PI * i) / count);
+  for (const w of vertices) {
+    const c = position(w);
     regions.set(w, { boundary: circle(c, r, 32), center: c });
     decorations.push({ kind: "disk", center: c, radius: r });
-    const star = spine.graph.star(w);
+    const star = graph.star(w);
     const width = Math.min((2 * Math.PI * r) / star.length, r) * 0.7;
-    star.forEach((x, k) => {
-      const outward = Complex.fromPolar(1, Math.PI / 2 + (2 * Math.PI * k) / star.length);
+    for (const x of star) {
+      const outward = Complex.fromPolar(1, angle.get(x) as number);
       const at = c.add(outward.scale(r));
       const lateral = new Complex(-outward.im, outward.re).scale(width / 2);
-      ports.set(x, { right: at.sub(lateral), left: at.add(lateral), outward, stub });
-      decorations.push({
-        kind: "stub",
-        from: at,
-        to: at.add(outward.scale(stub)),
-        halfWidth: width / 2,
-        label: x.name,
-        color: x.color,
+      const glued = !treeEdges.has(x.edge) && !petals.has(x.edge);
+      ports.set(x, {
+        right: at.sub(lateral),
+        left: at.add(lateral),
+        outward,
+        stub: glued ? r * stubLength : 0,
       });
+      if (glued)
+        decorations.push({
+          kind: "stub",
+          from: at,
+          to: at.add(outward.scale(r * stubLength)),
+          halfWidth: width / 2,
+          label: x.name,
+          color: x.color,
+        });
+    }
+  }
+  for (const [e, first] of petals) {
+    // Out through the first end, counterclockwise around a point beyond the two ports, back through the second end.
+    const [out, back] = [ports.get(first) as Port, ports.get(first.reversed) as Port];
+    const [start, end] = [out.right.add(out.left).scale(0.5), back.right.add(back.left).scale(0.5)];
+    const direction = out.outward.add(back.outward);
+    const phi = direction.arg();
+    const c = regions.get(e.source)?.center as Complex;
+    const p = c.add(Complex.fromPolar(r * 2.2, phi));
+    // Leave each port straight outwards for a bit, then go counterclockwise around p, the long way round.
+    const [s1, e1] = [start.add(out.outward.scale(r * 0.5)), end.add(back.outward.scale(r * 0.5))];
+    const [a0, a1] = [s1.sub(p).arg(), e1.sub(p).arg()];
+    const sweep = (((a1 - a0) % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI);
+    const [r0, r1] = [s1.sub(p).abs(), e1.sub(p).abs()];
+    const arc = Array.from({ length: 33 }, (_, i) =>
+      p.add(Complex.fromPolar(r0 + ((r1 - r0) * i) / 32, a0 + (sweep * i) / 32)),
+    );
+    const centerline = [start, ...arc, end];
+    const halfWidth = out.left.sub(out.right).abs() / 2;
+    bands.set(e, {
+      kind: "path",
+      centerline: first.isForward ? centerline : centerline.toReversed(),
+      halfWidth,
     });
-  });
-  return {
-    geometry: "euclidean",
-    spine,
-    regions,
-    ports,
-    bands: new Map(spine.graph.edges.map((e) => [e, { kind: "glue" }] as const)),
-    decorations,
-  };
+    decorations.push({ kind: "band", centerline, halfWidth, color: e.color });
+  }
+  for (const e of graph.edges) {
+    if (petals.has(e)) continue;
+    if (!treeEdges.has(e)) {
+      bands.set(e, { kind: "glue" });
+      continue;
+    }
+    const [from, to] = [ports.get(e.forward) as Port, ports.get(e.backward) as Port];
+    const centerline = [from.right.add(from.left).scale(0.5), to.right.add(to.left).scale(0.5)];
+    const halfWidth = Math.min(from.left.sub(from.right).abs(), to.left.sub(to.right).abs()) / 2;
+    bands.set(e, { kind: "path", centerline, halfWidth });
+    decorations.push({ kind: "band", centerline, halfWidth, color: e.color });
+  }
+  return { geometry: "euclidean", spine, regions, ports, bands, decorations };
 }
 
 // ─── Helpers ────────────────────────────────────────────────────────────────────────────────

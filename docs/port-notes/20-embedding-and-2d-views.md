@@ -54,11 +54,11 @@ Every model is drawn as **regions, ports and bands**:
 - **Bands:** each edge of G₀ is either **glued** (port x ≡ port x̄ with u ↦ −u, after an optional straight stub) or a drawn
   **band** along which the strands run side by side.
 
-| Model   | Regions                                  | Ports                                  | Bands                                                            |
-| ------- | ---------------------------------------- | -------------------------------------- | ---------------------------------------------------------------- |
-| polygon | the polygon (Klein, or flat coordinates) | the sides (the middle 50–80 % of them) | glued, with the deck transformations (isometries / translations) |
-| plane   | a disk around each base point            | at the angles of the petals            | petals around the points; for the comb also the path edges       |
-| ribbon  | a disk per vertex of G₀, on a circle     | evenly around each disk                | glued at the ends of half-bands (your rectangles), labelled      |
+| Model   | Regions                                                 | Ports                                                                                             | Bands                                                                                                                                                |
+| ------- | ------------------------------------------------------- | ------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| polygon | the polygon (Klein, or flat coordinates)                | the sides (the middle 50–80 % of them)                                                            | glued, with the deck transformations (isometries / translations)                                                                                     |
+| plane   | a disk around each base point                           | at the angles of the petals                                                                       | petals around the points; for the comb also the path edges                                                                                           |
+| ribbon  | a disk per vertex of G₀, laid out along a spanning tree | evenly around each disk; a child's star is turned so that its tree band points back to the parent | the **spanning tree as real bands** (your idea), loops whose ends are neighbours as petals, the other edges glued at the ends of labelled half-bands |
 
 `spineOfGraph(model, fs.spine0)` recovers which edge of G₀ belongs to which side or lasso from the structure of G₀.
 That way the chart uses the same objects as μ, even after renaming.
@@ -92,7 +92,6 @@ graphs, the three views, and the tessellation.
 
 ## Known limits
 
-- Ribbon models glue every half-band. A spanning tree could be drawn as real bands instead: nicer, a later improvement.
 - The layout doesn't yet avoid junctions that land on top of each other, when several junctions have the same neighbours.
 - Deck copies of the plane models: none (the plane has no deck group to show here).
 
