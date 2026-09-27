@@ -73,23 +73,30 @@ separately. Gallery pictures will be rendered once and cached (M3).
 `PRESETS` holds the C# examples as data: model, naming, setup moves, renames, and map texts with their modes.
 `buildPreset` builds one.
 
-| Preset                         | How                                                                                                                                                                          |
-| ------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Anosov map of the torus        | `a b A B`, a ↦ a b, b ↦ b a b                                                                                                                                                |
-| Half twist                     | the C# layout `a c b C A B` (split side), b reversed, a ↦ c A b c B                                                                                                          |
-| Reducible map (**new, valid**) | BH 6.1 setup, Anosov on a, b and the Dehn twist c ↦ c d. The C# one didn't preserve the boundary words.                                                                      |
-| BH 6.1                         | `a b A B c d C D` with c, d reversed and swapped, the paper's map                                                                                                            |
-| BH 6.2                         | `a b c C B A` with 3 lassos; collapse the stem a; rename c → a, b → c, β ↔ α (found by a search over all names and orientations: the only assignment up to reversing a loop) |
-| BH 6.3                         | the plane rose with the star `a A b B c C d D` (your cyclic order), a ↦ b ↦ c ↦ d ↦ A D C B                                                                                  |
-| Point push                     | the C# text with the named path ρ and conjugations                                                                                                                           |
-| Point push as a composition    | the four pushes along α, γ, β̄, δ, postcomposed                                                                                                                               |
-| Random genus 2                 | 10 of the C# Dehn twists, reproducible from a seed                                                                                                                           |
-| Closed genus 2                 | your example as a closed ribbon model                                                                                                                                        |
-| Twisted stem, swapped handles  | the test examples of port notes 16 and 17                                                                                                                                    |
+| Preset                         | How                                                                                                                                                                                                                 |
+| ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Anosov map of the torus        | `a b A B`, a ↦ a b, b ↦ b a b                                                                                                                                                                                       |
+| Half twist                     | the C# layout `a c b C A B` (split side), b reversed, a ↦ c A b c B                                                                                                                                                 |
+| Reducible map (**new, valid**) | the standard polygon, a ↦ a B, b ↦ b A b (Anosov on the first handle) and the Dehn twist c ↦ c d. The C# one didn't preserve the boundary words.                                                                    |
+| BH 6.1                         | `a b A B c d C D` with c, d reversed and swapped, the paper's map                                                                                                                                                   |
+| BH 6.2                         | `a b c C B A` with 3 lassos; collapse the stem a; rename b → a, γ → α, α → β, β → γ (found by a search over all names and orientations of the strips; the first version of this preset wasn't geometric, see below) |
+| BH 6.3                         | the plane rose with the star `a A b B c C d D` (your cyclic order), a ↦ b ↦ c ↦ d ↦ A D C B                                                                                                                         |
+| Point push                     | the C# text with the named path ρ and conjugations                                                                                                                                                                  |
+| Point push as a composition    | the four pushes along α, γ, β̄, δ, postcomposed                                                                                                                                                                      |
+| Random genus 2                 | 10 of the C# Dehn twists, reproducible from a seed                                                                                                                                                                  |
+| Closed genus 2                 | your example as a closed ribbon model                                                                                                                                                                               |
+| Twisted stem, swapped handles  | the test examples of port notes 16 and 17                                                                                                                                                                           |
 
 **Observation for your point-push experiment:** the two descriptions start with λ = 38.0 (named path) and 75.5
 (composition), and **both end at the same pseudo-Anosov with λ ≈ 22.5364** after 9 moves each. The `PushingPath`
 version comes with the point-push module.
+
+## g must preserve the boundary words
+
+Writing the embedding (module 20) showed that two presets weren't geometric: g mapped a boundary word to a loop that isn't
+one. `checkIntegrity` only checked μ, and C# didn't check g either. **`checkIntegrity` now also checks that g maps every
+boundary word onto one** (the thesis's criterion for being the carrying map of a homeomorphism). The collapse-forest test
+fixture had the same problem (g(a) = a instead of a b) and was fixed.
 
 ## Map editing
 

@@ -113,8 +113,7 @@ export const PRESETS: readonly Preset[] = [
     description:
       "The Anosov map on one handle and a Dehn twist on the other: reducible along the curve between the handles.",
     model: polygon("a b A B c d C D"),
-    options: bh61Options,
-    maps: replace("a -> a b, b -> b a b, c -> c d"),
+    maps: replace("a -> a B, b -> b A b, c -> c d"),
   },
   {
     name: "Bestvina–Handel example 6.1",
@@ -130,7 +129,7 @@ export const PRESETS: readonly Preset[] = [
     model: polygon("a b c C B A"),
     options: { peripheral: 3 },
     setup: [{ kind: "collapse invariant subforest", strips: ["a"] }],
-    renames: { c: "a", b: "c", β: "α", α: "β" },
+    renames: { b: "a", γ: "α", α: "β", β: "γ" },
     maps: replace("a -> β c γ C a, c -> β c γ C a α A c Γ C β c γ C a α A c Γ"),
   },
   {

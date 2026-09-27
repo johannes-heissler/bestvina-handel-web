@@ -23,8 +23,8 @@ describe("finding invariant subforests", () => {
   });
 
   it("finds the invariant forest {y} when g(y) is a point", () => {
-    // g(y) is empty and m ↦ v, so g(a) = g(x y) = x y.
-    const fs = subdivided("x -> x y, y -> , b -> b x y b");
+    // g(y) is empty and m ↦ v, so g(a) = g(x y) = x y b: the Anosov map a ↦ a b, b ↦ b a b.
+    const fs = subdivided("x -> x y b, y -> , b -> b x y b");
     expect(fs.checkIntegrity()).toEqual([]);
     expect(invariantSubforests(fs).map((f) => [...f].map(String))).toEqual([["y"]]);
   });
@@ -36,7 +36,7 @@ describe("finding invariant subforests", () => {
   });
 
   it("checks periphery-friendliness", () => {
-    const fs = subdivided("x -> x y, y -> , b -> b x y b", ["b"]);
+    const fs = subdivided("x -> x y b, y -> , b -> b x y b", ["b"]);
     const y = edge(fs, "y");
     expect(isPeripheryFriendlyForest(fs, [y])).toBe(true); // only v touches P = {b}
     expect(isPeripheryFriendlyForest(fs, [y], { touching: true })).toBe(true);
@@ -47,23 +47,23 @@ describe("finding invariant subforests", () => {
 
 describe("collapseSubforest", () => {
   it("collapses an invariant forest", () => {
-    const fs = subdivided("x -> x y, y -> , b -> b x y b");
+    const fs = subdivided("x -> x y b, y -> , b -> b x y b");
     const y = edge(fs, "y");
     const [v, m] = [y.target, y.source];
     expect(candidateCenters(fs, new Set([v, m]))).toEqual([v, m]);
     collapseSubforest(fs, new Set([y]));
     expect(fs.graph.vertices).toEqual([v]);
-    expect(images(fs)).toBe("x:x, b:b x b");
+    expect(images(fs)).toBe("x:x b, b:b x b");
     expect(images(fs, "mu")).toBe("x:x y, b:b"); // x now runs along x y = a
     expect(fs.checkIntegrity()).toEqual([]);
   });
 
   it("collapses towards a chosen centre", () => {
-    const fs = subdivided("x -> x y, y -> , b -> b x y b");
+    const fs = subdivided("x -> x y b, y -> , b -> b x y b");
     const y = edge(fs, "y");
     collapseSubforest(fs, new Set([y]), (candidates) => candidates[1]!); // towards m
     expect(fs.graph.vertices).toEqual([y.source]);
-    expect(images(fs)).toBe("x:x, b:b x b");
+    expect(images(fs)).toBe("x:x b, b:b x b");
     expect(fs.checkIntegrity()).toEqual([]);
   });
 
@@ -77,7 +77,7 @@ describe("collapseSubforest", () => {
   });
 
   it("rejects edges that are not a forest", () => {
-    const fs = subdivided("x -> x y, y -> , b -> b x y b");
+    const fs = subdivided("x -> x y b, y -> , b -> b x y b");
     expect(() => collapseSubforest(fs, new Set([edge(fs, "b")]))).toThrow(/don't form a forest/);
   });
 });

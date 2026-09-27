@@ -262,6 +262,13 @@ export class FibredSurface {
         problems.push(
           `μ maps the boundary word ${b.word} to ${b.image.toString() || "(empty)"}, which is neither a boundary word of G₀ nor a reduction curve`,
         );
+    // g is the carrying map of a homeomorphism iff it maps every boundary word onto one (the thesis, § "Reconstructing
+    // f from g"; C# didn't check this, so a map that isn't geometric went unnoticed).
+    for (const b of this.g.boundaryWordReport())
+      if (b.matchedIndex < 0)
+        problems.push(
+          `g maps the boundary word ${b.word} to ${b.image.toString() || "(empty)"}, which is not a boundary word: g is not the carrying map of a homeomorphism`,
+        );
     return problems;
   }
 
