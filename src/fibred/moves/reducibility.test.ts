@@ -4,11 +4,11 @@ import { EdgePath } from "../../graph/edge-path";
 import { RibbonGraph } from "../../graph/ribbon-graph";
 import { FibredSurface } from "../fibred-surface";
 import { perronFrobenius } from "../perron-frobenius";
+import { reduce } from "./reduce";
 import {
   componentOrbits,
   finiteOrder,
   maximalInvariantSubgraphRetractingTo,
-  reduceToSubgraph,
   reductionCandidates,
 } from "./reducibility";
 
@@ -41,7 +41,7 @@ describe("reducibility", () => {
   it("reduces to the first handle, where the map is the Anosov map", () => {
     const fs = make();
     const candidate = reductionCandidates(fs).find((c) => c.preserved.size === 2)!;
-    reduceToSubgraph(fs, candidate.preserved);
+    reduce(fs, candidate.preserved, (pieces) => pieces.find((p) => p.kind === "invariant subgraph")!);
     expect(names(fs.graph.edges)).toEqual(["a", "b"]);
     expect(fs.reductionCurves.map(String)).toEqual(["a b A B"]); // the curve separating the two handles
     expect(fs.checkIntegrity()).toEqual([]);
@@ -57,7 +57,7 @@ describe("reducibility", () => {
     const fs = make();
     const c = fs.graph.edges.find((e) => e.name === "c")!;
     const d = fs.graph.edges.find((e) => e.name === "d")!;
-    reduceToSubgraph(fs, new Set([c, d]));
+    reduce(fs, new Set([c, d]), (pieces) => pieces.find((p) => p.kind === "invariant subgraph")!);
     expect(finiteOrder(fs)).toBe(1);
   });
 });
@@ -86,13 +86,6 @@ describe("first return maps", () => {
   it("groups the components of an invariant subgraph into orbits", () => {
     const { fs, a, b } = make();
     expect(componentOrbits(fs, new Set([a, b])).map((orbit) => orbit.map(names))).toEqual([[["a"], ["b"]]]);
-  });
-
-  it("replaces g by g² when reducing to one of two swapped components", () => {
-    const { fs, a, b } = make();
-    reduceToSubgraph(fs, new Set([a, b]));
-    expect(names(fs.graph.edges)).toEqual(["a"]);
-    expect(String(fs.g.image(a.forward))).toBe("a");
   });
 
   it("doesn't add a strip that joins two components (that changes the homotopy type)", () => {

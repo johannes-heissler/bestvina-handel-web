@@ -33,9 +33,9 @@ in `docs/`.
 | 13  | [Inefficiencies, algorithm without interaction](13-inefficiencies-and-algorithm.md) | `Inefficiency.cs`, `…EssentialInefficiencies.cs`, `…PeripheralInefficiencies.cs` | 🔍   | ✅             | ✅    |
 | 14  | [The train track τ](14-train-track.md)                                              | `FibredSurfaceTrainTracks.cs` (new design)                                       | 🔍   | ✅             | ✅    |
 | 15  | [Closed surfaces](15-closed-surfaces.md)                                            | thesis § Closed surfaces and cutting (not in C#)                                 | 🔍   | ✅ both routes | ✅    |
-| 16  | [Finite order and reducibility](16-finite-order-and-reducibility.md)                | `FibredSurfaceReduction.cs`, `FiniteOrderSuggestion`                             | 🔍   | 16a ✅         | ✅    |
+| 16  | [Finite order and reducibility](16-finite-order-and-reducibility.md)                | `FibredSurfaceReduction.cs`, `FiniteOrderSuggestion`                             | 🔍   | ✅             | ✅    |
 | 17  | [Absorbing into the periphery](17-absorbing-into-periphery.md)                      | `FibredSurfaceAbsorbingIntoPeriphery.cs`                                         | 🔍   | ✅             | ✅    |
-| 18+ | Reducing to the complement, point pushes, suggestions                               | `…Reduction.cs`, `PointPushes.cs`, …                                             |      |                |       |
+| 18+ | Suggestions, point pushes, examples                                                 | `…Reduction.cs`, `PointPushes.cs`, …                                             |      |                |       |
 | 3   | Curves, points, geodesics                                                           | `GeometricObjects_Abstract/*`                                                    |      |                |       |
 | 4   | Surfaces, homeomorphisms                                                            | `GeometricObjects_Abstract/*`                                                    |      |                |       |
 | …   | Embedding layer, suggestion system, examples, rendering, UI                         |                                                                                  |      |                |       |

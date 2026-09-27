@@ -36,11 +36,16 @@ export function needsAbsorbing(fs: FibredSurface): boolean {
   return false;
 }
 
-/** Whether every component of P is a circle, i.e. P is the union of the boundary words consisting of P-strips. */
+/**
+ * Whether every component of P is a circle, i.e. P is the disjoint union of the boundary words consisting of
+ * P-strips.
+ */
 function isUnionOfCircles(fs: FibredSurface): boolean {
   const inP = (e: OrientedEdge) => fs.peripheral.has(e.edge);
-  const covered = new Set(peripheralCircles(fs, inP).flatMap((c) => c.edges.map((e) => e.edge)));
-  return covered.size === fs.peripheral.size;
+  const circles = peripheralCircles(fs, inP);
+  const covered = new Set(circles.flatMap((c) => c.edges.map((e) => e.edge)));
+  const vertices = circles.flatMap((c) => c.vertices);
+  return covered.size === fs.peripheral.size && new Set(vertices).size === vertices.length;
 }
 
 /** One peripheral circle, counterclockwise around its puncture. */

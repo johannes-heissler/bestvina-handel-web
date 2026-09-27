@@ -1,6 +1,6 @@
 /**
- * Finite order and reducibility (the C# `FiniteOrderSuggestion` and `FibredSurfaceReduction`; the thesis, § "Reducibility
- * and the periphery" and § "Reducing reducible maps").
+ * Finite order and detecting reducibility (the C# `FiniteOrderSuggestion` and `FibredSurfaceReduction`; the thesis,
+ * § "Reducibility and the periphery"). The reduction itself is in `reduce.ts`.
  *
  * @module
  */
@@ -8,7 +8,7 @@ import type { CombinatorialMap } from "../../graph/combinatorial-map";
 import type { Edge, OrientedEdge, Vertex } from "../../graph/ribbon-graph";
 import { lcm } from "../../util/number";
 import type { FibredSurface } from "../fibred-surface";
-import { collapseSubforest, isPeripheryFriendlyForest, orbitOfEdge } from "./collapse-forest";
+import { isPeripheryFriendlyForest, orbitOfEdge } from "./collapse-forest";
 
 /**
  * If g is a graph automorphism (every strip is mapped to a single strip), its order: the least common multiple of
@@ -106,23 +106,6 @@ export function reductionCandidates(fs: FibredSurface): ReductionCandidate[] {
   return [...byKey.values()];
 }
 
-/**
- * Prepares a reduction along the invariant subgraph `preserved`: collapses the trees that the maximal invariant subgraph
- * retracting to it hangs off `preserved`, towards junctions of `preserved` (the C# `PrepareReduction`). Afterwards, the
- * invariant subgraph is exactly `preserved` with no trees attached.
- */
-export function prepareReduction(fs: FibredSurface, preserved: ReadonlySet<Edge>): void {
-  const maximal = maximalInvariantSubgraphRetractingTo(fs, preserved);
-  const trees = new Set([...maximal].filter((e) => !preserved.has(e)));
-  if (trees.size === 0) return;
-  const inPreserved = new Set([...preserved].flatMap((e) => [e.source, e.target]));
-  collapseSubforest(
-    fs,
-    trees,
-    (candidates) => candidates.find((v) => inPreserved.has(v)) ?? (candidates[0] as Vertex),
-  );
-}
-
 /** The connected components of the subgraph `edges`, grouped into orbits under g (each orbit in the order of g). */
 export function componentOrbits(fs: FibredSurface, edges: ReadonlySet<Edge>): Set<Edge>[][] {
   const components = fs.graph.components(edges).map((c) => c.edges);
@@ -146,39 +129,15 @@ export function componentOrbits(fs: FibredSurface, edges: ReadonlySet<Edge>): Se
   return orbits;
 }
 
-/**
- * Reduces to the invariant subgraph `preserved` (the C# `ReduceToSubgraph`, "Reduce to subgraph"): prepares the reduction,
- * keeps one component C of it, and replaces g by the first return map g^k on C if g permutes k components.
- *
- * The result is a fibred surface for a subsurface of the original surface: μ still records the embedding, and the
- * boundary words of the component that aren't punctures are recorded as reduction curves.
- *
- * @param choose Picks the component to keep among the components of `preserved` (by default the first one).
- */
-export function reduceToSubgraph(
-  fs: FibredSurface,
-  preserved: ReadonlySet<Edge>,
-  choose: (components: Set<Edge>[]) => Set<Edge> = (components) => components[0] as Set<Edge>,
-): void {
-  prepareReduction(fs, preserved);
-  const kept = new Set([...preserved].filter((e) => fs.graph.hasEdge(e)));
-  const orbits = componentOrbits(fs, kept);
-  const component = choose(orbits.flat());
-  const k = (orbits.find((orbit) => orbit.includes(component)) as Set<Edge>[]).length;
-  if (k > 1) replaceByPower(fs.g, k); // before deleting the components that g maps C to
-  restrictTo(fs, component);
-  for (const word of fs.graph.boundaryWords()) fs.addReductionCurve(fs.mu.imageOfPath(word));
-}
-
 /** Deletes everything outside the subgraph `edges` (which g must map into itself). */
-function restrictTo(fs: FibredSurface, edges: ReadonlySet<Edge>): void {
+export function restrictTo(fs: FibredSurface, edges: ReadonlySet<Edge>): void {
   for (const e of fs.graph.edges) if (!edges.has(e)) fs.removeStrip(e);
   const vertices = new Set([...edges].flatMap((e) => [e.source, e.target]));
   for (const v of fs.graph.vertices) if (!vertices.has(v)) fs.removeJunction(v);
 }
 
 /** Replaces g by g^k, in place. */
-function replaceByPower(g: CombinatorialMap, k: number): void {
+export function replaceByPower(g: CombinatorialMap, k: number): void {
   let power = g;
   for (let i = 1; i < k; i++) power = g.after(power);
   for (const v of g.source.vertices) g.setVertexImage(v, power.vertexImage(v));

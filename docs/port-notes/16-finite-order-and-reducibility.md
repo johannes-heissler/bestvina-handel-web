@@ -3,8 +3,8 @@
 **C# source:** `FiniteOrderSuggestion` in `FibredSurfaceGraphOperations.cs`, `FibredSurfaceReduction.cs` (612 lines),
 `GetMaximalInvariantSubgraphDeformationRetractingTo` in `FibredSurfaceAbsorbingIntoPeriphery.cs`; the thesis, § "Reducibility
 and the periphery" and § "Reducing reducible maps"
-**Target:** `src/fibred/moves/reducibility.ts`, `classify` in `src/fibred/algorithm.ts`
-**Status:** 🔍 16a ported (finite order, detection, reducing to the invariant subgraph); 16b (reducing to the complement) follows
+**Target:** `src/fibred/moves/reducibility.ts` (detection), `src/fibred/moves/reduce.ts` (the move), `classify` in `src/fibred/algorithm.ts`
+**Status:** 🔍 ported: finite order, detection, and one move for all pieces of a reduction
 
 ## Finite order
 
@@ -26,18 +26,46 @@ tried again after the subgraph grew. The thesis restarts after each extension, a
 also passed its subgraph to `IsPeripheryFriendlySubforest`, which ignored it (port note 11), so the C# check used the
 periphery P instead of the subgraph.
 
-## Reducing to the invariant subgraph ("Reduce to subgraph")
+## Reducing: one move for all pieces
 
-1. **Prepare:** collapse the trees that the maximal invariant subgraph hangs off the chosen subgraph, towards junctions of the
-   subgraph (the C# `PrepareReduction`).
-2. **Choose a component** C of the subgraph (a callback; the default is the first). If g permutes k components, **g is replaced by
-   the first return map g^k**, computed before the other components are deleted, since g maps C into them. C# only did this for the
-   reduction to the complement.
-3. **Delete everything else.**
+"Reduce to subgraph" and "reduce to the complement" are one move, `reduce(fs, K, choose)` (your suggestion). The pieces are
+the complementary regions of the reduction system, i.e. the components of the thesis's graph G′ = K′ ⊔ (complement):
+
+1. **K′ = K** with g′ = g.
+2. **The complement:** G ∖ K, plus two copies of every strip e of K (`e_r` on its right, `e_l` on its left), plus one new
+   junction for every **sector** of a junction of K (between two consecutive strips x, σ_K(x) of K). The star of that
+   junction is [left copy of x, the strips of St(K) in between, right copy of σ_K(x)]. The copies form one circle for
+   each boundary word of K, and they become peripheral.
+3. **The isotopy** of the Lemma "preserving boundary components": the image of each boundary circle of K is pulled
+   tight as a cyclic word. Each sector junction moves along the cancelled stretch γ to the point where the tight circle
+   passes, and every image at it is conjugated: g(e) ↦ γ(start)⁻¹ g(e) γ(end), reduced. **Change from the plan:**
+   pulling tight one turn at a time wasn't enough. When a copy's image becomes empty, the next cancellation spans across it
+   (the genus-2 test: `b · ∅ · B A B`).
+4. **The lift to G′:** every letter of K in an image becomes its copy on one side, so that consecutive letters meet in
+   the same sector. A turn can stay on the right side iff it is a boundary turn y = σ_K(x̄), and on the left iff
+   x̄ = σ_K(y). The junctions mapped into K choose a sector there. This is solved as a small constraint problem
+   (forward/backward reachable sets per path, arc consistency, then a greedy choice). If no lift exists, the move
+   throws.
+5. μ: sector junctions sit at their junction of K, and a copy has μ(copy) = μ(e).
+6. **Choice:** the components of G′ with χ < 0 are offered as `ReductionPiece`s (`kind`, `edges`, `period`). g is
+   replaced by g^period (before deleting the other pieces), the rest is deleted, and the boundary words of the piece that
+   aren't punctures are recorded as reduction curves.
+
+A piece of the complement then has the copies as peripheral circles, and **absorbing into the periphery** (the next step of
+the algorithm) makes g an automorphism on them, as in the thesis.
+
+**Changes compared to C#:**
+
+- C#'s `PrepareReduction` (collapsing the trees that retract to K) is gone. Those trees stay strips of the complement.
+  Collapsing a stem that leads to P would join P's circle to K, and then to the copies. That broke the pair-of-pants test.
+- Circles of K (annuli) and components with χ ≥ 0 aren't offered.
+- `needsAbsorbing` now also requires P's circles to be vertex-disjoint.
+
+## Reduction curves
 
 The result is a fibred surface for a **subsurface** of the original surface. μ still records its embedding (as an inclusion),
-but the boundary words of G that aren't punctures are now mapped to the reduction curves. These are recorded in
-**`FibredSurface.reductionCurves`** (cyclically reduced closed paths in G₀), and the integrity check accepts μ(boundary word) =
+but the boundary words of G that aren't punctures now map to the reduction curves. These are recorded in
+**`FibredSurface.reductionCurves`** (cyclically reduced closed paths in G₀). The integrity check accepts μ(boundary word) =
 a boundary word of G₀ or a reduction curve, in either orientation. (A first version had a boolean `isSubsurface` that switched
 the check off.)
 
@@ -50,13 +78,18 @@ At the C# position (after removing valence-1 junctions), `nextStep` now stops at
 
 ## Tests
 
-`src/fibred/moves/reducibility.test.ts` (9 tests):
+`src/fibred/moves/reducibility.test.ts`: finite order (rotation of order 4, identity, swapping handles, none for Anosov);
+the candidates {a, b}, {c}, {d} for the Anosov map on one handle; reducing to {a, b} (growth φ², the reduction curve
+a b A B recorded, and the integrity check fails without it) and to {c, d} (the identity); component orbits; the maximal
+invariant subgraph.
 
-- **finite order:** a rotation of order 4, the identity, swapping the handles of a genus-2 surface (order 2), and none for an Anosov
-  map;
-- **reducible:** the Anosov map on one handle and the identity on the other: the candidates {a, b}, {c}, {d}. Reducing to {a, b} gives
-  the Anosov map (growth φ²), reducing to {c, d} gives the identity;
-- **first return map:** two loops swapped by g give g² on one of them;
-- the maximal invariant subgraph: a strip joining two components is not added, and a stem attaching at one junction is.
+`src/fibred/moves/reduce.test.ts` (7 tests):
+
+- genus 2, the Anosov map on one handle: both pieces are offered. The complement is a twice-punctured torus, where g is
+  the identity on c, d, and the algorithm ends at finite order;
+- the twice-punctured torus of port note 17: the complement of the rose is a pair of pants, the stem s lifts around the
+  new circle, and the algorithm ends at finite order;
+- two handles swapped by g (at the ends of a strip e): the two handles form one orbit of period 2, the first-return map
+  on a handle is the Anosov map, and the complement (a pair of pants) has finite order.
 
 `src/fibred/algorithm.test.ts`: `classify` recognizes the three types, and the algorithm stops at a reduction.
