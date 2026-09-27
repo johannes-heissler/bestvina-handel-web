@@ -139,7 +139,7 @@ export const PRESETS: readonly Preset[] = [
     model: {
       kind: "plane",
       name: "Plane, points on a line",
-      description: "Four points on a line with lassos from a base point below.",
+      description: "Four points on a line with lassos from a base point above.",
       points: [
         [-1.5, 0],
         [-0.5, 0],
@@ -147,7 +147,7 @@ export const PRESETS: readonly Preset[] = [
         [1.5, 0],
       ],
       spine: "rose",
-      basePoint: [0, -1],
+      basePoint: [0, 1],
     },
     maps: replace("a -> b, b -> c, c -> d, d -> A D C B"),
   },

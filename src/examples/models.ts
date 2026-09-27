@@ -19,8 +19,9 @@ import { CombinatorialMap } from "../graph/combinatorial-map";
 import { EdgePath } from "../graph/edge-path";
 import { fromBoundaryWords, fromStars } from "../graph/from-boundary-words";
 import { invertName, isForwardName } from "../graph/names";
-import type { Edge, OrientedEdge, RibbonGraph } from "../graph/ribbon-graph";
+import type { Edge, OrientedEdge, RibbonGraph, Vertex } from "../graph/ribbon-graph";
 import { FibredSurface } from "../fibred/fibred-surface";
+import { EDGE_COLORS } from "../fibred/names-and-colors";
 
 export type Point2 = readonly [number, number];
 
@@ -53,11 +54,12 @@ export interface PlaneModel extends ModelBase {
   /** The punctures in the plane (the point at ∞ is one more). */
   readonly points: readonly Point2[];
   /**
-   * "rose": one base point with a lasso around each point, in the order of `points`.
-   * "comb": a base point below each point with its lasso, joined by a path from left to right.
+   * "rose": one base point with a lasso around each point; the lassos leave the base point counterclockwise in the
+   * order of `points` (for points on a line: base point above them, the first point on the left).
+   * "comb": a base point above each point with its lasso below it, joined by a path from left to right.
    */
   readonly spine: "rose" | "comb";
-  /** Where the base point of the rose is. */
+  /** Where the base point of the rose is (for the comb: the height of the base points above the points). */
   readonly basePoint: Point2;
 }
 
@@ -142,9 +144,32 @@ export function spineOf(model: SurfaceModel, naming: SpineNames = {}): Spine {
     if (!isForwardName(to)) throw new Error(`Use a lowercase name for ${from}; reverse it with "reversed"`);
     e.edge.name = to;
   }
+  graph.edges.forEach((e, i) => (e.color = EDGE_COLORS[i % EDGE_COLORS.length] as typeof e.color));
   const names = graph.edges.map((e) => e.name.toLowerCase());
   if (new Set(names).size !== names.length) throw new Error("Two edges of G₀ have the same name");
   return { graph, ...(sides && { sides }), ...(lassos && { lassos }) };
+}
+
+/**
+ * The {@link Spine} of a model on an existing G₀ (e.g. `fs.spine0`), recovered from its structure, so that it stays
+ * right after renaming or reversing edges: for a polygon, the star of its vertex lists the sides counterclockwise; for
+ * the plane, each lasso is the first of its two ends in the star of its base point.
+ */
+export function spineOfGraph(model: SurfaceModel, graph: RibbonGraph): Spine {
+  if (model.kind === "polygon") return { graph, sides: graph.star(graph.vertices[0] as Vertex) };
+  if (model.kind === "plane") {
+    const lassos: OrientedEdge[] = [];
+    for (const v of graph.vertices) {
+      const seen = new Set<Edge>();
+      for (const x of graph.star(v))
+        if (x.edge.isLoop && !seen.has(x.edge)) {
+          seen.add(x.edge);
+          lassos.push(x);
+        }
+    }
+    return { graph, lassos };
+  }
+  return { graph };
 }
 
 /** Genus and number of punctures of the surface of a ribbon graph (from χ = V − E and the boundary words). */

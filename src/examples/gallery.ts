@@ -82,10 +82,10 @@ export function gallery(genus: number, punctures: number): SurfaceModel[] {
       {
         kind: "plane",
         name: "Plane, points on a line",
-        description: `${n} points in the plane on a line, with a lasso around each from a base point below them.`,
+        description: `${n} points in the plane on a line, with a lasso around each from a base point above them.`,
         points: line,
         spine: "rose",
-        basePoint: [0, -1],
+        basePoint: [0, 1],
       },
       {
         kind: "plane",
@@ -98,10 +98,10 @@ export function gallery(genus: number, punctures: number): SurfaceModel[] {
       {
         kind: "plane",
         name: "Plane, comb",
-        description: `${n} points on a line, each with its own base point; the base points are joined from left to right.`,
+        description: `${n} points on a line, each with its own base point above it; the base points are joined from left to right.`,
         points: line,
         spine: "comb",
-        basePoint: [0, -1],
+        basePoint: [0, 1],
       },
     );
     const labels = [...LABELS].slice(0, n);

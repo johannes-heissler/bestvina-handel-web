@@ -17,6 +17,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@resvg/resvg-js": "^2.6.2",
     "eslint": "^10.11.0",
     "prettier": "^3.9.9",
     "typescript": "^6.0.3",

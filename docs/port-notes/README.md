@@ -37,7 +37,8 @@ in `docs/`.
 | 17  | [Absorbing into the periphery](17-absorbing-into-periphery.md)                      | `FibredSurfaceAbsorbingIntoPeriphery.cs`                                         | 🔍   | ✅             | ✅    |
 | 18  | [The suggestion system and the autopilot](18-suggestions.md)                        | `FibredSurfaceAlgorithmSuggestionSystem.cs`                                      | 🔍   | ✅             | ✅    |
 | 19  | [Model surfaces, gallery, presets, map editing](19-models-and-examples.md)          | `SurfaceGenerator.cs` (combinatorial part), `MainMenu` presets                   | 🔍   | ✅             | ✅    |
-| 20+ | Geometry, embedding, rendering, UI, point pushes                                    | `GeometricObjects_*`, `UIElements/*`, `PointPushes.cs`                           |      |                |       |
+| 20  | [Geometry, embedding, 2D views](20-embedding-and-2d-views.md)                       | `GeometricObjects_*` (replaced)                                                  | 🔍   | ✅             | ✅    |
+| 21+ | UI, saving, deployment, point pushes, 3D                                            | `UIElements/*`, `PointPushes.cs`                                                 |      |                |       |
 | 3   | Curves, points, geodesics                                                           | `GeometricObjects_Abstract/*`                                                    |      |                |       |
 | 4   | Surfaces, homeomorphisms                                                            | `GeometricObjects_Abstract/*`                                                    |      |                |       |
 | …   | Embedding layer, suggestion system, examples, rendering, UI                         |                                                                                  |      |                |       |
