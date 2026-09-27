@@ -9,6 +9,7 @@ import { EdgePath } from "../graph/edge-path";
 import { nameTable, parseEdgePath } from "../graph/path-parser";
 import type { Edge, OrientedEdge, Vertex } from "../graph/ribbon-graph";
 import { EdgePoint } from "./edge-point";
+import { type MapUpdateMode, renameJunction, renameStrip, updateMap } from "./map-editing";
 import type { FibredSurface } from "./fibred-surface";
 import { collapseSubforest } from "./moves/collapse-forest";
 import { absorbIntoPeriphery } from "./moves/absorb-periphery";
@@ -99,7 +100,11 @@ export type Move =
       readonly prong?: number;
       readonly realBranches?: number;
     }
-  | { readonly kind: "replace puncture by singularity"; readonly junction: string };
+  | { readonly kind: "replace puncture by singularity"; readonly junction: string }
+  /** Editing by hand (the map editor): these are moves too, so that a session is its start plus its moves. */
+  | { readonly kind: "edit map"; readonly text: string; readonly mode: MapUpdateMode }
+  | { readonly kind: "rename strip"; readonly strip: string; readonly name: string }
+  | { readonly kind: "rename junction"; readonly junction: string; readonly name: string };
 
 export type MoveKind = Move["kind"];
 
@@ -181,6 +186,15 @@ export function applyMove(fs: FibredSurface, move: Move): FibredSurface {
       const { surface } = cutClosedSurface(tt, { prong: option.prong, realBranches: option.realBranches });
       return keepFlags(fs, surface);
     }
+    case "edit map":
+      updateMap(fs, move.text, move.mode);
+      return fs;
+    case "rename strip":
+      renameStrip(fs, strip(fs, move.strip).edge, move.name);
+      return fs;
+    case "rename junction":
+      renameJunction(fs, junction(fs, move.junction), move.name);
+      return fs;
     case "replace puncture by singularity": {
       const q = polygonSingularities(fs).find((s) => s.junction.name === move.junction);
       if (q === undefined) throw new Error(`${move.junction} is not a singularity`);

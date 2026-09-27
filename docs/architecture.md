@@ -22,7 +22,8 @@ code.
 | `src/examples/`  | Model surfaces (polygon, plane, ribbon) with their spine G₀, the gallery, the presets.                                                      | `Surfaces_Explicit/SurfaceGenerator`, `MainMenu` presets                                 |
 | `src/embedding/` | Strand order, charts (regions, ports, bands) and the layout of G in a model (see [design/embedding.md](design/embedding.md), port note 20). | new, replaces the curves stored on strips                                                |
 | `src/render/`    | SVG for the 2D views (standard, τ, striped; deck copies); later three.js for 3D.                                                            | `GeometricObjects_Visualization/*`, `Kamera/*`                                           |
-| `src/ui/`        | Svelte components: menus, algorithm history, graph-map editor.                                                                              | `UIElements/*`, `Tooltip/*`                                                              |
+| `src/session/`   | The session: start, history tree of moves, saving as JSON and as a link. Plain TypeScript.                                                  | `FibredSurfaceMenu` history                                                              |
+| `src/ui/`        | Svelte components: start dialog and gallery, surface views, next step and autopilot, map editor, history.                                   | `UIElements/*`, `Tooltip/*`, `Kamera/*`                                                  |
 
 Everything from `util/` to `embedding/` is **headless**: plain TypeScript that runs in Node without a
 browser. That keeps the mathematical core fully unit-testable.

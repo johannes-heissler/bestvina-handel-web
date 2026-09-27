@@ -179,7 +179,7 @@ export function renderSvg(fs: FibredSurface, layout: Layout, options: RenderOpti
         const width = strokeWidth(e) * 2.2;
         for (const line of lines.get(e) ?? [])
           group.push(
-            `<path d="${path(line)}" stroke="${css(e.color)}" stroke-opacity="0.18" stroke-width="${fmt(width)}" fill="none" stroke-linejoin="round"/>`,
+            `<path data-edge="${escape(e.name)}" d="${path(line)}" stroke="${css(e.color)}" stroke-opacity="0.18" stroke-width="${fmt(width)}" fill="none" stroke-linejoin="round"/>`,
           );
         const list = stripes?.along.get(e) ?? [];
         list.forEach((s, i) => {
@@ -194,7 +194,7 @@ export function renderSvg(fs: FibredSurface, layout: Layout, options: RenderOpti
       for (const e of fs.graph.edges)
         for (const line of lines.get(e) ?? [])
           group.push(
-            `<path d="${path(line)}" stroke="${css(e.color)}" stroke-width="${fmt(strokeWidth(e))}" fill="none" stroke-linecap="round" stroke-linejoin="round"/>`,
+            `<path data-edge="${escape(e.name)}" d="${path(line)}" stroke="${css(e.color)}" stroke-width="${fmt(strokeWidth(e))}" fill="none" stroke-linecap="round" stroke-linejoin="round"/>`,
           );
     }
 

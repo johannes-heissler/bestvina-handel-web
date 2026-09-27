@@ -1,0 +1,81 @@
+# 21 — The UI, saving and deployment
+
+**C# source:** `UIElements/*` (`MainMenu`, `FibredSurfaceMenu`, `SurfaceMenu`, `StartButton`, `CurveEditor`),
+`Kamera/*`, `Tooltip/*` (about 2000 lines of Unity UI)
+**Target:** `src/session/` (plain TypeScript), `src/ui/` (Svelte 5), `.github/workflows/`, `Dockerfile`, `deploy/`
+**Status:** 🔍 new (M3 of the plan)
+
+## The session (`src/session/`)
+
+- **`Session`**: the start and the history as a **tree of states**, whose edges are moves (the C# history graph). Each node
+  keeps its own copy of the fibred surface, so going back and branching is free.
+  - `apply(move)` works on a copy and reuses a child if the same move was made before. A failing move leaves the
+    history unchanged.
+  - `runAutopilot` records every step as a node.
+  - After a closed-surface move, the node's model becomes the ribbon graph of the new spine.
+- **Map editing and renaming are moves too** (`edit map`, `rename strip`, `rename junction`), so **a session is its
+  start plus its moves**. `toFile`/`fromFile` save it as JSON with a format version. Replaying skips moves that fail with a
+  newer program version and reports how many.
+- **Links** (`share.ts`): the JSON, deflated and in base64url, after `#s=` in the address (it never reaches a server).
+- `Session.create` checks the integrity of the start, so an invalid map is refused right away.
+- `describeMove` gives the labels of the history.
+
+## The UI (`src/ui/`)
+
+- **Layout:** a header (New, Save, Open, Copy link, one or two views, History), the views of the surface on the left,
+  the algorithm on the right, and the history tree below. The panels are resizable (paneforge), and the layout is
+  remembered.
+- **Start dialog** (bits-ui `Dialog`):
+  - examples;
+  - a new surface: genus, punctures (0 = closed) and the number of peripheral punctures, plus the **gallery** of models
+    with pictures. The pictures are rendered the first time and then cached in the browser, as you suggested;
+  - a ribbon graph from boundary words, closed or with peripheral strips;
+  - opening a file, and continuing the last session.
+- **Surface view:**
+  - view (standard, τ, striped), display model, curves (smooth, rounded, straight), copies (deck transformations),
+    width exponent c, to scale, names;
+  - **pan** (drag) and **zoom** (wheel) per view;
+  - export as SVG, PDF, PNG or JPEG;
+  - **hovering a strip highlights it in every view**, and in the texts.
+- **Next step:** the suggestion with its options (checkboxes where several can be combined), **More choices…** (the
+  variants), and the **autopilot** with the list of kinds it applies by itself (your semi-automatic mode). Buttons: _Run_
+  (the chosen kinds) and _Run to the end_ (all but reducing). Below that, the history: _Start_, _Back_ (with the move),
+  and the children, as in C#.
+- **Graph map:** the map as editable text with the modes replace, apply after, apply before, and renaming strips.
+- **State:** the result (pseudo-Anosov with λ, finite order, reducible), the growth of g, the surface, the graph, the
+  reduction curves, and μ.
+- **History:** the tree from the start downwards. Click a node to go there, and hover to see its move.
+- **Look:** serif text on white, thin rules, small caps for headings, the C# palette. Light and dark mode follow the
+  system, and the pictures stay on white paper.
+- **Saving:** automatically in the browser (IndexedDB) and in the address after every change. Files are saved and opened
+  from the header.
+
+## Tests
+
+- Unit tests for the session: copies, reuse, autopilot nodes, failing moves, save → replay, links, the model after a
+  closed-surface move.
+- Component tests in jsdom (`src/ui/ui.test.ts`): the state panel shows λ, and _Apply_ adds a node.
+- **Playwright** (`tests/e2e/`), 5 flows in Chromium:
+  - start an example and see it drawn;
+  - BH 6.1 _Run to the end_;
+  - a gallery model (the L);
+  - apply a step and go back through the tree;
+  - a session restored from its link.
+
+  Screenshot baselines are made on the developer's machine (`npx playwright test --update-snapshots`). Fonts differ
+  between systems, so CI runs the flows with `--ignore-snapshots`.
+
+## Deployment
+
+- `.github/workflows/deploy.yml`: check, build, and publish on **GitHub Pages** after every push to `main`. The base
+  path comes from the repository variable `BASE_PATH`, which is `/` for a custom domain.
+- `.github/workflows/ci.yml`: check and build, plus the Playwright flows.
+- `Dockerfile`, `deploy/nginx.conf`, `deploy/k8s/app.yaml`, `.github/workflows/container.yml`: self-hosting, prepared.
+- [docs/hosting.md](../hosting.md): your guide for GitHub Pages, the subdomain at checkdomain, and Hetzner/Kubernetes.
+
+## Not yet
+
+- Strip names after many subdivisions (`a1-1-1`, `d1+1+31`) are hard to read; a renaming scheme for the display (or
+  `rename strip`) would help.
+- The C# tooltips and the curve editor (drawing curves on the surface) aren't ported.
+- 3D, and point pushes (after the UI, as decided).

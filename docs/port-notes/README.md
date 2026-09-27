@@ -38,7 +38,8 @@ in `docs/`.
 | 18  | [The suggestion system and the autopilot](18-suggestions.md)                        | `FibredSurfaceAlgorithmSuggestionSystem.cs`                                      | 🔍   | ✅             | ✅    |
 | 19  | [Model surfaces, gallery, presets, map editing](19-models-and-examples.md)          | `SurfaceGenerator.cs` (combinatorial part), `MainMenu` presets                   | 🔍   | ✅             | ✅    |
 | 20  | [Geometry, embedding, 2D views](20-embedding-and-2d-views.md)                       | `GeometricObjects_*` (replaced)                                                  | 🔍   | ✅             | ✅    |
-| 21+ | UI, saving, deployment, point pushes, 3D                                            | `UIElements/*`, `PointPushes.cs`                                                 |      |                |       |
+| 21  | [UI, saving, deployment](21-ui-saving-deployment.md)                                | `UIElements/*`, `Kamera/*` (rewritten)                                           | 🔍   | ✅             | ✅    |
+| 22+ | Point pushes, 3D                                                                    | `PointPushes.cs`, `GeometricObjects_Visualization/*`                             |      |                |       |
 | 3   | Curves, points, geodesics                                                           | `GeometricObjects_Abstract/*`                                                    |      |                |       |
 | 4   | Surfaces, homeomorphisms                                                            | `GeometricObjects_Abstract/*`                                                    |      |                |       |
 | …   | Embedding layer, suggestion system, examples, rendering, UI                         |                                                                                  |      |                |       |

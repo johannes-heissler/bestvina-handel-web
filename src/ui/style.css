@@ -1,0 +1,366 @@
+/* A sober, academic look: serif text, white paper, thin rules. Follows the system's light or dark mode. */
+:root {
+  --paper: #ffffff;
+  --panel: #fbfbf9;
+  --ink: #1f1f1f;
+  --muted: #6b6b6b;
+  --rule: #d9d7d0;
+  --accent: #1a4fa0;
+  --error: #a3222b;
+  --font: Georgia, "Times New Roman", serif;
+  --ui-font: system-ui, -apple-system, "Segoe UI", sans-serif;
+  color-scheme: light dark;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --paper: #1b1b1d;
+    --panel: #232326;
+    --ink: #e6e4df;
+    --muted: #a09d96;
+    --rule: #3a3a3e;
+    --accent: #7fa7e8;
+    --error: #ef7b82;
+  }
+  /* The pictures stay on white paper. */
+  .surface svg,
+  .thumbnail svg {
+    background: #ffffff;
+    border-radius: 4px;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+html,
+body,
+#app {
+  height: 100%;
+  margin: 0;
+}
+body {
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font);
+  font-size: 15px;
+}
+#app {
+  display: flex;
+  flex-direction: column;
+}
+
+header {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+  padding: 0.4rem 1rem;
+  border-bottom: 1px solid var(--rule);
+}
+header h1 {
+  font-size: 1.15rem;
+  font-weight: normal;
+  margin: 0;
+  letter-spacing: 0.02em;
+}
+nav {
+  display: flex;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+}
+main {
+  flex: 1;
+  min-height: 0;
+}
+
+button,
+.button,
+select,
+input,
+textarea {
+  font-family: var(--ui-font);
+  font-size: 0.85rem;
+}
+button,
+.button {
+  border: 1px solid var(--rule);
+  background: var(--panel);
+  color: var(--ink);
+  padding: 0.25rem 0.6rem;
+  border-radius: 3px;
+  cursor: pointer;
+}
+button:hover:not(:disabled),
+.button:hover {
+  border-color: var(--accent);
+}
+button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+button.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--paper);
+}
+button.link {
+  border: none;
+  background: none;
+  padding: 0;
+  color: var(--accent);
+  text-align: left;
+  font-family: var(--font);
+  font-size: inherit;
+}
+button.wide,
+label.wide {
+  display: block;
+  width: 100%;
+  margin: 0.4rem 0;
+}
+select,
+input,
+textarea {
+  background: var(--paper);
+  color: var(--ink);
+  border: 1px solid var(--rule);
+  border-radius: 3px;
+  padding: 0.15rem 0.3rem;
+}
+textarea {
+  width: 100%;
+  font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
+  font-size: 0.85rem;
+}
+input[type="number"] {
+  width: 3.5rem;
+}
+
+.panel {
+  padding: 0.6rem 0.9rem;
+  border-bottom: 1px solid var(--rule);
+}
+.panel h2 {
+  font-size: 1rem;
+  font-weight: normal;
+  font-variant: small-caps;
+  letter-spacing: 0.05em;
+  margin: 0.2rem 0 0.5rem;
+}
+.panel h3 {
+  font-size: 0.9rem;
+  font-weight: normal;
+  font-style: italic;
+  margin: 0.8rem 0 0.3rem;
+}
+.sidebar {
+  height: 100%;
+  overflow-y: auto;
+  background: var(--panel);
+  border-left: 1px solid var(--rule);
+}
+.hint {
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+.note {
+  color: var(--muted);
+  font-style: italic;
+  margin: 0.3rem 0.8rem;
+}
+.error {
+  color: var(--error);
+}
+.banner {
+  margin: 0;
+  padding: 0.3rem 1rem;
+  border-bottom: 1px solid var(--rule);
+}
+.buttons {
+  display: flex;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+  align-items: center;
+  margin: 0.4rem 0;
+}
+.options {
+  list-style: none;
+  padding: 0;
+  margin: 0.3rem 0;
+  max-height: 14rem;
+  overflow-y: auto;
+}
+.options li {
+  padding: 0.12rem 0;
+}
+.rating {
+  color: var(--muted);
+  font-size: 0.8rem;
+  margin-left: 0.4rem;
+}
+.checklist {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.1rem 0.8rem;
+  font-size: 0.85rem;
+}
+.strip-name {
+  font-style: italic;
+}
+.junction-name {
+  font-variant: small-caps;
+}
+dl {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 0.2rem 0.8rem;
+  margin: 0;
+}
+dt {
+  color: var(--muted);
+}
+dd {
+  margin: 0;
+}
+pre {
+  font-size: 0.8rem;
+  white-space: pre-wrap;
+}
+
+.view {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  padding: 0;
+  border: none;
+}
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem 0.8rem;
+  align-items: center;
+  padding: 0.35rem 0.8rem;
+  border-bottom: 1px solid var(--rule);
+  font-family: var(--ui-font);
+  font-size: 0.8rem;
+}
+.toolbar .spacer {
+  flex: 1;
+}
+.canvas {
+  flex: 1;
+  overflow: hidden;
+  position: relative;
+  cursor: grab;
+  touch-action: none;
+}
+.canvas:active {
+  cursor: grabbing;
+}
+.surface {
+  transform-origin: 0 0;
+  width: 100%;
+  height: 100%;
+}
+.surface svg {
+  width: 100%;
+  height: 100%;
+}
+
+.resizer {
+  background: var(--rule);
+}
+.resizer[data-direction="horizontal"] {
+  width: 3px;
+}
+.resizer[data-direction="vertical"] {
+  height: 3px;
+}
+
+.history .scroll {
+  overflow: auto;
+  height: calc(100% - 2rem);
+}
+.history line {
+  stroke: var(--rule);
+  stroke-width: 1.5;
+}
+.history line.active {
+  stroke: var(--accent);
+}
+.history circle {
+  fill: var(--panel);
+  stroke: var(--muted);
+  stroke-width: 1.5;
+  cursor: pointer;
+}
+.history circle.current {
+  fill: var(--accent);
+  stroke: var(--accent);
+}
+
+.overlay {
+  position: fixed;
+  inset: 0;
+  background: rgb(0 0 0 / 0.35);
+}
+.dialog {
+  position: fixed;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: min(56rem, 94vw);
+  max-height: 88vh;
+  overflow-y: auto;
+  background: var(--paper);
+  border: 1px solid var(--rule);
+  border-radius: 6px;
+  padding: 1rem 1.3rem;
+}
+.tabs {
+  display: flex;
+  gap: 0.3rem;
+  border-bottom: 1px solid var(--rule);
+  margin: 0.6rem 0 0.7rem;
+}
+.tabs button {
+  border-radius: 3px 3px 0 0;
+}
+.tabs button.active {
+  background: var(--paper);
+  border-color: var(--accent);
+}
+.examples {
+  list-style: none;
+  padding: 0;
+}
+.examples li {
+  margin: 0.45rem 0;
+  display: flex;
+  flex-direction: column;
+}
+.gallery {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr));
+  gap: 0.6rem;
+  margin: 0.6rem 0;
+}
+.card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.2rem;
+  padding: 0.3rem;
+  background: var(--paper);
+}
+.card.active {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
+}
+.thumbnail svg {
+  width: 10rem;
+  height: 10rem;
+}
+.empty {
+  padding: 2rem;
+  color: var(--muted);
+}
