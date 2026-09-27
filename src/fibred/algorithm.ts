@@ -1,42 +1,29 @@
 /**
- * The Bestvina–Handel algorithm without user interaction: the priority order of the C# `NextSuggestion`, each
- * step applied with its default choices (the C# `ApplyNextSuggestion` / `BestvinaHandelAlgorithm`).
- *
- * The typed suggestion system for the UI (port note 07) will offer the same steps with their options.
- * (Converting into a train track is not a step: τ is always derived from G, see `train-track.ts`.)
+ * The Bestvina–Handel algorithm without user interaction, on top of the suggestion system (`suggestions.ts`):
+ * {@link nextStep} applies the default of the next suggestion if it changes the surface in place, and
+ * {@link runAlgorithm} repeats that. The closed-surface moves replace the surface; for them, use `autopilot`.
  *
  * @module
  */
 import type { FibredSurface } from "./fibred-surface";
-import type { Edge, OrientedEdge } from "../graph/ribbon-graph";
-import { absorbIntoPeriphery, needsAbsorbing } from "./moves/absorb-periphery";
-import { collapseSubforest, invariantSubforests, isPeripheryFriendlyForest } from "./moves/collapse-forest";
-import {
-  inefficiencies,
-  peripheralInefficiencies,
-  removeInefficiency,
-  removePeripheralInefficiency,
-} from "./moves/inefficiency";
-import { loosePositions, pullTight } from "./moves/pull-tight";
-import { perronFrobenius } from "./perron-frobenius";
-import { finiteOrder, type ReductionCandidate, reductionCandidates } from "./moves/reducibility";
-import {
-  defaultStripToRemove,
-  removeValenceOneJunction,
-  removeValenceTwoJunction,
-  valenceOneJunctions,
-  valenceTwoJunctions,
-} from "./moves/valence";
+import { applyMove } from "./move";
+import { finiteOrder, reductionCandidates } from "./moves/reducibility";
+import { type Classification, type MoveOption, nextSuggestion, type SuggestionKind } from "./suggestions";
 
-/** The kinds of steps, in the order in which the algorithm tries them. */
-export type StepKind =
-  | "collapse invariant subforest"
-  | "pull tight"
-  | "remove valence-1 junction"
-  | "absorb into periphery"
-  | "remove valence-2 junctions"
-  | "fold peripheral inefficiency"
-  | "remove inefficiency";
+export type { Classification } from "./suggestions";
+
+/** The kinds of steps that {@link nextStep} applies, in the order in which the algorithm tries them. */
+export type StepKind = Exclude<SuggestionKind, "reducible" | "closed surface" | "finished">;
+
+const STEP_KINDS: ReadonlySet<SuggestionKind> = new Set<StepKind>([
+  "collapse invariant subforest",
+  "pull tight",
+  "remove valence-1 junction",
+  "absorb into periphery",
+  "remove valence-2 junctions",
+  "fold peripheral inefficiency",
+  "remove inefficiency",
+]);
 
 /** A step that can be applied to the fibred surface it was computed for. */
 export interface Step {
@@ -44,42 +31,20 @@ export interface Step {
   readonly apply: () => void;
 }
 
-/** The next step with its default choices, or `undefined` if none applies (the map is efficient). */
+/**
+ * The next step with its default choices, or `undefined` if the algorithm stops here: finished, at a reduction (unless
+ * ignored), or at the closed-surface move.
+ */
 export function nextStep(fs: FibredSurface): Step | undefined {
-  const forests = invariantSubforests(fs);
-  if (forests.length > 0)
-    return {
-      kind: "collapse invariant subforest",
-      apply: () => collapseSubforest(fs, forestsToCollapse(fs, forests)),
-    };
-  if (loosePositions(fs).size > 0) return { kind: "pull tight", apply: () => pullTight(fs) };
-  const [v] = valenceOneJunctions(fs);
-  if (v !== undefined)
-    return { kind: "remove valence-1 junction", apply: () => removeValenceOneJunction(fs, v) };
-  if (needsAbsorbing(fs)) return { kind: "absorb into periphery", apply: () => absorbIntoPeriphery(fs) };
-  // The algorithm stops at a graph automorphism (finite order) and, unless told to ignore it, at a reduction.
-  if (finiteOrder(fs) !== undefined) return undefined;
-  if (!fs.ignoreReducible && reductionCandidates(fs).length > 0) return undefined;
-  if (valenceTwoJunctions(fs).length > 0)
-    return { kind: "remove valence-2 junctions", apply: () => removeAllValenceTwoJunctions(fs) };
-  const [group] = peripheralInefficiencies(fs);
-  if (group !== undefined)
-    return { kind: "fold peripheral inefficiency", apply: () => removePeripheralInefficiency(fs, group) };
-  const [p] = inefficiencies(fs);
-  if (p !== undefined) return { kind: "remove inefficiency", apply: () => removeInefficiency(fs, p) };
-  return undefined;
+  const suggestion = nextSuggestion(fs);
+  if (!STEP_KINDS.has(suggestion.kind)) return undefined;
+  const { move } = suggestion.options[0] as MoveOption;
+  return { kind: suggestion.kind as StepKind, apply: () => void applyMove(fs, move) };
 }
-
-/** What the algorithm has found out about the mapping class. */
-export type Classification =
-  | { readonly kind: "finite order"; readonly order: number }
-  | { readonly kind: "reducible"; readonly candidates: readonly ReductionCandidate[] }
-  | { readonly kind: "pseudo-Anosov"; readonly growth: number }
-  | { readonly kind: "undecided" };
 
 /**
  * The classification at the current state: finite order if g is a graph automorphism; reducible if an invariant proper
- * subgraph contains essential strips (unless ignored); pseudo-Anosov if no step applies anymore and the growth is > 1
+ * subgraph contains essential strips (unless ignored); pseudo-Anosov if the algorithm is finished and the growth is > 1
  * (checking that τ is a filling train track with cusps everywhere is a separate question, see `train-track.ts`);
  * otherwise undecided.
  */
@@ -88,9 +53,10 @@ export function classify(fs: FibredSurface): Classification {
   if (order !== undefined) return { kind: "finite order", order };
   const candidates = fs.ignoreReducible ? [] : reductionCandidates(fs);
   if (candidates.length > 0) return { kind: "reducible", candidates };
-  if (nextStep(fs) !== undefined) return { kind: "undecided" };
-  const { growth } = perronFrobenius(fs, { essentialOnly: true });
-  return growth > 1 + 1e-9 ? { kind: "pseudo-Anosov", growth } : { kind: "undecided" };
+  const suggestion = nextSuggestion(fs);
+  return suggestion.kind === "finished" && suggestion.classification !== undefined
+    ? suggestion.classification
+    : { kind: "undecided" };
 }
 
 /**
@@ -108,24 +74,4 @@ export function runAlgorithm(fs: FibredSurface, maxSteps = 20 * fs.graph.edgeCou
     if (problems.length > 0) throw new Error(`After "${step.kind}":\n${problems.join("\n")}`);
   }
   return log;
-}
-
-/** Removes valence-2 junctions one by one, stopping when an invariant subforest appears (as in C#). */
-function removeAllValenceTwoJunctions(fs: FibredSurface): void {
-  // The widths only decide which of the two strips is removed; computing them once for the batch is enough.
-  const { widths } = perronFrobenius(fs, { essentialOnly: true });
-  for (let [v] = valenceTwoJunctions(fs); v !== undefined; [v] = valenceTwoJunctions(fs)) {
-    const [s0, s1] = fs.graph.star(v) as [OrientedEdge, OrientedEdge];
-    removeValenceTwoJunction(fs, v, defaultStripToRemove(fs, s0, s1, widths));
-    if (invariantSubforests(fs).length > 0) return;
-  }
-}
-
-/**
- * The union of all maximal invariant subforests, if it is still a periphery-friendly forest (then they can be
- * collapsed at once); otherwise the first one.
- */
-function forestsToCollapse(fs: FibredSurface, forests: readonly Set<Edge>[]): Set<Edge> {
-  const union = new Set(forests.flatMap((f) => [...f]));
-  return isPeripheryFriendlyForest(fs, union) ? union : (forests[0] as Set<Edge>);
 }

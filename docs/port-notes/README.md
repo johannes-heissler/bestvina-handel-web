@@ -35,7 +35,8 @@ in `docs/`.
 | 15  | [Closed surfaces](15-closed-surfaces.md)                                            | thesis § Closed surfaces and cutting (not in C#)                                 | 🔍   | ✅ both routes | ✅    |
 | 16  | [Finite order and reducibility](16-finite-order-and-reducibility.md)                | `FibredSurfaceReduction.cs`, `FiniteOrderSuggestion`                             | 🔍   | ✅             | ✅    |
 | 17  | [Absorbing into the periphery](17-absorbing-into-periphery.md)                      | `FibredSurfaceAbsorbingIntoPeriphery.cs`                                         | 🔍   | ✅             | ✅    |
-| 18+ | Suggestions, point pushes, examples                                                 | `…Reduction.cs`, `PointPushes.cs`, …                                             |      |                |       |
+| 18  | [The suggestion system and the autopilot](18-suggestions.md)                        | `FibredSurfaceAlgorithmSuggestionSystem.cs`                                      | 🔍   | ✅             | ✅    |
+| 19+ | Folding loops, examples, point pushes                                               | `SurfaceGenerator.cs`, `PointPushes.cs`, …                                       |      |                |       |
 | 3   | Curves, points, geodesics                                                           | `GeometricObjects_Abstract/*`                                                    |      |                |       |
 | 4   | Surfaces, homeomorphisms                                                            | `GeometricObjects_Abstract/*`                                                    |      |                |       |
 | …   | Embedding layer, suggestion system, examples, rendering, UI                         |                                                                                  |      |                |       |

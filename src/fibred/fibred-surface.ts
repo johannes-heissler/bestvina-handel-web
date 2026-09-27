@@ -49,6 +49,11 @@ export class FibredSurface {
   readonly peripheral: Set<Edge>;
   /** Set when the user chose to continue although the map is reducible. */
   ignoreReducible = false;
+  /**
+   * Set if the surface is closed: its punctures are artificial (marked points), so a 1-pronged singularity there is
+   * not allowed, and the closed-surface move (cutting along a singular leaf) becomes necessary.
+   */
+  isClosed = false;
   /** Set once the fibred surface has been converted into a train track. */
   isTrainTrack = false;
   /**
@@ -114,6 +119,7 @@ export class FibredSurface {
     });
     result.ignoreReducible = this.ignoreReducible;
     result.isTrainTrack = this.isTrainTrack; // the C# Copy() forgot this flag
+    result.isClosed = this.isClosed;
     result.reductionCurves.push(...this.reductionCurves);
     result.onError = this.onError;
     return { copy: result, correspondence: graphCopy };

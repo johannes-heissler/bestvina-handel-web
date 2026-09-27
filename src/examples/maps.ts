@@ -21,8 +21,11 @@ export const conjugatedTorusAnosov = () =>
  * in the puncture gives a singularity of angle π: the case of the thesis, § "Closed surfaces and cutting".
  * Example by the author.
  */
-export const closedGenus2OneCusp = () =>
-  FibredSurface.fromText(
+export const closedGenus2OneCusp = () => {
+  const fs = FibredSurface.fromText(
     ["c x B y k a z Y K Z d C X D A b".split(" ")],
     "b -> K Y b X C B y Z d x c, z -> Z d C X D, x -> B y Z d, d -> Y b X C, c -> x c x, k -> z Y, y -> a, a -> K",
   );
+  fs.isClosed = true;
+  return fs;
+};
