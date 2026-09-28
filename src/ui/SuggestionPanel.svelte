@@ -70,7 +70,11 @@
     {#if suggestion.options.length > 0}
       <ul class="options">
         {#each suggestion.options as option, i (i)}
-          <li class:continues={typeof option.label[0] === "string" && option.label[0].startsWith("Next fold")}>
+          <li
+            class:continues={typeof option.label[0] === "string" && option.label[0].startsWith("Next fold")}
+            class:discouraged={option.discouraged}
+            title={option.discouraged ? "Possible now, but the algorithm does this only at the end" : undefined}
+          >
             <label>
               <input
                 type={suggestion.multiple ? "checkbox" : "radio"}

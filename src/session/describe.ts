@@ -34,6 +34,8 @@ export function describeMove(move: Move): Text {
       ];
     case "ignore reducibility":
       return ["Ignore reducibility"];
+    case "split junctions":
+      return ["Split junctions along τ", ...(move.piece !== undefined ? [` (piece ${move.piece + 1})`] : [])];
     case "remove valence-2 junctions":
       return move.junctions === undefined
         ? ["Remove valence-2 junctions"]

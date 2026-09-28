@@ -529,3 +529,8 @@ details.panel > summary h2 {
 .boundary-word > .hint {
   grid-column: 2;
 }
+
+/* An option that is possible but not the step of the algorithm now. */
+.options li.discouraged {
+  opacity: 0.55;
+}

@@ -32,8 +32,9 @@ describe("nextSuggestion", () => {
     const s = nextSuggestion(fs);
     expect(s.kind).toBe("reducible");
     expect(s.classification?.kind).toBe("reducible");
-    expect(s.options.at(-1)!.move).toEqual({ kind: "ignore reducibility" });
-    expect(s.options.slice(0, -1).every((o) => o.move.kind === "reduce")).toBe(true);
+    const regular = s.options.filter((o) => !o.discouraged); // (splitting along τ is offered greyed out)
+    expect(regular.at(-1)!.move).toEqual({ kind: "ignore reducibility" });
+    expect(regular.slice(0, -1).every((o) => o.move.kind === "reduce")).toBe(true);
   });
 
   it("reports the result when finished", () => {

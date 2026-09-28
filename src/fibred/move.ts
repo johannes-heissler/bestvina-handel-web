@@ -25,6 +25,7 @@ import {
 } from "./moves/inefficiency";
 import { pullTight } from "./moves/pull-tight";
 import { reduce } from "./moves/reduce";
+import { splitJunctions } from "./moves/split-junctions";
 import {
   defaultStripToRemove,
   removeValenceOneJunction,
@@ -72,6 +73,11 @@ export type Move =
       /** Index into the offered pieces. */ readonly piece?: number;
     }
   | { readonly kind: "ignore reducibility" }
+  | {
+      /** Split the junctions whose gate graphs are disconnected (τ is disconnected there: f is reducible). */
+      readonly kind: "split junctions";
+      /** Index into the offered pieces. */ readonly piece?: number;
+    }
   | {
       readonly kind: "remove valence-2 junctions";
       /** All of them (until an invariant subforest appears) if omitted. */
@@ -170,6 +176,13 @@ export function applyMove(fs: FibredSurface, move: Move, hooks: MoveHooks = {}):
       return fs;
     case "ignore reducibility":
       fs.ignoreReducible = true;
+      return fs;
+    case "split junctions":
+      splitJunctions(fs, (pieces) => {
+        const piece = pieces[move.piece ?? 0];
+        if (piece === undefined) throw new Error(`There is no piece ${move.piece}`);
+        return piece;
+      });
       return fs;
     case "remove valence-2 junctions":
       if (move.junctions === undefined) removeAllValenceTwoJunctions(fs);

@@ -40,7 +40,7 @@
       <dd>
         {#if info.classification?.kind === "pseudo-Anosov"}pseudo-Anosov, λ = {info.classification.growth.toFixed(6)}
         {:else if info.classification?.kind === "finite order"}finite order {info.classification.order}
-        {:else if info.classification?.kind === "reducible"}reducible
+        {:else if info.classification?.kind === "reducible"}reducible{#if info.classification.curves?.length}, reduction system {info.classification.curves.join(", ")}{/if}
         {:else}not yet known{/if}
       </dd>
       <dt>Growth of g</dt>

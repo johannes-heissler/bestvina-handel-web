@@ -22,6 +22,7 @@ import {
 } from "./moves/inefficiency";
 import { loosePositions } from "./moves/pull-tight";
 import { reduce, type ReductionPiece } from "./moves/reduce";
+import { disconnectedJunctions, type SplitPiece, splitJunctions } from "./moves/split-junctions";
 import { finiteOrder, type ReductionCandidate, reductionCandidates } from "./moves/reducibility";
 import { valenceOneJunctions, valenceTwoJunctions } from "./moves/valence";
 import { EdgePoint } from "./edge-point";
@@ -49,7 +50,12 @@ const names = (edges: Iterable<Edge>) => [...edges].map((e) => e.name);
 /** What the algorithm has found out about the mapping class. */
 export type Classification =
   | { readonly kind: "finite order"; readonly order: number }
-  | { readonly kind: "reducible"; readonly candidates: readonly ReductionCandidate[] }
+  | {
+      readonly kind: "reducible";
+      readonly candidates: readonly ReductionCandidate[];
+      /** The reduction system as words in G₀, when it is known (e.g. from a disconnected train track). */
+      readonly curves?: readonly string[];
+    }
   | { readonly kind: "pseudo-Anosov"; readonly growth: number }
   | { readonly kind: "undecided" };
 
@@ -59,6 +65,8 @@ export interface MoveOption {
   readonly label: Text;
   /** Lower is better, e.g. the number of side crossings after a fold, or the period of a singularity. */
   readonly rating?: number;
+  /** Possible, but not the step of the algorithm now (shown greyed out). */
+  readonly discouraged?: boolean;
 }
 
 export type SuggestionKind =
@@ -70,6 +78,7 @@ export type SuggestionKind =
   | "remove valence-2 junctions"
   | "fold"
   | "closed surface"
+  | "disconnected train track"
   | "finished";
 
 export interface Suggestion {
@@ -94,8 +103,34 @@ export interface SuggestionContext {
   readonly followUp?: FollowUp | undefined;
 }
 
-/** The next suggestion, in the priority order of the C# `NextSuggestion`. */
+/**
+ * The next suggestion, in the priority order of the C# `NextSuggestion`. Whenever some gate graph is disconnected, the
+ * suggestion also offers splitting the junctions there, greyed out: the algorithm does that only at the end.
+ */
 export function nextSuggestion(fs: FibredSurface, context: SuggestionContext = {}): Suggestion {
+  const suggestion = nextStep(fs, context);
+  if (suggestion.kind === "finished" || suggestion.kind === "disconnected train track" || fs.ignoreReducible)
+    return suggestion;
+  const disconnected = disconnectedJunctions(fs);
+  if (disconnected.size === 0) return suggestion;
+  return {
+    ...suggestion,
+    options: [
+      ...suggestion.options,
+      {
+        move: { kind: "split junctions" },
+        label: [
+          "Split ",
+          ...junctionList([...disconnected.keys()]),
+          " along the components of τ (f is reducible; the algorithm does this only at the end)",
+        ],
+        discouraged: true,
+      },
+    ],
+  };
+}
+
+function nextStep(fs: FibredSurface, context: SuggestionContext): Suggestion {
   const forests = invariantSubforests(fs);
   if (forests.length > 0) {
     const union = new Set(forests.flatMap((f) => [...f]));
@@ -268,6 +303,11 @@ export function nextSuggestion(fs: FibredSurface, context: SuggestionContext = {
     };
   }
 
+  if (!fs.ignoreReducible) {
+    const disconnected = disconnectedJunctions(fs);
+    if (disconnected.size > 0) return disconnectedTrainTrack(fs, [...disconnected.keys()]);
+  }
+
   const { growth } = perronFrobenius(fs, { essentialOnly: true });
   return growth > 1 + 1e-9
     ? finished(["g is an efficient train-track map with growth ", growth.toFixed(6), "."], {
@@ -302,6 +342,75 @@ function foldLabel(fs: FibredSurface, c: FoldCandidate): Text {
           ...(c.peripheral ? ["; peripheral"] : []),
         ];
   return [...what, ...why];
+}
+
+const junctionList = (vs: readonly Vertex[]): TextPart[] =>
+  vs.flatMap((v, i) => (i === 0 ? [{ junction: v.name }] : [", ", { junction: v.name }]));
+
+/**
+ * The end of the algorithm with a disconnected train track: g is efficient, but at some junctions the gates are not
+ * all joined by infinitesimal branches, so f is reducible. The options are the pieces after splitting, each with the
+ * growth of g there (its component of τ is an invariant filling train track, so g is pseudo-Anosov there if λ > 1).
+ */
+function disconnectedTrainTrack(fs: FibredSurface, junctions: readonly Vertex[]): Suggestion {
+  const { pieces, curves } = splitPieces(fs);
+  const growthOf = (i: number): number | undefined => {
+    const copy = fs.copy();
+    copy.onError = () => {};
+    try {
+      splitJunctions(copy, (offered) => offered[i] as SplitPiece);
+      return perronFrobenius(copy, { essentialOnly: true }).growth;
+    } catch {
+      return undefined;
+    }
+  };
+  return {
+    kind: "disconnected train track",
+    description: [
+      "g is an efficient train-track map, but at ",
+      ...junctionList(junctions),
+      " the gates are not all joined by infinitesimal branches: τ is disconnected there, so f is reducible. The boundary of a neighbourhood of τ is a reduction system",
+      ...(curves.length > 0 ? [": ", curves.join(", ")] : []),
+      ". Split the junctions and continue on one piece; each component of τ is an invariant filling train track there.",
+    ],
+    options: [
+      ...pieces.map((piece, i) => {
+        const growth = growthOf(i);
+        return {
+          move: { kind: "split junctions" as const, piece: i },
+          label: [
+            "Continue on ",
+            ...strips(names(piece.edges)),
+            ...(piece.period > 1 ? [` (period ${piece.period})`] : []),
+            ...(growth === undefined
+              ? []
+              : [growth > 1 + 1e-9 ? `: pseudo-Anosov, λ = ${growth.toFixed(6)}` : ": growth 1"]),
+          ] as Text,
+          rating: piece.period,
+        };
+      }),
+      { move: { kind: "ignore reducibility" }, label: ["Ignore and finish"] },
+    ],
+    multiple: false,
+    classification: { kind: "reducible", candidates: [], curves },
+  };
+}
+
+/** The pieces offered after splitting, and the new reduction curves (as words in G₀), tried on a copy. */
+function splitPieces(fs: FibredSurface): { pieces: readonly SplitPiece[]; curves: string[] } {
+  let pieces: readonly SplitPiece[] = [];
+  const copy = fs.copy();
+  copy.onError = () => {};
+  const before = new Set(copy.reductionCurves.map(String));
+  try {
+    splitJunctions(copy, (offered) => {
+      pieces = offered;
+      return offered[0] as SplitPiece;
+    });
+  } catch {
+    return { pieces: [], curves: [] };
+  }
+  return { pieces, curves: copy.reductionCurves.map(String).filter((c) => !before.has(c)) };
 }
 
 function sameNames(a: readonly string[], b: readonly string[]): boolean {
@@ -425,6 +534,18 @@ export function variants(fs: FibredSurface, move: Move): MoveOption[] {
           ...strips(names(piece.edges)),
           ...(piece.period > 1 ? [` (period ${piece.period})`] : []),
         ],
+        rating: piece.period,
+      }));
+    }
+    case "split junctions": {
+      if (move.piece !== undefined) return [];
+      return splitPieces(fs).pieces.map((piece, i) => ({
+        move: { ...move, piece: i },
+        label: [
+          "Continue on ",
+          ...strips(names(piece.edges)),
+          ...(piece.period > 1 ? [` (period ${piece.period})`] : []),
+        ] as Text,
         rating: piece.period,
       }));
     }

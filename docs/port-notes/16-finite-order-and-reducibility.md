@@ -93,3 +93,27 @@ invariant subgraph.
   on a handle is the Anosov map, and the complement (a pair of pants) has finite order.
 
 `src/fibred/algorithm.test.ts`: `classify` recognizes the three types, and the algorithm stops at a reduction.
+
+### Later addition: a disconnected train track (efficient, but reducible)
+
+When the algorithm ends with an efficient train-track map, the infinitesimal branches may still not join all gates at
+some junction: the **gate graph** there (the gates as vertices, the infinitesimal branches as edges) is disconnected,
+τ is disconnected there, and f is reducible (`moves/split-junctions.ts`).
+
+- **Detection** (`disconnectedJunctions`): union–find on the switches of τ, joined by the infinitesimal branches (and,
+  to be safe, by every turn taken by an image of g).
+- **The move "split junctions"**: every such junction becomes one junction per component (each keeps the cyclic order
+  of its strip ends; the infinitesimal branches of an embedded τ don't cross, so the junction disk can be cut between
+  the components). g stays a graph map without any lifting: every turn of an image lies in one component, and a
+  junction's image is the piece of its old image that contains Dg of its strip ends. The new graph is a regular
+  neighbourhood of τ; its boundary words, as words in G₀ without the peripheral ones, are recorded as the reduction
+  system. The user chooses a piece (a component with χ < 0, with its period under g), and g is replaced by its
+  first-return map there, as for `reduce`.
+- **Suggestions**: at the end (after the closed-surface step, before declaring the map pseudo-Anosov) this is a step
+  of its own, "disconnected train track", with the reduction system in the text and one option per piece, each with
+  the growth of g there (its component of τ is an invariant filling train track, so g is pseudo-Anosov on it when
+  λ > 1), plus "Ignore and finish". Before the end it is offered greyed out in every suggestion whenever some gate
+  graph is disconnected (the official algorithm does it only at the end). The autopilot and "Run to the end" stop at
+  it.
+- Example: "Swapped handles" now ends here: τ splits at v₀ into {a B A b} and {c D C d}, the reduction system is
+  a b A B, c d C D, and on each of the two pieces (swapped by g, period 2) g² is pseudo-Anosov with λ = 2.618034.
