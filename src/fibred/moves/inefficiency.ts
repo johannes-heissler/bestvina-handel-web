@@ -210,3 +210,89 @@ export function removePeripheralInefficiency(
   const { c, preferred, move } = choose(options);
   foldInitialSegments(fs, edges, i, { c, kept: preferred, ...(move && { move }) });
 }
+
+/**
+ * A fold that the algorithm can do next: folding the initial segments (of length `initialSegment`) of the strip ends
+ * `edgesToFold` at one junction, which all have the same Dg.
+ *
+ * It is suggested because inefficiencies lead to it (the thesis: removing an inefficiency (α, β) of order k starts by
+ * folding Dgᵏ⁻¹(α) and Dgᵏ⁻¹(β)), or because Dg of these strips lies in the pre-periphery (a peripheral inefficiency).
+ */
+export interface FoldCandidate {
+  readonly edgesToFold: readonly OrientedEdge[];
+  readonly initialSegment: number;
+  /** The smallest order of the inefficiencies whose removal starts with this fold (undefined if there is none). */
+  readonly order: number | undefined;
+  /** How many places in the images have an inefficiency of that order leading to this fold. */
+  readonly count: number;
+  /** One of them, for carrying out the first step. */
+  readonly representative: Inefficiency | undefined;
+  /** Whether Dg of the strips lies in the pre-periphery. */
+  readonly peripheral: boolean;
+}
+
+/**
+ * The folds the algorithm can do next (your proposal: show the pairs of strips that are folded, with the order and
+ * number of the inefficiencies behind them, instead of the inefficiencies). Every occurrence of an illegal turn in
+ * an image counts. Peripheral folds come first (as in the C# priority order), then by order and number.
+ */
+export function foldCandidates(fs: FibredSurface): FoldCandidate[] {
+  const gateOf = new Map<OrientedEdge, number>();
+  findGates(fs.graph, fs.g).forEach((gate, index) => gate.edges.forEach((e) => gateOf.set(e, index)));
+  const keyOf = (edges: readonly OrientedEdge[], initialSegment: number) =>
+    `${edges
+      .map((e) => `${e.edge.id}${e.isForward ? "+" : "-"}`)
+      .sort()
+      .join(",")}@${initialSegment}`;
+  const groups = new Map<
+    string,
+    { edges: readonly OrientedEdge[]; initialSegment: number; found: Inefficiency[] }
+  >();
+  for (const strip of fs.graph.edges) {
+    const letters = fs.g.image(strip.forward).letters;
+    for (let i = 1; i < letters.length; i++) {
+      const [x, y] = [letters[i - 1] as OrientedEdge, letters[i] as OrientedEdge];
+      if (gateOf.get(x.reversed) !== gateOf.get(y)) continue;
+      const p = inefficiencyAt(fs, new EdgePoint(strip.forward, i));
+      if (p === undefined || p.order === 0) continue; // backtracks are pulled tight
+      const key = keyOf(p.edgesToFold, p.initialSegment);
+      const group = groups.get(key) ?? { edges: p.edgesToFold, initialSegment: p.initialSegment, found: [] };
+      group.found.push(p);
+      groups.set(key, group);
+    }
+  }
+  const prePeriphery = fs.prePeriphery();
+  const isPeripheral = (edges: readonly OrientedEdge[]) => {
+    const d = fs.g.derivative(edges[0] as OrientedEdge);
+    return d !== undefined && prePeriphery.has(d.edge);
+  };
+  const candidates: FoldCandidate[] = [...groups.values()].map(({ edges, initialSegment, found }) => {
+    const order = Math.min(...found.map((p) => p.order));
+    const lowest = found.filter((p) => p.order === order);
+    return {
+      edgesToFold: edges,
+      initialSegment,
+      order,
+      count: lowest.length,
+      representative: lowest[0],
+      peripheral: isPeripheral(edges),
+    };
+  });
+  for (const group of peripheralInefficiencies(fs)) {
+    const initialSegment = sharedPrefix(group.map((e) => fs.g.image(e).letters)).length;
+    if (groups.has(keyOf(group, initialSegment))) continue;
+    candidates.push({
+      edgesToFold: group,
+      initialSegment,
+      order: undefined,
+      count: 0,
+      representative: undefined,
+      peripheral: true,
+    });
+  }
+  const rank = (c: FoldCandidate) => [c.peripheral ? 0 : 1, c.order ?? 0, -c.count] as const;
+  return candidates.sort((a, b) => {
+    const [ra, rb] = [rank(a), rank(b)];
+    return ra[0] - rb[0] || ra[1] - rb[1] || ra[2] - rb[2];
+  });
+}

@@ -20,7 +20,7 @@ describe("runAlgorithm", () => {
     fs.onError = (message) => errors.push(message);
     const log = runAlgorithm(fs);
     expect(errors).toEqual([]);
-    expect(log).toContain("remove inefficiency");
+    expect(log).toContain("fold");
     expect(inefficiencies(fs)).toEqual([]);
     expect(growth(fs)).toBeCloseTo(φ * φ, 8);
   });

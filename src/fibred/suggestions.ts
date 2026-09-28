@@ -5,7 +5,7 @@
  *
  * @module
  */
-import type { Edge, Vertex } from "../graph/ribbon-graph";
+import type { Edge, OrientedEdge, Vertex } from "../graph/ribbon-graph";
 import type { FibredSurface } from "./fibred-surface";
 import { applyMove, type FoldRef, foldRef, type Move, type MoveKind, strip } from "./move";
 import { needsAbsorbing } from "./moves/absorb-periphery";
@@ -14,9 +14,9 @@ import { cutOptions, prongsOfOrbit } from "./moves/cut-closed-surface";
 import { hasOneCuspPuncture, polygonSingularities } from "./moves/fill-puncture";
 import type { FoldOption } from "./moves/fold";
 import {
-  inefficiencies,
+  type FoldCandidate,
+  foldCandidates,
   inefficiencyAt,
-  peripheralInefficiencies,
   removeInefficiencyStep,
   removePeripheralInefficiency,
 } from "./moves/inefficiency";
@@ -68,8 +68,7 @@ export type SuggestionKind =
   | "absorb into periphery"
   | "reducible"
   | "remove valence-2 junctions"
-  | "fold peripheral inefficiency"
-  | "remove inefficiency"
+  | "fold"
   | "closed surface"
   | "finished";
 
@@ -82,6 +81,11 @@ export interface Suggestion {
   readonly multiple: boolean;
   /** The result, for a finished algorithm. */
   readonly classification?: Classification;
+  /**
+   * What the autopilot does instead of the first option, if that differs: for folds, it removes the whole first
+   * inefficiency at once (fast), while the options are single fold steps (visible).
+   */
+  readonly autopilotMove?: Move;
 }
 
 /** The next suggestion, in the priority order of the C# `NextSuggestion`. */
@@ -183,33 +187,33 @@ export function nextSuggestion(fs: FibredSurface): Suggestion {
       multiple: true,
     };
 
-  const peripheral = peripheralInefficiencies(fs);
-  if (peripheral.length > 0)
+  const folds = foldCandidates(fs);
+  if (folds.length > 0)
     return {
-      kind: "fold peripheral inefficiency",
-      description: ["Strips at a junction start with the same strip of the pre-periphery."],
-      options: peripheral.map((group) => ({
-        move: { kind: "fold peripheral inefficiency", strips: group.map((e) => e.name) },
-        label: ["Fold ", ...strips(group.map((e) => e.name))],
-      })),
-      multiple: false,
-    };
-
-  const found = inefficiencies(fs);
-  if (found.length > 0)
-    return {
-      kind: "remove inefficiency",
-      description: ["g is not efficient: some image contains an illegal turn."],
-      options: found.map((p) => {
-        const point = p.point.normalized(fs);
+      kind: "fold",
+      description: [
+        "g is not efficient. Fold the initial segments of strips with the same Dg, one step at a time (removing an inefficiency (α, β) of order k starts by folding Dgᵏ⁻¹(α) and Dgᵏ⁻¹(β)).",
+      ],
+      ...(folds[0]?.representative && {
+        autopilotMove: {
+          kind: "remove inefficiency" as const,
+          at: {
+            strip: folds[0].representative.point.normalized(fs).edge.name,
+            index: folds[0].representative.point.normalized(fs).index,
+          },
+          steps: "all" as const,
+        },
+      }),
+      options: folds.map((c) => {
+        const at = c.representative?.point.normalized(fs);
         return {
           move: {
-            kind: "remove inefficiency",
-            at: { strip: point.edge.name, index: point.index },
-            steps: "all",
+            kind: "fold" as const,
+            strips: c.edgesToFold.map((e) => e.name),
+            ...(at && { at: { strip: at.edge.name, index: at.index } }),
           },
-          label: [`Order ${p.order}: `, point.describe(fs)],
-          rating: p.order,
+          label: foldLabel(fs, c),
+          ...(c.order !== undefined && { rating: c.order }),
         };
       }),
       multiple: false,
@@ -253,6 +257,33 @@ export function nextSuggestion(fs: FibredSurface): Suggestion {
         growth,
       })
     : finished(["No step applies, but the growth is 1."], { kind: "undecided" });
+}
+
+/**
+ * "Fold a and the initial segments of b, c at v: order 2, 3 places" (the C# wording: fully folded strips, then the
+ * ones folded partially, based at the junction), or "peripheral: Dg = p ∈ pre-P".
+ */
+function foldLabel(fs: FibredSurface, c: FoldCandidate): Text {
+  const full = c.edgesToFold.filter((e) => fs.g.image(e).length === c.initialSegment).map((e) => e.name);
+  const partial = c.edgesToFold.filter((e) => fs.g.image(e).length > c.initialSegment).map((e) => e.name);
+  const junctionName = (c.edgesToFold[0] as OrientedEdge).source.name;
+  const what: TextPart[] = [
+    "Fold ",
+    ...strips(full),
+    ...(full.length > 0 && partial.length > 0 ? [" and "] : []),
+    ...(partial.length > 0 ? ["initial segments of ", ...strips(partial)] : []),
+    " at ",
+    { junction: junctionName },
+  ];
+  const d = fs.g.derivative(c.edgesToFold[0] as OrientedEdge);
+  const why: TextPart[] =
+    c.order === undefined
+      ? [": peripheral, Dg = ", ...(d ? [{ strip: d.name }] : []), " is in the pre-periphery"]
+      : [
+          `: order ${c.order}, ${c.count} ${c.count === 1 ? "place" : "places"}`,
+          ...(c.peripheral ? ["; peripheral"] : []),
+        ];
+  return [...what, ...why];
 }
 
 function finished(description: Text, classification: Classification): Suggestion {
@@ -320,6 +351,30 @@ export function variants(fs: FibredSurface, move: Move): MoveOption[] {
         ],
       }));
     }
+    case "fold": {
+      const at = move.at;
+      const choices = foldVariants(fs, move, (copy, choose) => {
+        if (at === undefined)
+          removePeripheralInefficiency(
+            copy,
+            move.strips.map((n) => strip(copy, n)),
+            choose,
+          );
+        else {
+          const p = inefficiencyAt(copy, new EdgePoint(strip(copy, at.strip), at.index));
+          if (p !== undefined) removeInefficiencyStep(copy, p, choose);
+        }
+      });
+      return at === undefined
+        ? choices
+        : [
+            ...choices,
+            {
+              move: { kind: "remove inefficiency", at, steps: "all" },
+              label: ["Remove the whole inefficiency at once (all its folds)"],
+            },
+          ];
+    }
     case "fold peripheral inefficiency":
       return foldVariants(fs, move, (copy, choose) =>
         removePeripheralInefficiency(
@@ -373,7 +428,7 @@ export function variants(fs: FibredSurface, move: Move): MoveOption[] {
 
 /** Tries a folding move on a copy to collect its fold options, and turns them into variants of `move`. */
 function foldVariants<
-  M extends Extract<Move, { kind: "fold peripheral inefficiency" | "remove inefficiency" }>,
+  M extends Extract<Move, { kind: "fold" | "fold peripheral inefficiency" | "remove inefficiency" }>,
 >(
   fs: FibredSurface,
   move: M,
@@ -408,8 +463,7 @@ export const DEFAULT_AUTOMATIC: ReadonlySet<SuggestionKind> = new Set<Suggestion
   "remove valence-1 junction",
   "absorb into periphery",
   "remove valence-2 junctions",
-  "fold peripheral inefficiency",
-  "remove inefficiency",
+  "fold",
   "closed surface",
 ]);
 
@@ -443,7 +497,7 @@ export function autopilot(fs: FibredSurface, options: AutopilotOptions = {}): Au
   let surface = fs;
   let suggestion = nextSuggestion(surface);
   while (automatic.has(suggestion.kind) && moves.length < maxSteps) {
-    const move = (suggestion.options[0] as MoveOption).move;
+    const move = suggestion.autopilotMove ?? (suggestion.options[0] as MoveOption).move;
     surface = applyMove(surface, move);
     moves.push(move);
     const problems = surface.checkIntegrity();

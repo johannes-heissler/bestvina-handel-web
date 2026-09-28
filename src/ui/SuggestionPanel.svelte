@@ -14,8 +14,7 @@
     { kind: "remove valence-1 junction", label: "Valence-1 junctions" },
     { kind: "absorb into periphery", label: "Absorb into the periphery" },
     { kind: "remove valence-2 junctions", label: "Valence-2 junctions" },
-    { kind: "fold peripheral inefficiency", label: "Peripheral folds" },
-    { kind: "remove inefficiency", label: "Inefficiencies" },
+    { kind: "fold", label: "Folds" },
     { kind: "closed surface", label: "Closed surfaces (cut)" },
     { kind: "reducible", label: "Reduce (first piece)" },
   ];

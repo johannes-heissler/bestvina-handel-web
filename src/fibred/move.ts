@@ -79,6 +79,16 @@ export type Move =
       /** For a single junction: the oriented strip to remove (leaving it). */
       readonly removed?: string;
     }
+  /**
+   * One fold step (the thesis: an inefficiency is removed fold by fold): folds the initial segments of the strip ends
+   * `strips`, as the first step of removing the inefficiency at `at`, or, without `at`, as a peripheral fold.
+   */
+  | {
+      readonly kind: "fold";
+      readonly strips: readonly string[];
+      readonly at?: PointRef;
+      readonly fold?: FoldRef;
+    }
   | {
       readonly kind: "fold peripheral inefficiency";
       readonly strips: readonly string[];
@@ -155,6 +165,21 @@ export function applyMove(fs: FibredSurface, move: Move): FibredSurface {
           );
         }
       return fs;
+    case "fold": {
+      const choose = foldChoice(fs, move.fold);
+      if (move.at === undefined)
+        removePeripheralInefficiency(
+          fs,
+          move.strips.map((name) => strip(fs, name)),
+          choose,
+        );
+      else {
+        const p = inefficiencyAt(fs, new EdgePoint(strip(fs, move.at.strip), move.at.index));
+        if (p === undefined) throw new Error(`There is no inefficiency at ${move.at.strip}@${move.at.index}`);
+        removeInefficiencyStep(fs, p, choose);
+      }
+      return fs;
+    }
     case "fold peripheral inefficiency":
       removePeripheralInefficiency(
         fs,

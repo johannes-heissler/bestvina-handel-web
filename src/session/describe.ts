@@ -23,6 +23,8 @@ export function describeMove(move: Move): string {
       return move.junctions === undefined
         ? "Remove valence-2 junctions"
         : `Remove valence-2 ${move.junctions.join(", ")}`;
+    case "fold":
+      return `Fold ${move.strips.join(", ")}`;
     case "fold peripheral inefficiency":
       return `Fold ${move.strips.join(", ")}`;
     case "remove inefficiency":

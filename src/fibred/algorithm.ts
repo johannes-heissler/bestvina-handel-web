@@ -21,8 +21,7 @@ const STEP_KINDS: ReadonlySet<SuggestionKind> = new Set<StepKind>([
   "remove valence-1 junction",
   "absorb into periphery",
   "remove valence-2 junctions",
-  "fold peripheral inefficiency",
-  "remove inefficiency",
+  "fold",
 ]);
 
 /** A step that can be applied to the fibred surface it was computed for. */
@@ -38,7 +37,7 @@ export interface Step {
 export function nextStep(fs: FibredSurface): Step | undefined {
   const suggestion = nextSuggestion(fs);
   if (!STEP_KINDS.has(suggestion.kind)) return undefined;
-  const { move } = suggestion.options[0] as MoveOption;
+  const move = suggestion.autopilotMove ?? (suggestion.options[0] as MoveOption).move;
   return { kind: suggestion.kind as StepKind, apply: () => void applyMove(fs, move) };
 }
 

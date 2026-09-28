@@ -18,9 +18,10 @@ describe("nextSuggestion", () => {
     expect(s.options.slice(1).map((o) => plainText(o.label))).toEqual(["Tighten at B", "Tighten at b"]); // a b B b has two backtracks
   });
 
-  it("lists inefficiencies by order, as moves that refer to strips by name", () => {
+  it("lists folds by the order of the inefficiencies behind them, as moves that refer to strips by name", () => {
     const s = nextSuggestion(conjugatedTorusAnosov());
-    expect(s.kind).toBe("remove inefficiency");
+    expect(s.kind).toBe("fold");
+    expect(plainText(s.options[0]!.label)).toMatch(/^Fold .* at .*: order \d+, \d+ places?/);
     const ratings = s.options.map((o) => o.rating!);
     expect(ratings).toEqual(ratings.toSorted((x, y) => x - y));
     expect(JSON.parse(JSON.stringify(s.options[0]!.move))).toEqual(s.options[0]!.move);
@@ -96,7 +97,7 @@ describe("variants", () => {
   it("lists the fold options of an inefficiency step, rated by side crossings, each applicable", () => {
     const fs = conjugatedTorusAnosov();
     const move = nextSuggestion(fs).options[0]!.move;
-    const options = variants(fs, move);
+    const options = variants(fs, move).filter((o) => o.move.kind === "fold");
     expect(options.length).toBeGreaterThan(0);
     const ratings = options.map((o) => o.rating!);
     expect(ratings).toEqual(ratings.toSorted((x, y) => x - y));
