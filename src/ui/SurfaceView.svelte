@@ -27,6 +27,7 @@
   let deckDepth = $state(0);
   let widthExponent = $state(0);
   let straightening = $state(10);
+  let pointerSize = $state(4); // the radius of the dot under the mouse, in pixels at the centre (0: no dot)
   let toScale = $state(false);
   let labels = $state(true);
   let showOptions = $state(true);
@@ -208,6 +209,9 @@
       <label title="Draw the strips as wide as their share of the sides they cross (their weights w(e)^c)"
         ><input type="checkbox" bind:checked={toScale} /> Strip widths to scale</label
       >
+      <label title="The dot under the mouse, shown in the polygon and in every copy; its radius in pixels at the centre of the model, shrinking with the metric (0: no dot)"
+        >Pointer size <input type="range" min="0" max="12" step="0.5" bind:value={pointerSize} /> {pointerSize}</label
+      >
       <label><input type="checkbox" bind:checked={labels} /> Show names</label>
       {#if hyperbolic && labels}
         <label title="Scale the names with the hyperbolic metric (the copies then get names too)"
@@ -237,9 +241,9 @@
     <div class="surface" bind:this={surfaceElement} style:transform={`translate(${panX}px, ${panY}px) scale(${zoom})`}>
       <!-- The SVG comes from our own renderer (src/render/svg.ts), not from user input. -->
       {@html highlight}{@html rendered?.svg ?? ""}
-      {#if dots.length}
+      {#if dots.length && pointerSize > 0}
         <svg class="echo" viewBox="0 0 800 800" aria-hidden="true">
-          {#each dots as d, i (i)}<circle cx={d.x} cy={d.y} r={d.r} />{/each}
+          {#each dots as d, i (i)}<circle cx={d.x} cy={d.y} r={(d.r * pointerSize) / 4} />{/each}
         </svg>
       {/if}
     </div>

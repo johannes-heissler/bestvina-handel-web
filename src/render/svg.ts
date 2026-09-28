@@ -63,7 +63,8 @@ export interface Rendered {
   readonly notes: readonly string[];
   /**
    * For a point of the SVG (in its pixel coordinates), the same point of the surface in the polygon and in each drawn
-   * copy, with the radius of a dot of constant hyperbolic size there (the C# `Display(Point)`); empty outside.
+   * copy, with the radius of a dot of constant hyperbolic size there, 4 pixels at the centre of the model (the C#
+   * `Display(Point)`); empty outside.
    */
   readonly echo: (x: number, y: number) => { x: number; y: number; r: number }[];
 }
