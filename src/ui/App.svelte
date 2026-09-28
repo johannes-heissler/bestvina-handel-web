@@ -25,6 +25,17 @@
         else app.showStart = true;
       })
       .catch(() => (app.showStart = true));
+    // A link entered in the address bar of an open page changes only the part after #, without reloading: open it.
+    // (The autosave writes the address with history.replaceState, which doesn't fire this event.)
+    const onHashChange = () => {
+      void decodeSession(location.hash)
+        .then((file) => {
+          if (file) app.open(file);
+        })
+        .catch(() => (app.error = "This link doesn't contain a session that can be opened."));
+    };
+    window.addEventListener("hashchange", onHashChange);
+    return () => window.removeEventListener("hashchange", onHashChange);
   });
 
   function save() {

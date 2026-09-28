@@ -49,3 +49,12 @@ test("restores a session from its link", async ({ page }) => {
   await page.goto(url);
   await expect(page.locator(".panel dl")).toHaveText(state);
 });
+
+test("opens a link entered into the address bar of the open page", async ({ page }) => {
+  await startExample(page, "Anosov map of the torus");
+  // Bestvina–Handel example 6.3 after a fold and pulling tight.
+  const link =
+    "#s=fc1BisJAEAXQq4S_LkURZlFLceEdQhatXZpmOp1QXQYhNMwd5oZzEklQ0M1Qmw_1eX_CpdfOGRgnyTaG5FatS17iKkvOoU8gjKJL4i0hm1MDT_gOyYMxqGQx0Csw9k_n7-f3uEiV3F03RKm-1jsUgqnILJzbEL1KAtcTun6UN_bSR495TcOQwTUcCAc0BLesLw8w5lJIXu7gbSn0rzncYqwsXFvDZ7Mp8xHON1VJBq43tGnKAw";
+  await page.evaluate((hash) => (location.hash = hash), link);
+  await expect(page.getByRole("button", { name: /↑ Back: Pull tight/ })).toBeVisible();
+});
