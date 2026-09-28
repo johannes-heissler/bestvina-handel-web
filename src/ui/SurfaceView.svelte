@@ -6,7 +6,12 @@
   import { untrack } from "svelte";
   import type { HyperbolicModel } from "../geometry/hyperbolic";
   import type { Smoothing, ViewKind } from "../render/svg";
+  import type { FibredSurface } from "../fibred/fibred-surface";
+  import type { Text } from "../fibred/suggestions";
+  import { matrixInfo, type MatrixInfo } from "../session/analysis";
+  import { graphColors } from "./colors";
   import { draw } from "./drawing";
+  import TextView from "./TextView.svelte";
   import { exportImage, type ExportFormat } from "./export";
   import { app } from "./state.svelte";
 
@@ -44,6 +49,29 @@
   let panX = $state(0);
   let panY = $state(0);
   let dragging: { x: number; y: number } | undefined;
+  let mouse = $state({ x: 0, y: 0 });
+
+  // The card for the strip under the mouse: its images under g and μ, its width and length.
+  const weights = new WeakMap<FibredSurface, MatrixInfo>();
+  const card = $derived.by(() => {
+    const surface = node?.surface;
+    const name = app.hovered;
+    if (!surface || name === undefined || dragging) return undefined;
+    const e = surface.graph.edges.find((x) => x.name === name);
+    if (!e) return undefined;
+    let info = weights.get(surface);
+    if (!info) weights.set(surface, (info = matrixInfo(surface)));
+    const path = (letters: readonly { name: string }[]): Text =>
+      letters.length === 0 ? ["·"] : letters.flatMap((x, i) => (i === 0 ? [{ strip: x.name }] : [" ", { strip: x.name }]));
+    return {
+      name,
+      g: path(surface.g.image(e.forward).letters),
+      mu: path(surface.mu.image(e.forward).letters),
+      palette: graphColors(surface.spine0),
+      width: info.widths.get(e),
+      length: info.lengths.get(e),
+    };
+  });
 
   function onWheel(event: WheelEvent) {
     event.preventDefault();
@@ -59,6 +87,8 @@
     (event.currentTarget as HTMLElement).setPointerCapture(event.pointerId);
   }
   function onPointerMove(event: PointerEvent) {
+    const rect = (event.currentTarget as HTMLElement).getBoundingClientRect();
+    mouse = { x: event.clientX - rect.left, y: event.clientY - rect.top };
     if (dragging) {
       panX = event.clientX - dragging.x;
       panY = event.clientY - dragging.y;
@@ -144,6 +174,17 @@
       <!-- The SVG comes from our own renderer (src/render/svg.ts), not from user input. -->
       {@html highlight}{@html rendered?.svg ?? ""}
     </div>
+    {#if card}
+      <div class="hover-card" style:left={`${mouse.x + 16}px`} style:top={`${mouse.y + 16}px`}>
+        <div><TextView text={[{ strip: card.name }]} /> ↦ <TextView text={card.g} /></div>
+        <div class="hint">μ: <TextView text={card.mu} palette={card.palette} /></div>
+        <div class="hint">
+          width {card.width === undefined ? "—" : card.width.toFixed(3)}, length {card.length === undefined
+            ? "—"
+            : card.length.toFixed(3)}
+        </div>
+      </div>
+    {/if}
   </div>
   {#each rendered?.notes ?? [] as note (note)}<p class="note">{note}</p>{/each}
 </section>

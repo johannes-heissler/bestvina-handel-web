@@ -92,3 +92,18 @@
 - **Panel left or right:** a button in the header.
 - **History tree:** scrollable, with λ next to each state and the move (coloured) between the levels. It scrolls to
   the current state.
+
+## Update: more information in the side panel and on hover
+
+- **Hovering a strip** shows a card with g(e), μ(e) (in the colours of G₀), and its Perron–Frobenius width and length.
+- **Side panel**, from top to bottom: next step; the graph map g and the state (always open); then collapsible
+  sections (`src/session/analysis.ts` computes their contents):
+  - **Transition matrix, widths, lengths** (with λ).
+  - **Punctures, cusps, gates:**
+    - the boundary words of G with the boundary word g maps each one to (the permutation of the punctures);
+    - at each turn, the number k of infinitesimal branches of τ, marked as a cusp (k = 0 or 2, angle π) or a multicusp
+      (k ≥ 3, angle (k − 1)π), with the totals;
+    - the singularities (infinitesimal polygons) with their prongs;
+    - P and pre-P ∖ P;
+    - the gates at each junction in cyclic order.
+  - **Embedding μ:** coloured in the colours of the edges of G₀, with an explanation of G₀ and μ.

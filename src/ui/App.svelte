@@ -5,7 +5,10 @@
   import type { SessionFile } from "../session/session";
   import { download } from "./export";
   import HistoryView from "./HistoryView.svelte";
+  import BoundaryPanel from "./BoundaryPanel.svelte";
+  import EmbeddingPanel from "./EmbeddingPanel.svelte";
   import InfoPanel from "./InfoPanel.svelte";
+  import MatrixPanel from "./MatrixPanel.svelte";
   import MapEditor from "./MapEditor.svelte";
   import StartDialog from "./StartDialog.svelte";
   import { app } from "./state.svelte";
@@ -111,5 +114,8 @@
     <SuggestionPanel />
     <MapEditor />
     <InfoPanel />
+    <MatrixPanel />
+    <BoundaryPanel />
+    <EmbeddingPanel />
   </div>
 {/snippet}

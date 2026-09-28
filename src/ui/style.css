@@ -407,3 +407,91 @@ pre {
   padding: 2rem;
   color: var(--muted);
 }
+
+details.panel > summary {
+  cursor: pointer;
+  list-style-position: inside;
+}
+details.panel > summary h2 {
+  display: inline;
+}
+.table-scroll {
+  overflow-x: auto;
+}
+.matrix {
+  border-collapse: collapse;
+  font-size: 0.85rem;
+}
+.matrix th,
+.matrix td {
+  padding: 0.1rem 0.35rem;
+  text-align: right;
+  font-style: italic;
+}
+.matrix td {
+  font-style: normal;
+  font-variant-numeric: tabular-nums;
+}
+.matrix td.zero {
+  color: var(--rule);
+}
+.matrix .weight {
+  color: var(--muted);
+  font-style: normal;
+}
+.words li,
+.gates li {
+  margin: 0.25rem 0;
+}
+.gates {
+  list-style: none;
+  padding: 0;
+}
+.turns {
+  display: inline-flex;
+  gap: 2px;
+  margin-left: 0.3rem;
+}
+.turns span {
+  font-size: 0.75rem;
+  min-width: 1.1em;
+  text-align: center;
+  border-radius: 2px;
+  color: var(--muted);
+}
+.turns .cusp {
+  background: var(--accent);
+  color: var(--paper);
+}
+.turns .multicusp {
+  background: var(--error);
+  color: var(--paper);
+}
+/* Dragging the view must not select the labels. */
+.canvas,
+.canvas svg text {
+  user-select: none;
+  -webkit-user-select: none;
+}
+.canvas svg text {
+  pointer-events: none;
+}
+
+.hover-card {
+  position: absolute;
+  z-index: 2;
+  max-width: 26rem;
+  padding: 0.35rem 0.55rem;
+  background: var(--paper);
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  box-shadow: 0 2px 6px rgb(0 0 0 / 0.12);
+  pointer-events: none;
+  font-size: 0.85rem;
+}
+
+/* Mathematical symbols in small-caps headings keep their shape. */
+.math {
+  font-variant: normal;
+  font-style: italic;
+}

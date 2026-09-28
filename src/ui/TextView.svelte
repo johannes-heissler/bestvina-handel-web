@@ -6,11 +6,20 @@
   import { stripColors } from "./colors";
   import { app } from "./state.svelte";
 
-  let { text, surface }: { text: Text; surface?: FibredSurface | undefined } = $props();
+  let {
+    text,
+    surface,
+    palette,
+  }: {
+    text: Text;
+    surface?: FibredSurface | undefined;
+    /** Colours by strip name, instead of those of the surface (e.g. for the edges of G₀). */
+    palette?: ReadonlyMap<string, string> | undefined;
+  } = $props();
 
   const colors = $derived.by(() => {
     void app.version;
-    return stripColors(surface ?? app.session?.current.surface);
+    return palette ?? stripColors(surface ?? app.session?.current.surface);
   });
 </script>
 

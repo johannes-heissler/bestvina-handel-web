@@ -51,7 +51,7 @@
 
 <section class="panel">
   <div class="heading">
-    <h2>Graph map g</h2>
+    <h2>Graph map <span class="math">g</span></h2>
     {#if !editing}<button onclick={edit} disabled={!surface}>Edit</button>{/if}
   </div>
   {#if !editing}

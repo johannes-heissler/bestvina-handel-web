@@ -5,6 +5,7 @@
  */
 import type { Color } from "../math/color";
 import type { FibredSurface } from "../fibred/fibred-surface";
+import type { RibbonGraph } from "../graph/ribbon-graph";
 
 export function cssColor(color: Color): string {
   const channel = (x: number) => Math.round(Math.min(1, Math.max(0, x)) * 255);
@@ -24,6 +25,16 @@ export function stripColors(surface: FibredSurface | undefined): ReadonlyMap<str
       colors.set(e.backward.name, cssColor(e.color));
     }
     cache.set(surface, colors);
+  }
+  return colors;
+}
+
+/** The colour of each edge name ("a" and "A") of a ribbon graph, e.g. of G₀. */
+export function graphColors(graph: RibbonGraph): ReadonlyMap<string, string> {
+  const colors = new Map<string, string>();
+  for (const e of graph.edges) {
+    colors.set(e.name, cssColor(e.color));
+    colors.set(e.backward.name, cssColor(e.color));
   }
   return colors;
 }

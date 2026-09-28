@@ -140,7 +140,14 @@ export function renderSvg(fs: FibredSurface, layout: Layout, options: RenderOpti
         const left = new Complex(-out.im, out.re);
         const gap = Math.min(junctionRadius * 0.35, junctionRadius / Math.max(1, list.length)); // the gate is at most ~R wide
         const length = junctionRadius * 0.9;
-        list.sort((a, b) => a.angle - b.angle); // counterclockwise = from right to left, looking outwards
+        // The strips of a gate are consecutive in the star; counterclockwise is from right to left, looking outwards.
+        const star = fs.graph.star(v);
+        const members = new Set(list.map((m) => m.x));
+        const first = star.findIndex(
+          (y, i) => members.has(y) && !members.has(star[(i - 1 + star.length) % star.length] as OrientedEdge),
+        );
+        const rank = (y: OrientedEdge) => (star.indexOf(y) - Math.max(0, first) + star.length) % star.length;
+        list.sort((a, b) => rank(a.x) - rank(b.x));
         list.forEach(({ x, angle }, j) => {
           const shift = left.scale((j - (list.length - 1) / 2) * gap);
           const radialStart = switchPoint.add(out.scale(junctionRadius * 0.2)).add(shift);
@@ -233,6 +240,12 @@ export function renderSvg(fs: FibredSurface, layout: Layout, options: RenderOpti
         });
       }
     } else {
+      // A small arrow in the middle of each segment, in the direction of the strip.
+      for (const e of fs.graph.edges)
+        for (const line of lines.get(e) ?? []) {
+          const arrow = arrowAt(line, (4 + strokeWidth(e)) / scale);
+          if (arrow) group.push(`<path d="M${arrow.map(px).join("L")}Z" fill="${css(e.color)}"/>`);
+        }
       for (const e of fs.graph.edges)
         for (const line of lines.get(e) ?? [])
           group.push(
@@ -529,4 +542,25 @@ function cubic(p0: Complex, p1: Complex, p2: Complex, p3: Complex, t: number): C
     .add(p1.scale(3 * s * s * t))
     .add(p2.scale(3 * s * t * t))
     .add(p3.scale(t * t * t));
+}
+
+/** A small triangle pointing along the polyline at the middle of its length (undefined if it is too short). */
+function arrowAt(line: readonly Complex[], size: number): Complex[] | undefined {
+  const lengths = line.map((p, i) => (i === 0 ? 0 : p.sub(line[i - 1] as Complex).abs()));
+  const total = lengths.reduce((a, b) => a + b, 0);
+  if (total < size * 4) return undefined;
+  let walked = 0;
+  for (let i = 1; i < line.length; i++) {
+    const segment = lengths[i] as number;
+    if (walked + segment >= total / 2 && segment > 0) {
+      const [a, b] = [line[i - 1] as Complex, line[i] as Complex];
+      const direction = b.sub(a).scale(1 / segment);
+      const tip = a.add(direction.scale(total / 2 - walked + size / 2));
+      const back = tip.sub(direction.scale(size));
+      const side = new Complex(-direction.im, direction.re).scale(size * 0.55);
+      return [tip, back.add(side), back.sub(side)];
+    }
+    walked += segment;
+  }
+  return undefined;
 }

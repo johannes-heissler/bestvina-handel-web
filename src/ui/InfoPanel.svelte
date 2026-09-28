@@ -26,7 +26,6 @@
       strips: surface.graph.edgeCount,
       junctions: surface.graph.vertexCount,
       peripheral: [...surface.peripheral].map((e) => e.name),
-      mu: surface.graph.edges.map((e) => `${e.name} ↦ ${surface.mu.image(e.forward).toString() || "·"}`).join("\n"),
       curves: surface.reductionCurves.map(String),
       closed: surface.isClosed,
     };
@@ -55,9 +54,5 @@
         <dd>{info.curves.join("; ")}</dd>
       {/if}
     </dl>
-    <details>
-      <summary>Embedding μ (side crossings)</summary>
-      <pre>{info.mu}</pre>
-    </details>
   {/if}
 </section>

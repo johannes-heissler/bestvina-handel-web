@@ -117,3 +117,11 @@ graphs, the three views, and the tessellation.
   order, at most one radius wide together). Only then do they bend into their paths with a cubic Bézier curve (the C#
   `AdjustStartVector`, done more smoothly). The bend is at least about 30 pixels long, and longer for strands that turn
   far away from the gate's direction. This holds in the standard view and in the τ view.
+
+## Update: order within a gate, arrows
+
+- The strands of a gate are laid side by side in the **cyclic order of the star** (the strips of a gate are consecutive
+  there; counterclockwise is from right to left, looking outwards). Before, their order came from the directions of
+  their far ends, which was often reversed and caused avoidable self-intersections near the junctions.
+- **Arrows:** a small arrowhead in the middle of each segment of a strip, pointing along its orientation.
+- Dragging the view no longer selects the labels (`user-select: none`, and labels don't catch the mouse).
