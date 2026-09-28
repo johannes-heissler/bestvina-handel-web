@@ -193,3 +193,7 @@ it crosses. So a curve turned one way during the spiral and back at its end. Now
 The curve is tangent-continuous and turns only in one direction. Strands that turn further use smaller circles, so they
 stay on the inside and the arcs of a gate are nested. The radii are capped by the nearest junction and by the distance
 to the target.
+
+- **Lanes of a single gate:** a single gate was cut at its widest gap for its direction, but its lanes still started
+  where the star starts, so they could be in the wrong order (v in your second example). The lanes now use the same
+  order as the direction.

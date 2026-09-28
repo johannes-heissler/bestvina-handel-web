@@ -147,6 +147,8 @@ export function renderSvg(fs: FibredSurface, layout: Layout, options: RenderOpti
         );
       const points = new Map<Vertex, Complex>();
       const psiInChartOf = new Map<Vertex, number>();
+      /** The strands of each gate from right to left, looking outwards (the lanes): as used for its direction. */
+      const lanesOf = new Map<Vertex, OrientedEdge[]>();
       for (const s of new Set(star.map((y) => switchOf.get(y) as Vertex))) {
         // A counterclockwise step between consecutive strands; a tiny backward step (nearly parallel strands) stays
         // backward instead of becoming almost a full turn.
@@ -171,6 +173,7 @@ export function renderSvg(fs: FibredSurface, layout: Layout, options: RenderOpti
         for (const y of inGate.slice(1)) unrolled += step(unrolled, chartAngle(y));
         const psiInChart = (first + unrolled) / 2;
         psiInChartOf.set(s, psiInChart);
+        lanesOf.set(s, inGate);
         // The same direction in the display.
         const psi = toScreen(junctionInChart.add(Complex.fromPolar(1e-4, psiInChart)))
           .sub(toScreen(junctionInChart))
@@ -196,13 +199,9 @@ export function renderSvg(fs: FibredSurface, layout: Layout, options: RenderOpti
         const left = new Complex(-out.im, out.re);
         const gap = Math.min(radius * 0.35, radius / Math.max(1, list.length)); // the gate is at most ~R wide
         const length = radius * 0.9;
-        // The strips of a gate are consecutive in the star; counterclockwise is from right to left, looking outwards.
-        const inGate = new Set(list);
-        const first = star.findIndex(
-          (y, i) => inGate.has(y) && !inGate.has(star[(i - 1 + star.length) % star.length] as OrientedEdge),
-        );
-        const rank = (y: OrientedEdge) => (star.indexOf(y) - Math.max(0, first) + star.length) % star.length;
-        list.sort((p, q) => rank(p) - rank(q));
+        // The same order as for the gate's direction (a single gate is cut at its widest gap, not where the star starts).
+        const lanes = lanesOf.get(s) as OrientedEdge[];
+        list.sort((p, q) => lanes.indexOf(p) - lanes.indexOf(q));
         list.forEach((x, j) => {
           const shift = left.scale((j - (list.length - 1) / 2) * gap);
           ends.set(x, {
