@@ -34,29 +34,33 @@
   });
 
   let selected = $state<number[]>([0]);
+  /** The option clicked last: its further choices are shown (also when several options are ticked). */
+  let focused = $state(0);
   $effect(() => {
     void suggestion;
     selected = [0];
+    focused = 0;
   });
-  // The further choices of the selected option (e.g. how to fold), computed after the panel is drawn: some need the
+  // The further choices of the focused option (e.g. how to fold), computed after the panel is drawn: some need the
   // move to be tried on a copy.
-  let choices = $state<MoveOption[] | undefined>(undefined);
+  let choices = $state<{ list?: MoveOption[]; error?: string } | undefined>(undefined);
   $effect(() => {
-    const option = suggestion?.options[selected[0] ?? 0];
+    const option = suggestion?.options[focused];
     const surface = node?.surface;
     choices = undefined;
-    if (!option || !surface || selected.length !== 1) return;
+    if (!option || !surface) return;
     const timer = setTimeout(() => {
       try {
-        choices = variants(surface, option.move);
-      } catch {
-        choices = [];
+        choices = { list: variants(surface, option.move) };
+      } catch (e) {
+        choices = { error: e instanceof Error ? e.message : String(e) };
       }
     }, 0);
     return () => clearTimeout(timer);
   });
 
   function toggle(i: number) {
+    focused = i;
     if (!suggestion?.multiple) selected = [i];
     else selected = selected.includes(i) ? selected.filter((j) => j !== i) : [...selected, i];
   }
@@ -107,11 +111,17 @@
       {/if}
     </div>
   {/if}
-  {#if choices?.length}
+  {#if suggestion?.options.length}
     <h3>Choices for the selected option</h3>
-    {#if choices}
+    {#if choices === undefined}
+      <p class="note">Computing…</p>
+    {:else if choices.error !== undefined}
+      <p class="note">This option can't be applied here: {choices.error}</p>
+    {:else if choices.list?.length === 0}
+      <p class="note">No further choices: Apply does it.</p>
+    {:else}
       <ul class="options">
-        {#each choices as choice, i (i)}
+        {#each choices.list ?? [] as choice, i (i)}
           <li>
             <button class="link" onclick={() => app.apply(choice.move, { thenAutomatic: true })}
               ><TextView text={choice.label} /></button

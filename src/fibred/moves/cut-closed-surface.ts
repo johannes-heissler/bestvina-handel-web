@@ -103,6 +103,26 @@ export function prongsOfOrbit(tt: TrainTrack, junction: Vertex): Prong[] {
 }
 
 /**
+ * How much shorter than L its shortest preimage slit is: λ^(P−1) for the period P of the prongs of the orbit of
+ * `junction` (see `slitsForProng`). The cut computes in floating point with a tolerance of 1e-9, so beyond about
+ * 1e10 the short preimages can't be resolved and no cut is found (e.g. a period-4 orbit of 3-pronged singularities
+ * with λ ≈ 22.5: λ¹¹ ≈ 10¹⁵).
+ */
+export function preimageShrinking(tt: TrainTrack, junction: Vertex): number {
+  const prong = prongsOfOrbit(tt, junction)[0];
+  if (prong === undefined) return 1;
+  const same = (p: Prong, q: Prong) => p.atSwitch === q.atSwitch && p.below === q.below;
+  let period = 1;
+  for (let p = imageProng(tt, prong); !same(p, prong) && period < 10_000; p = imageProng(tt, p)) period++;
+  return tt.growth ** (period - 1);
+}
+
+/** Whether the cut from this orbit is beyond what the floating-point cut can resolve ({@link preimageShrinking}). */
+export function cutTooFine(tt: TrainTrack, junction: Vertex): boolean {
+  return preimageShrinking(tt, junction) > 1e10;
+}
+
+/**
  * The switches along the boundary word of p that still have valence > 2, i.e. where the cut hasn't yet separated
  * a thin ring along p's boundary; empty when B is a circle attached at one switch plus that one switch. For showing
  * the progress while L is prolonged. `undefined` if p's boundary word can't be identified.

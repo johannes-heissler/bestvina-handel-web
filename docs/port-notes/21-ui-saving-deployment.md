@@ -142,3 +142,11 @@
   surface, model and all options, 12 per surface) are kept in weak maps keyed by the surface, so going back and forth
   in the history or switching an option back draws nothing again. The surfaces of the history are never changed in
   place, so they can be keys. A Web Worker (e.g. to show the growth after each option) is for later.
+- **Choices of the option clicked last** are shown (also when several options are ticked), with "Computing…", "No
+  further choices: Apply does it.", or why the option can't be applied.
+- **Closed-surface options per orbit:** one cut and one shortcut per orbit of singularities (before, every junction of
+  an orbit was listed). A cut is greyed out when it can't be computed: the preimage slits f⁻ʲ[L] are λ^j times shorter
+  than L, up to λ^(P−1) for the period P of the prongs, and the cut works in floating point with a tolerance of 1e-9.
+  Beyond λ^(P−1) ≈ 1e10 no cut is found (Point push: a period-4 orbit of 3-pronged singularities, P = 12, λ ≈ 22.5, so
+  λ¹¹ ≈ 8·10¹⁴; `cutOptions` took 2.4 s to find nothing). A finer tolerance alone doesn't help (the images of the tiny
+  pieces don't fit either); a real fix needs exact or rescaled arithmetic in the cut, or avoiding the tiny preimages.

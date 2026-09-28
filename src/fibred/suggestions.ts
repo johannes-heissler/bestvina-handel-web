@@ -10,7 +10,7 @@ import type { FibredSurface } from "./fibred-surface";
 import { applyMove, type FollowUp, type FoldRef, foldRef, type Move, type MoveKind, strip } from "./move";
 import { needsAbsorbing } from "./moves/absorb-periphery";
 import { candidateCenters, invariantSubforests, isPeripheryFriendlyForest } from "./moves/collapse-forest";
-import { cutOptions, prongsOfOrbit } from "./moves/cut-closed-surface";
+import { cutOptions, cutTooFine, preimageShrinking, prongsOfOrbit } from "./moves/cut-closed-surface";
 import { hasOneCuspPuncture, polygonSingularities } from "./moves/fill-puncture";
 import type { FoldOption } from "./moves/fold";
 import {
@@ -314,21 +314,56 @@ function nextStep(fs: FibredSurface, context: SuggestionContext): Suggestion {
   };
 }
 
-/** The moves of the closed-surface case: cut along a leaf from a singularity, or the shortcut, by period. */
+/**
+ * The moves of the closed-surface case: cut along a leaf from a singularity, or the shortcut, one option per orbit of
+ * singularities, by period. Cuts that the floating-point cut can't resolve are shown greyed out.
+ */
 function closedSurfaceOptions(fs: FibredSurface): MoveOption[] {
-  const singularities = polygonSingularities(fs); // sorted by period
+  const tt = trainTrack(fs);
+  const seen = new Set<Vertex>();
+  // (sorted by period) One per orbit.
+  const singularities = polygonSingularities(fs, tt).filter((q) => {
+    if (seen.has(q.junction)) return false;
+    for (const v of q.orbit) seen.add(v);
+    return true;
+  });
+  const orbitText = (orbit: readonly Vertex[]): Text =>
+    orbit.length === 1
+      ? [" (fixed)"]
+      : [
+          " (orbit ",
+          ...orbit.flatMap((v, i): TextPart[] =>
+            i === 0 ? [{ junction: v.name }] : [", ", { junction: v.name }],
+          ),
+          "; period " + orbit.length + ")",
+        ];
   return [
-    ...singularities.map((q) => ({
-      move: { kind: "cut along a singular leaf" as const, junction: q.junction.name },
-      label: ["Cut along a leaf from ", { junction: q.junction.name }, ` (period ${q.orbit.length})`] as Text,
-      rating: q.orbit.length,
-    })),
+    ...singularities.map((q) => {
+      const tooFine = cutTooFine(tt, q.junction);
+      return {
+        move: { kind: "cut along a singular leaf" as const, junction: q.junction.name },
+        label: [
+          "Cut along a leaf from ",
+          { junction: q.junction.name },
+          ...orbitText(q.orbit),
+          ...(tooFine
+            ? [
+                ": not possible yet, its preimages would be " +
+                  preimageShrinking(tt, q.junction).toExponential(0) +
+                  " times shorter",
+              ]
+            : []),
+        ] as Text,
+        rating: q.orbit.length,
+        ...(tooFine && { discouraged: true }),
+      };
+    }),
     ...singularities.map((q) => ({
       move: { kind: "replace puncture by singularity" as const, junction: q.junction.name },
       label: [
         "Shortcut: fill the puncture at ",
         { junction: q.junction.name },
-        ` (period ${q.orbit.length})`,
+        ...orbitText(q.orbit),
       ] as Text,
       rating: q.orbit.length,
     })),
@@ -572,6 +607,8 @@ export function variants(fs: FibredSurface, move: Move): MoveOption[] {
       const all = prongs(tt);
       const q = fs.graph.vertices.find((v) => v.name === move.junction);
       if (q === undefined) return [];
+      if (cutTooFine(tt, q))
+        throw new Error("the preimages of the leaf are too short for the floating-point cut");
       return cutOptions(tt, prongsOfOrbit(tt, q)).map((o) => ({
         move: {
           ...move,
