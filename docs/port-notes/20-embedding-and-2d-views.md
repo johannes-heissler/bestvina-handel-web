@@ -106,3 +106,14 @@ graphs, the three views, and the tessellation.
   - ports and regions for all gallery models;
   - the layout of every preset after the algorithm: strip pieces = gluings + 1, junctions inside the disk.
 - `src/render/svg.test.ts`: all views in all display models without NaN, and the note for a non-tight g.
+
+## Update: gates leave their junction together
+
+- **Layout:** as in τ, each gate is a node of the Tutte layout between its junction and its strands. It is tied to
+  the junction as strongly as to all its strands together, so it lies halfway, in the direction in which the gate
+  leaves. Each strip first leaves its junction a short way in that direction.
+- **Drawing:** each switch sits on the junction circle in the direction of its gate's node. The strands of a gate start
+  at the switch and run straight out, **perpendicular to the circle and parallel** (side by side in their angular
+  order, at most one radius wide together). Only then do they bend into their paths with a cubic Bézier curve (the C#
+  `AdjustStartVector`, done more smoothly). The bend is at least about 30 pixels long, and longer for strands that turn
+  far away from the gate's direction. This holds in the standard view and in the τ view.

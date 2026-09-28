@@ -79,3 +79,16 @@
   `rename strip`) would help.
 - The C# tooltips and the curve editor (drawing curves on the surface) aren't ported.
 - 3D, and point pushes (after the UI, as decided).
+
+## Update (your feedback)
+
+- **Coloured strip names everywhere:** in the options, in the moves (`describeMove` returns structured text), in the
+  history, and in the graph map.
+- **The graph map is coloured text.** _Edit_ opens the editor with "edit g", "apply a map after g", "apply a map before
+  g", and renaming or reversing strips.
+- **Automatic steps after Apply:** the kinds ticked under "Automatic steps" (collapsible) follow every step you apply,
+  so no separate _Run_ is needed. By default these are the bookkeeping steps (collapse, pull tight, valence 1 and 2,
+  absorb); folds, reductions and cuts are left to you. _Run to the end_ sits next to _Apply_.
+- **Panel left or right:** a button in the header.
+- **History tree:** scrollable, with λ next to each state and the move (coloured) between the levels. It scrolls to
+  the current state.

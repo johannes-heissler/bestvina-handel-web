@@ -5,7 +5,7 @@
  * @module
  */
 import type { Move } from "../fibred/move";
-import { DEFAULT_AUTOMATIC, type SuggestionKind } from "../fibred/suggestions";
+import type { SuggestionKind } from "../fibred/suggestions";
 import { type HistoryNode, Session, type SessionFile, type Start } from "../session/session";
 import { encodeSession } from "../session/share";
 import { store } from "./storage";
@@ -22,8 +22,19 @@ export class AppState {
   showHistory = $state(false);
   showStart = $state(false);
   busy = $state(false);
-  /** The suggestion kinds the autopilot applies by itself (the semi-automatic mode). */
-  automatic = $state<SuggestionKind[]>([...DEFAULT_AUTOMATIC]);
+  /**
+   * The kinds of steps that are done automatically after each step the user applies (your semi-automatic mode). By
+   * default the bookkeeping steps; the folds, reductions and closed-surface cuts are left to the user.
+   */
+  automatic = $state<SuggestionKind[]>([
+    "collapse invariant subforest",
+    "pull tight",
+    "remove valence-1 junction",
+    "remove valence-2 junctions",
+    "absorb into periphery",
+  ]);
+  /** Whether the panel with the algorithm is on the left. */
+  sidebarLeft = $state(false);
 
   start(start: Start): void {
     this.run(() => {
@@ -42,8 +53,13 @@ export class AppState {
     });
   }
 
-  apply(move: Move): void {
-    this.run(() => this.session?.apply(move));
+  /** Applies a move; with `thenAutomatic`, the automatic kinds follow (see {@link automatic}). */
+  apply(move: Move, options: { thenAutomatic?: boolean } = {}): void {
+    this.run(() => {
+      this.session?.apply(move);
+      if (options.thenAutomatic && this.automatic.length > 0)
+        this.session?.runAutopilot({ automatic: new Set(this.automatic) });
+    });
   }
 
   select(node: HistoryNode): void {

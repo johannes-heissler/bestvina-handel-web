@@ -17,6 +17,7 @@
 import type { Edge, OrientedEdge, Vertex } from "../graph/ribbon-graph";
 import { Complex } from "../math/complex";
 import type { FibredSurface } from "../fibred/fibred-surface";
+import { findGates } from "../fibred/gates";
 import { perronFrobenius } from "../fibred/perron-frobenius";
 import type { Chart, Port } from "./chart";
 import { type StrandOrder, strandKey, strandOrder } from "./strand-order";
@@ -33,6 +34,11 @@ export interface Layout {
   readonly chart: Chart;
   readonly order: StrandOrder;
   readonly junctions: ReadonlyMap<Vertex, Complex>;
+  /**
+   * For each strip end, the node of its gate in the layout: a point between the junction and the strands of the gate.
+   * The direction from the junction to it is the direction in which the gate leaves.
+   */
+  readonly switches: ReadonlyMap<OrientedEdge, Complex>;
   /** For each strip, its pieces (a gluing between consecutive pieces). */
   readonly strips: ReadonlyMap<Edge, readonly Piece[]>;
   /** The lateral width of each strip's strands, as a fraction of its port's width (for drawing to scale). */
@@ -66,40 +72,67 @@ export function layout(fs: FibredSurface, chart: Chart, options: LayoutOptions =
     return port.right.add(port.left.sub(port.right).scale((u + 1) / 2));
   };
 
-  // 2. Junctions: a Tutte layout per region.
-  const neighbours = new Map<Vertex, (Vertex | Complex)[]>(fs.graph.vertices.map((v) => [v, []]));
-  const add = (v: Vertex, other: Vertex | Complex) => (neighbours.get(v) as (Vertex | Complex)[]).push(other);
+  // 2. Junctions and switches: a Tutte layout per region. As in the train track τ, each gate of a junction is a node
+  // (its switch) between the junction and the strands of the gate, so that strands in a gate leave in the same
+  // direction. Each node is the average of its neighbours; the port points are fixed.
+  const gateOf = new Map<OrientedEdge, number>();
+  findGates(fs.graph, fs.g).forEach((gate, i) => gate.edges.forEach((x) => gateOf.set(x, i)));
+  const junctionNode = (v: Vertex) => `j${v.id}`;
+  const switchNode = (x: OrientedEdge) => `s${gateOf.get(x) ?? `${x.edge.id}${x.isForward ? "+" : "-"}`}`;
+  const links = new Map<string, (string | Complex)[]>();
+  const link = (node: string, other: string | Complex) => {
+    if (other === node) return;
+    links.set(node, [...(links.get(node) ?? []), other]);
+  };
+  const start = new Map<string, Complex>();
+  for (const v of fs.graph.vertices) {
+    const center = chart.regions.get(fs.mu.vertexImage(v))?.center ?? Complex.ZERO;
+    start.set(junctionNode(v), center);
+    const members = new Map<string, number>();
+    for (const x of fs.graph.star(v)) members.set(switchNode(x), (members.get(switchNode(x)) ?? 0) + 1);
+    for (const [sw, count] of members) {
+      start.set(sw, center);
+      link(junctionNode(v), sw);
+      // As strongly tied to its junction as to all its strands together: the switch lies halfway between the junction
+      // and its strands, in the direction in which the gate leaves.
+      for (let i = 0; i < count; i++) link(sw, junctionNode(v));
+    }
+  }
   for (const e of fs.graph.edges) {
     const letters = fs.mu.image(e.forward).letters;
+    const [from, to] = [switchNode(e.forward), switchNode(e.backward)];
     if (letters.length === 0) {
-      if (e.source !== e.target) {
-        add(e.source, e.target);
-        add(e.target, e.source);
-      }
+      link(from, to);
+      link(to, from);
       continue;
     }
-    add(e.source, portPoint(e, 0, letters[0] as OrientedEdge));
-    add(e.target, portPoint(e, letters.length - 1, (letters.at(-1) as OrientedEdge).reversed));
+    link(from, portPoint(e, 0, letters[0] as OrientedEdge));
+    link(to, portPoint(e, letters.length - 1, (letters.at(-1) as OrientedEdge).reversed));
   }
-  const junctions = new Map<Vertex, Complex>(
-    fs.graph.vertices.map((v) => [v, chart.regions.get(fs.mu.vertexImage(v))?.center ?? Complex.ZERO]),
-  );
-  for (let iteration = 0; iteration < 300; iteration++)
-    for (const v of fs.graph.vertices) {
-      const list = neighbours.get(v) as (Vertex | Complex)[];
-      if (list.length === 0) continue;
+  const position = new Map(start);
+  for (let iteration = 0; iteration < 400; iteration++)
+    for (const [node, list] of links) {
       const sum = list.reduce<Complex>(
-        (s, x) => s.add(x instanceof Complex ? x : (junctions.get(x) as Complex)),
+        (acc, x) => acc.add(x instanceof Complex ? x : (position.get(x) as Complex)),
         Complex.ZERO,
       );
-      junctions.set(v, sum.scale(1 / list.length));
+      position.set(node, sum.scale(1 / list.length));
     }
+  const junctions = new Map(fs.graph.vertices.map((v) => [v, position.get(junctionNode(v)) as Complex]));
+  const switches = new Map(fs.graph.orientedEdges.map((x) => [x, position.get(switchNode(x)) as Complex]));
 
-  // 3. The strips.
+  // 3. The strips. Each strip end first leaves its junction a short way in the direction of its gate (towards the
+  // gate's node), so that the strands of a gate start out together.
+  const leave = (x: OrientedEdge): Complex => {
+    const j = junctions.get(x.source) as Complex;
+    const d = (switches.get(x) as Complex).sub(j);
+    const length = d.abs();
+    return length === 0 ? j : j.add(d.scale(Math.min(0.5, 0.05 / length)));
+  };
   const strips = new Map<Edge, Piece[]>();
   for (const e of fs.graph.edges) {
     const letters = fs.mu.image(e.forward).letters;
-    const pieces: Complex[][] = [[junctions.get(e.source) as Complex]];
+    const pieces: Complex[][] = [[junctions.get(e.source) as Complex, leave(e.forward)]];
     letters.forEach((x, k) => {
       const current = pieces.at(-1) as Complex[];
       const exit = portPoint(e, k, x);
@@ -116,10 +149,13 @@ export function layout(fs: FibredSurface, chart: Chart, options: LayoutOptions =
         pieces.push(back.stub > 0 ? [entry.add(back.outward.scale(back.stub)), entry] : [entry]);
       }
     });
-    (pieces.at(-1) as Complex[]).push(junctions.get(e.target) as Complex);
+    (pieces.at(-1) as Complex[]).push(
+      switches.get(e.backward) as Complex,
+      junctions.get(e.target) as Complex,
+    );
     strips.set(e, pieces);
   }
-  return { chart, order, junctions, strips, relativeWidth };
+  return { chart, order, junctions, switches, strips, relativeWidth };
 }
 
 /** w(e)^c, with the Perron–Frobenius widths (strips of width 0 or without one get the smallest positive width). */

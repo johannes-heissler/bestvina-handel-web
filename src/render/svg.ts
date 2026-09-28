@@ -104,37 +104,75 @@ export function renderSvg(fs: FibredSurface, layout: Layout, options: RenderOpti
     lines: Map<Edge, Complex[][]>,
     junctionAt: (v: Vertex) => Complex,
     radiusOf: (v: Vertex) => number,
+    switchAt: (x: OrientedEdge) => Complex,
   ): Map<Vertex, Map<Vertex, Complex>> => {
     const switchPoints = new Map<Vertex, Map<Vertex, Complex>>();
     for (const v of fs.graph.vertices) {
       const center = junctionAt(v);
       const junctionRadius = radiusOf(v);
       const { switchOf } = gatesOf(v);
+      // Each switch lies on the circle in the direction of its gate's node in the layout.
       const direction = new Map<Vertex, Complex>();
       for (const x of fs.graph.star(v)) {
-        const { line, atStart } = endAt(lines, x);
-        const ordered = atStart ? line : line.toReversed();
-        const next =
-          ordered.find((p) => p.sub(center).abs() > junctionRadius * 0.5) ?? center.add(Complex.ONE);
-        const d = next.sub(center);
         const s = switchOf.get(x) as Vertex;
+        const d = switchAt(x).sub(center);
         direction.set(s, (direction.get(s) ?? Complex.ZERO).add(d.scale(1 / (d.abs() || 1))));
       }
       const points = new Map<Vertex, Complex>();
       for (const [s, d] of direction) points.set(s, center.add(d.scale(junctionRadius / (d.abs() || 1))));
       switchPoints.set(v, points);
+      // The strips of a gate leave their switch side by side, perpendicular to the circle (like the branches of a
+      // train track), and only then bend into their paths (the C# AdjustStartVector, done with a Bézier curve).
+      const members = new Map<Vertex, { x: OrientedEdge; angle: number }[]>();
       for (const x of fs.graph.star(v)) {
+        const s = switchOf.get(x) as Vertex;
         const { line, atStart } = endAt(lines, x);
-        const switchPoint = points.get(switchOf.get(x) as Vertex) as Complex;
-        // Drop the points inside the disk, then end at the switch.
-        const inside = (p: Complex | undefined) => p !== undefined && p.sub(center).abs() < junctionRadius;
-        if (atStart) {
-          while (line.length > 1 && inside(line[0])) line.shift();
-          line.unshift(switchPoint);
-        } else {
-          while (line.length > 1 && inside(line.at(-1))) line.pop();
-          line.push(switchPoint);
-        }
+        const ordered = atStart ? line : line.toReversed();
+        const far =
+          ordered.find((p) => p.sub(center).abs() > junctionRadius * 2.5) ?? (ordered.at(-1) as Complex);
+        const switchAngle = (points.get(s) as Complex).sub(center).arg();
+        const angle = normalizeAngle(far.sub(center).arg() - switchAngle);
+        members.set(s, [...(members.get(s) ?? []), { x, angle }]);
+      }
+      for (const [s, list] of members) {
+        const switchPoint = points.get(s) as Complex;
+        const out = switchPoint.sub(center).scale(1 / (switchPoint.sub(center).abs() || 1));
+        const left = new Complex(-out.im, out.re);
+        const gap = Math.min(junctionRadius * 0.35, junctionRadius / Math.max(1, list.length)); // the gate is at most ~R wide
+        const length = junctionRadius * 0.9;
+        list.sort((a, b) => a.angle - b.angle); // counterclockwise = from right to left, looking outwards
+        list.forEach(({ x, angle }, j) => {
+          const shift = left.scale((j - (list.length - 1) / 2) * gap);
+          const radialStart = switchPoint.add(out.scale(junctionRadius * 0.2)).add(shift);
+          const radialEnd = switchPoint.add(out.scale(length)).add(shift);
+          const { line, atStart } = endAt(lines, x);
+          const path = atStart ? [...line] : line.toReversed();
+          // At least ~30 px, and longer for strands that turn far away from the direction of their gate.
+          const bendLength =
+            Math.max(length * 1.4, (30 * junctionRadius) / junctionPixels) *
+            (1 + (2 * Math.abs(angle)) / Math.PI);
+          // Bend towards the first point beyond the bend length (or, on a short piece, towards its end).
+          const found = path.findIndex((p) => p.sub(center).abs() > junctionRadius + bendLength);
+          const q = found === -1 ? path.length - 1 : found;
+          let result: Complex[];
+          if (q <= 0 || (path[q] as Complex).sub(center).abs() < junctionRadius + length) {
+            // Too short to bend: drop the points inside the disk and start at the switch.
+            const rest = path.filter((p) => p.sub(center).abs() >= junctionRadius);
+            result = [switchPoint, ...(rest.length > 0 ? rest : [path.at(-1) as Complex])];
+          } else {
+            const target = path[q] as Complex;
+            const after = (path[q + 1] ?? target).sub(target);
+            const tangent =
+              after.abs() > 0
+                ? after.scale(1 / after.abs())
+                : target.sub(radialEnd).scale(1 / (target.sub(radialEnd).abs() || 1));
+            const h = target.sub(radialEnd).abs() * 0.5;
+            const [c1, c2] = [radialEnd.add(out.scale(h)), target.sub(tangent.scale(h))];
+            const bend = Array.from({ length: 12 }, (_, i) => cubic(radialEnd, c1, c2, target, (i + 1) / 12));
+            result = [switchPoint, radialStart, radialEnd, ...bend, ...path.slice(q + 1)];
+          }
+          line.splice(0, line.length, ...(atStart ? result : result.toReversed()));
+        });
       }
     }
     return switchPoints;
@@ -166,6 +204,10 @@ export function renderSvg(fs: FibredSurface, layout: Layout, options: RenderOpti
       lines,
       junctionAt,
       (v) => junctionRadius * localScale(layout.junctions.get(v) as Complex),
+      (x) =>
+        toDisplay(
+          transform ? transform(layout.switches.get(x) as Complex) : (layout.switches.get(x) as Complex),
+        ),
     );
 
     if (view === "striped") {
@@ -469,4 +511,22 @@ function fmt(x: number): string {
 
 function escape(text: string): string {
   return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+/** The angle in (−π, π]. */
+function normalizeAngle(angle: number): number {
+  let a = angle % (2 * Math.PI);
+  if (a <= -Math.PI) a += 2 * Math.PI;
+  if (a > Math.PI) a -= 2 * Math.PI;
+  return a;
+}
+
+/** A point on the cubic Bézier curve with control points p0, p1, p2, p3. */
+function cubic(p0: Complex, p1: Complex, p2: Complex, p3: Complex, t: number): Complex {
+  const s = 1 - t;
+  return p0
+    .scale(s * s * s)
+    .add(p1.scale(3 * s * s * t))
+    .add(p2.scale(3 * s * t * t))
+    .add(p3.scale(t * t * t));
 }

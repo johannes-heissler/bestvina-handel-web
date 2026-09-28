@@ -49,6 +49,9 @@
     <button onclick={copyLink} disabled={!app.session}>Copy link</button>
     <button onclick={() => (secondView = !secondView)}>{secondView ? "One view" : "Two views"}</button>
     <button onclick={() => (app.showHistory = !app.showHistory)}>History</button>
+    <button onclick={() => (app.sidebarLeft = !app.sidebarLeft)} title="Move the panel with the algorithm to the other side"
+      >Panel {app.sidebarLeft ? "right" : "left"}</button
+    >
   </nav>
 </header>
 {#if app.error}
@@ -66,26 +69,16 @@
   {#if app.session}
     <PaneGroup direction="vertical">
       <Pane defaultSize={75}>
-        <PaneGroup direction="horizontal" autoSaveId="layout-horizontal">
-          <Pane defaultSize={64} minSize={30}>
-            {#if secondView}
-              <PaneGroup direction="horizontal">
-                <Pane defaultSize={50}><SurfaceView /></Pane>
-                <PaneResizer class="resizer" />
-                <Pane defaultSize={50}><SurfaceView initialView="striped" /></Pane>
-              </PaneGroup>
-            {:else}
-              <SurfaceView />
-            {/if}
-          </Pane>
-          <PaneResizer class="resizer" />
-          <Pane defaultSize={36} minSize={20}>
-            <div class="sidebar">
-              <SuggestionPanel />
-              <MapEditor />
-              <InfoPanel />
-            </div>
-          </Pane>
+        <PaneGroup direction="horizontal" autoSaveId={app.sidebarLeft ? "layout-left" : "layout-right"}>
+          {#if app.sidebarLeft}
+            <Pane defaultSize={36} minSize={20}>{@render sidebar()}</Pane>
+            <PaneResizer class="resizer" />
+            <Pane defaultSize={64} minSize={30}>{@render views()}</Pane>
+          {:else}
+            <Pane defaultSize={64} minSize={30}>{@render views()}</Pane>
+            <PaneResizer class="resizer" />
+            <Pane defaultSize={36} minSize={20}>{@render sidebar()}</Pane>
+          {/if}
         </PaneGroup>
       </Pane>
       {#if app.showHistory}
@@ -100,3 +93,23 @@
   {/if}
 </main>
 <StartDialog />
+
+{#snippet views()}
+  {#if secondView}
+    <PaneGroup direction="horizontal">
+      <Pane defaultSize={50}><SurfaceView /></Pane>
+      <PaneResizer class="resizer" />
+      <Pane defaultSize={50}><SurfaceView initialView="striped" /></Pane>
+    </PaneGroup>
+  {:else}
+    <SurfaceView />
+  {/if}
+{/snippet}
+
+{#snippet sidebar()}
+  <div class="sidebar" class:left={app.sidebarLeft}>
+    <SuggestionPanel />
+    <MapEditor />
+    <InfoPanel />
+  </div>
+{/snippet}

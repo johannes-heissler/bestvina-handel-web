@@ -115,3 +115,21 @@ moves. `classify` reads the classification of the "finished" suggestion.
   of a reduction; the choices at a valence-2 junction;
 - the autopilot: to the end with `onStep`, semi-automatic with only "pull tight", stopping at a reduction, and on the
   closed genus-2 example cutting first and ending at λ ≈ 4.2121.
+
+## Update: folds as pairs of strips, one step at a time (your proposal)
+
+The suggestions "fold peripheral inefficiency" and "remove inefficiency" are merged into one kind, **fold**:
+
+- **Options are folds, not inefficiencies.** Each option is a set of strip ends at a junction with the same Dg, whose
+  initial segments are folded. `foldCandidates` groups every occurrence of an illegal turn in the images by the
+  **first fold** of its removal (for an inefficiency (α, β) of order k, that fold is Dgᵏ⁻¹(α) and Dgᵏ⁻¹(β)). The
+  label names the strips, in the C# wording: "Fold a and initial segments of b, c at v: **order k, n places**". k is
+  the smallest order among them, and n is how many places in the images have an inefficiency of that order, i.e. where
+  one could pull tight after the fold.
+- **Peripheral folds are in the same list**, marked "peripheral: Dg = p is in the pre-periphery", even when no
+  inefficiency leads to them. As in the C# priority order, they come first, then the lowest order.
+- **Apply does one fold step** (the new move `fold`), as in the thesis. The followed inefficiency then appears with a
+  lower order. _More choices…_ lists the choices of c (and the junction moves for loops), and also "remove the whole
+  inefficiency at once".
+- **The autopilot** still removes whole inefficiencies at once (`Suggestion.autopilotMove`). Recomputing all candidates
+  after every single fold is too slow on the large graphs of the closed-surface cuts.
