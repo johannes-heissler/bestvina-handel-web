@@ -126,6 +126,107 @@ export class DiskIsometry {
   }
 }
 
+/** Whether a point of the closed disk is on the boundary circle (an ideal point). */
+export function isIdeal(z: Complex): boolean {
+  return z.abs() >= 1 - 1e-12;
+}
+
+/**
+ * A complete geodesic of the hyperbolic plane (the C# `HyperbolicGeodesicSegment`, extended to whole geodesics), stored
+ * as the isometry M of the Poincaré disk that maps the standard geodesic, the diameter (−1, 1), onto it: M(0) is its
+ * base point and M(tanh(t/2)) the point at signed distance t from it, so t is an arc-length parameter. All points are
+ * in Poincaré coordinates unless the method says otherwise.
+ */
+export class Geodesic {
+  constructor(readonly isometry: DiskIsometry) {}
+
+  /** The geodesic through the point m of the disk, towards the point d ≠ m (which may be ideal). */
+  static from(m: Complex, d: Complex): Geodesic {
+    const toOrigin = DiskIsometry.toOrigin(m);
+    return new Geodesic(toOrigin.inverse().after(DiskIsometry.rotation(toOrigin.apply(d).arg())));
+  }
+
+  /** The geodesic through p and q, from p towards q; either or both may be ideal. */
+  static throughPoints(p: Complex, q: Complex): Geodesic {
+    if (!isIdeal(p)) return Geodesic.from(p, q);
+    if (!isIdeal(q)) return Geodesic.from(q, p).reversed();
+    return Geodesic.fromIdealPoints(p, q);
+  }
+
+  /** The geodesic from the ideal point a to the ideal point b; its base point is its point closest to the centre. */
+  static fromIdealPoints(a: Complex, b: Complex): Geodesic {
+    const [u, v] = [a.scale(1 / a.abs()), b.scale(1 / b.abs())];
+    const sum = u.add(v);
+    if (sum.abs() < 1e-12) return Geodesic.from(Complex.ZERO, v); // a diameter
+    // The circle orthogonal to the unit circle through u and v is centred where the tangents at u and v meet.
+    const centre = sum.scale(1 / (1 + u.re * v.re + u.im * v.im));
+    const radius = centre.sub(u).abs();
+    return Geodesic.from(centre.sub(centre.scale(radius / centre.abs())), v);
+  }
+
+  /** The geodesic through p in the direction of the (nonzero) tangent vector v. */
+  static fromTangent(p: Complex, v: Complex): Geodesic {
+    // z ↦ (z − p)/(1 − p̄z) has the positive real derivative 1/(1 − |p|²) at p, so it keeps directions there.
+    return new Geodesic(DiskIsometry.toOrigin(p).inverse().after(DiskIsometry.rotation(v.arg())));
+  }
+
+  /** The same geodesic, run backwards (with the same base point). */
+  reversed(): Geodesic {
+    return new Geodesic(this.isometry.after(DiskIsometry.rotation(Math.PI)));
+  }
+
+  /** The point at signed distance t from the base point (the ideal end points for t = ±∞). */
+  pointAt(t: number): Complex {
+    return this.isometry.apply(new Complex(Math.tanh(t / 2), 0));
+  }
+
+  /** The parameter of a point on the geodesic (±∞ for its ideal points). */
+  parameterOf(z: Complex): number {
+    const x = Math.max(-1, Math.min(1, this.isometry.inverse().apply(z).re));
+    // Within rounding of ±1 (|t| > 30 or so), the point is ideal.
+    return x >= 1 - 1e-12 ? Infinity : x <= -1 + 1e-12 ? -Infinity : 2 * Math.atanh(x);
+  }
+
+  /** The ideal points at t = −∞ and t = +∞. */
+  get idealPoints(): [Complex, Complex] {
+    return [this.isometry.apply(new Complex(-1, 0)), this.isometry.apply(Complex.ONE)];
+  }
+
+  /** The Möbius transformation of the Poincaré disk that maps the standard geodesic (−1, 1) onto this one. */
+  get mobius(): DiskIsometry {
+    return this.isometry;
+  }
+
+  /**
+   * The geodesic in the Poincaré disk: an arc of the circle with this centre and radius, orthogonal to the unit
+   * circle, or (`centre` undefined) a diameter.
+   */
+  diskCircle(): { centre?: Complex; radius: number } {
+    const [a, b] = this.idealPoints;
+    const sum = a.add(b);
+    if (sum.abs() < 1e-9) return { radius: Infinity };
+    const centre = sum.scale(1 / (1 + a.re * b.re + a.im * b.im));
+    return { centre, radius: centre.sub(a).abs() };
+  }
+
+  /**
+   * The geodesic in the upper half-plane: the half-circle with this centre on the real axis and radius, or
+   * (`centre` undefined) the vertical line Re z = `x`.
+   */
+  halfPlaneCircle(): { centre?: number; radius: number; x?: number } {
+    const [a, b] = this.idealPoints.map(diskToHalfPlane) as [Complex, Complex];
+    const finite = (z: Complex) => Number.isFinite(z.re) && Math.abs(z.re) < 1e12;
+    if (!finite(a)) return { radius: Infinity, x: b.re };
+    if (!finite(b)) return { radius: Infinity, x: a.re };
+    return { centre: (a.re + b.re) / 2, radius: Math.abs(a.re - b.re) / 2 };
+  }
+
+  /** The geodesic through two points given in Klein coordinates (either may be ideal). */
+  static throughKleinPoints(p: Complex, q: Complex): Geodesic {
+    return Geodesic.throughPoints(kleinToPoincare(p), kleinToPoincare(q));
+  }
+}
+
 /**
  * The vertices of a regular hyperbolic n-gon, in Klein coordinates, counterclockwise, the first at angle `start`.
  * Ideal: on the unit circle. Compact: with interior angles 2π/n, so that all n vertices together have angle 2π (one

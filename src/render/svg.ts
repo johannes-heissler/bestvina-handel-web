@@ -15,7 +15,16 @@ import { Complex } from "../math/complex";
 import type { Color } from "../math/color";
 import type { FibredSurface } from "../fibred/fibred-surface";
 import { trainTrack } from "../fibred/train-track";
-import { DiskIsometry, fromKlein, type HyperbolicModel, lengthFactor, toKlein } from "../geometry/hyperbolic";
+import {
+  DiskIsometry,
+  fromKlein,
+  Geodesic,
+  type HyperbolicModel,
+  kleinToPoincare,
+  lengthFactor,
+  poincareToKlein,
+  toKlein,
+} from "../geometry/hyperbolic";
 import type { Chart, Decoration } from "../embedding/chart";
 import type { Layout } from "../embedding/layout";
 import { strandOrder } from "../embedding/strand-order";
@@ -38,6 +47,12 @@ export interface RenderOptions {
   readonly stripWidth?: "uniform" | "toScale";
   /** How the sides of the polygon are drawn (with constant hyperbolic width, like the strips). */
   readonly sideStyle?: SideStyle;
+  /** Down to which width (in pixels) the sides are dashed or dotted; thinner, they fade to a faint solid line. */
+  readonly dashUntil?: number;
+  /** Scale the names with the metric (hyperbolic charts); the copies then get names too. */
+  readonly scaleNames?: boolean;
+  /** In the Klein model, shape the names by the metric (squeezed towards the boundary), not only scale them. */
+  readonly kleinNames?: boolean;
 }
 
 export type SideStyle = "solid" | "dashed" | "dotted";
@@ -71,15 +86,19 @@ export function renderSvg(fs: FibredSurface, layout: Layout, options: RenderOpti
   const scale = size / Math.max(bounds.width, bounds.height);
   const px = (z: Complex) => `${fmt((z.re - bounds.minX) * scale)},${fmt((bounds.maxY - z.im) * scale)}`;
 
-  /** A chart polyline, smoothed and densified in chart coordinates, then mapped to the display. */
+  /**
+   * A chart polyline, smoothed and densified in chart coordinates, then mapped to the display. For hyperbolic charts,
+   * segments longer than 4 pixels in the display are halved in the chart (Klein coordinates, where segments are
+   * geodesics) until they are short enough: near the boundary a step in Klein coordinates is long in the display.
+   */
   const display = (line: readonly Complex[], transform?: (z: Complex) => Complex): Complex[] => {
     const smooth = smooth_(line, smoothing);
-    const dense = hyperbolic ? densify(smooth, 0.02) : smooth;
-    return dense.map((z) => toDisplay(transform ? transform(z) : z));
+    const map = (z: Complex) => toDisplay(transform ? transform(z) : z);
+    return hyperbolic ? refine(densify(smooth, 0.02), map, 4 / scale) : smooth.map(map);
   };
 
   const parts: string[] = [];
-  const copies = deckCopies(chart, options.deckDepth ?? 0, toDisplay);
+  const copies = deckCopies(chart, options.deckDepth ?? 0);
 
   // Junction disks and the switches of the gates.
   const junctionPixels = Math.max(5, size / 110);
@@ -172,7 +191,9 @@ export function renderSvg(fs: FibredSurface, layout: Layout, options: RenderOpti
   /** The width of the strip e in the hyperbolic metric (in display units for flat charts). */
   const trueWidth = (e: Edge) => ((basePixels(e) * shrink) / scale) * centreMetric;
   /** The width of e in display units at the display point z, across the unit direction n (at least 0.4 pixels). */
-  const widthAt = (e: Edge, z: Complex, n: Complex) => Math.max(0.4 / scale, trueWidth(e) / metric(z, n));
+  // (At most twice the width at the centre: in the half-plane, strips high up would get arbitrarily wide.)
+  const widthAt = (e: Edge, z: Complex, n: Complex) =>
+    Math.min((2 * trueWidth(e)) / centreMetric, Math.max(0.4 / scale, trueWidth(e) / metric(z, n)));
   /** The region between the offsets from·w and to·w across a display polyline of e (w: the width of e there). */
   const band = (e: Edge, line: readonly Complex[], from: number, to: number): string =>
     bandPath(line, (z, n) => widthAt(e, z, n), from, to);
@@ -200,7 +221,9 @@ export function renderSvg(fs: FibredSurface, layout: Layout, options: RenderOpti
   // The sides of the polygon: 1.5 pixels wide at the centre, constant in the hyperbolic metric; solid, or dashes and
   // dots whose lengths are constant in the hyperbolic metric as well.
   const sideWidth = (1.5 / scale) * centreMetric;
-  const sideWidthAt = (z: Complex, n: Complex) => Math.max(0.3 / scale, sideWidth / metric(z, n));
+  // (At most 3 pixels: in the half-plane, a side running up to ∞ would get arbitrarily wide.)
+  const sideWidthAt = (z: Complex, n: Complex) =>
+    Math.min(3 / scale, Math.max(0.05 / scale, sideWidth / metric(z, n)));
   /** The hyperbolic length of the display segment from a to b (display units for flat charts). */
   const lengthOf = (a: Complex, b: Complex) => {
     const step = b.sub(a);
@@ -236,6 +259,151 @@ export function renderSvg(fs: FibredSurface, layout: Layout, options: RenderOpti
           .join("");
       })
       .join("");
+  };
+
+  /**
+   * The geodesic from the chart point a to b (Klein coordinates, either may be ideal) after a deck transformation,
+   * sampled by arc length t in steps of about 3 pixels in the display (and at most 0.1). Towards an ideal end it stops
+   * where a side would be thinner than 0.05 pixels (or leaves the picture), and then adds the ideal point itself.
+   * Returns the samples and the display point at any parameter.
+   */
+  const geodesicSamples = (a: Complex, b: Complex, transform: ((z: Complex) => Complex) | undefined) => {
+    const inChart = (k: Complex) => kleinToPoincare(transform ? transform(k) : k);
+    const [p, q] = [inChart(a), inChart(b)];
+    const geodesic = Geodesic.throughPoints(p, q);
+    const [t0, t1] = [geodesic.parameterOf(p), geodesic.parameterOf(q)];
+    const at = (t: number) => toDisplay(poincareToKlein(geodesic.pointAt(t)));
+    const speed = (t: number) =>
+      at(t + 1e-5)
+        .sub(at(t))
+        .abs() / 1e-5;
+    const [ideal0, ideal1] = geodesic.idealPoints.map((z) => toDisplay(poincareToKlein(z)));
+    const finite = (z: Complex | undefined): z is Complex =>
+      z !== undefined && Number.isFinite(z.re) && Number.isFinite(z.im) && z.abs() < 1e6;
+    const margin = Math.max(bounds.width, bounds.height) * 0.1;
+    /** Whether the walk towards an ideal end can stop at z: out of the picture, or within a pixel of the end. */
+    const done = (z: Complex, ideal: Complex) =>
+      !(
+        z.re > bounds.minX - margin &&
+        z.re < bounds.maxX + margin &&
+        z.im > bounds.minY - margin &&
+        z.im < bounds.maxY + margin
+      ) ||
+      (finite(ideal) && z.sub(ideal).abs() * scale < 1);
+    const middle =
+      Number.isFinite(t0) && Number.isFinite(t1)
+        ? (t0 + t1) / 2
+        : Number.isFinite(t0)
+          ? t0
+          : Number.isFinite(t1)
+            ? t1
+            : 0;
+    const walk = (end: number, direction: 1 | -1): number[] => {
+      const ts: number[] = [];
+      let t = middle;
+      for (let n = 0; n < 4000; n++) {
+        ts.push(t);
+        if (direction * (end - t) <= 1e-12) break;
+        if (!Number.isFinite(end) && done(at(t), (direction > 0 ? ideal1 : ideal0) as Complex)) break;
+        const v = speed(t);
+        const dt = v > 0 ? Math.min(0.1, Math.max(0.001, 3 / scale / v)) : 0.1;
+        t = direction > 0 ? Math.min(t + dt, end) : Math.max(t - dt, end);
+      }
+      return ts;
+    };
+    const ts = [...walk(t0, -1).toReversed(), ...walk(t1, 1).slice(1)];
+    const samples = ts.map((t) => ({ t, z: at(t) }));
+    if (!Number.isFinite(t0) && finite(ideal0)) samples.unshift({ t: -Infinity, z: ideal0 });
+    if (!Number.isFinite(t1) && finite(ideal1)) samples.push({ t: Infinity, z: ideal1 });
+    return { samples, at };
+  };
+
+  /**
+   * A side of the polygon (in a copy), along the actual geodesic: dashed or dotted, with dash lengths constant in the
+   * hyperbolic metric, down to the width `dashUntil`; beyond, where it gets thinner towards the ideal points, a faint
+   * solid line.
+   */
+  const geodesicSide = (
+    a: Complex,
+    b: Complex,
+    transform: ((z: Complex) => Complex) | undefined,
+    color: string,
+  ) => {
+    const { samples, at } = geodesicSamples(a, b, transform);
+    const points = samples.map((x) => x.z);
+    const style = options.sideStyle ?? "solid";
+    if (style === "solid") return `<path d="${bandPath(points, sideWidthAt, -0.5, 0.5)}" fill="${color}"/>`;
+    const until = options.dashUntil ?? 0.3;
+    const wide = samples.filter(
+      (x) => Number.isFinite(x.t) && sideWidthAt(x.z, Complex.ONE) * scale >= until,
+    );
+    const faint = (piece: readonly Complex[]) =>
+      piece.length < 2
+        ? ""
+        : `<path d="${bandPath(piece, sideWidthAt, -0.5, 0.5)}" fill="${color}" fill-opacity="0.35"/>`;
+    if (wide.length < 2) return faint(points);
+    const [ta, tb] = [(wide[0] as { t: number }).t, (wide.at(-1) as { t: number }).t];
+    const parts = [
+      faint(samples.filter((x) => x.t <= ta).map((x) => x.z)),
+      faint(samples.filter((x) => x.t >= tb).map((x) => x.z)),
+    ];
+    const [on, off] = style === "dashed" ? [7 * sideWidth, 4 * sideWidth] : [0, 3.5 * sideWidth];
+    const period = on + off;
+    if (style === "dashed") {
+      const d: string[] = [];
+      for (let k = Math.ceil((ta - on) / period); k * period <= tb; k++) {
+        const [s0, s1] = [Math.max(ta, k * period), Math.min(tb, k * period + on)];
+        if (s1 <= s0) continue;
+        d.push(
+          bandPath(
+            [0, 1, 2, 3].map((j) => at(s0 + ((s1 - s0) * j) / 3)),
+            sideWidthAt,
+            -0.5,
+            0.5,
+          ),
+        );
+      }
+      parts.push(`<path d="${d.join("")}" fill="${color}"/>`);
+    } else
+      for (let k = Math.ceil(ta / period); k * period <= tb; k++) {
+        const z = at(k * period);
+        const [x, y] = px(z).split(",");
+        parts.push(
+          `<circle cx="${x}" cy="${y}" r="${fmt(sideWidthAt(z, Complex.ONE) * 0.6 * scale)}" fill="${color}"/>`,
+        );
+      }
+    return parts.join("");
+  };
+
+  /** The polygon in a copy, bounded by its geodesic sides. */
+  const geodesicPolygon = (
+    vertices: readonly Complex[],
+    transform: ((z: Complex) => Complex) | undefined,
+  ) => {
+    const points = vertices.flatMap((v, i) =>
+      geodesicSamples(v, vertices[(i + 1) % vertices.length] as Complex, transform).samples.map((x) => x.z),
+    );
+    return `<path d="M${points.map(px).join("L")}Z" fill="#f7f7f4" stroke="none"/>`;
+  };
+
+  // Names: scaled with the metric (like the strips), and in the Klein model optionally shaped by it.
+  const scaleNames = hyperbolic && (options.scaleNames ?? false);
+  /** How to draw a name at the display point z: a scale factor, or a linear map (Klein, shaped by the metric). */
+  const nameShape = (z: Complex): NameShape => {
+    if (!scaleNames) return { scale: 1 };
+    if (model === "klein" && options.kleinNames) {
+      // The Klein metric has the eigenvalues 1/(1 − r²)² radially and 1/(1 − r²) tangentially, so a circle of the
+      // metric looks like an ellipse with the half-axes (1 − r²) and √(1 − r²); the name is mapped onto that ellipse.
+      const r2 = Math.min(z.abs2(), 1 - 1e-9);
+      const [radial, tangential] = [1 - r2, Math.sqrt(1 - r2)];
+      const u = r2 < 1e-12 ? Complex.ONE : new Complex(z.re, -z.im).scale(1 / Math.sqrt(r2)); // screen: y points down
+      const w = new Complex(-u.im, u.re);
+      const a = radial * u.re * u.re + tangential * w.re * w.re;
+      const b = radial * u.re * u.im + tangential * w.re * w.im;
+      const d = radial * u.im * u.im + tangential * w.im * w.im;
+      return { scale: Math.sqrt(radial * tangential), matrix: [a, b, b, d] };
+    }
+    return { scale: centreMetric / metric(z, Complex.ONE) };
   };
 
   /** Moves the ends of the strips at junctions onto the switch points of their gates. */
@@ -413,11 +581,24 @@ export function renderSvg(fs: FibredSurface, layout: Layout, options: RenderOpti
 
   const drawSurface = (transform: ((z: Complex) => Complex) | undefined, opacity: number) => {
     const group: string[] = [];
-    const labels = (options.labels ?? true) && transform === undefined; // copies get no labels
+    // The copies get names only when they are scaled with the metric.
+    const labels = (options.labels ?? true) && (transform === undefined || scaleNames);
     for (const d of chart.decorations) {
       const toScreen = (z: Complex) => toDisplay(transform ? transform(z) : z);
-      if (d.kind === "side") group.push(side(densify([d.from, d.to], 0.01).map(toScreen), css(d.color)));
-      group.push(decoration(d, toScreen, px, scale, labels));
+      if (hyperbolic && d.kind === "polygon") group.push(geodesicPolygon(d.vertices, transform));
+      else if (d.kind === "side") {
+        group.push(
+          hyperbolic
+            ? geodesicSide(d.from, d.to, transform, css(d.color))
+            : side(densify([d.from, d.to], 0.01).map(toScreen), css(d.color)),
+        );
+        if (labels) {
+          const along = d.to.sub(d.from);
+          const outward = new Complex(along.im, -along.re).scale(0.06 / (along.abs() || 1)); // counterclockwise polygon
+          const at = toScreen(d.from.add(d.to).scale(0.5).add(outward));
+          group.push(label(at, d.label, css(d.color), px, 13, true, nameShape(at)));
+        }
+      } else group.push(decoration(d, toScreen, px, scale, labels));
     }
 
     const lines = new Map<Edge, Complex[][]>(fs.graph.edges.map((e) => [e, stripLines(e, transform)]));
@@ -491,17 +672,11 @@ export function renderSvg(fs: FibredSurface, layout: Layout, options: RenderOpti
         group.push(
           `<circle cx="${px(p).split(",")[0]}" cy="${px(p).split(",")[1]}" r="${fmt(1.6 * k)}" fill="#333"/>`,
         );
-      if (labels)
-        group.push(
-          label(
-            center.add(new Complex(junctionRadius * 1.3, junctionRadius * 1.3)),
-            v.name,
-            JUNCTION_COLOR,
-            px,
-            11,
-            true,
-          ),
-        );
+      if (labels) {
+        const offset = radiusOf(v, transform) * 1.3;
+        const at = center.add(new Complex(offset, offset));
+        group.push(label(at, v.name, JUNCTION_COLOR, px, 11, true, nameShape(at)));
+      }
     }
     if (labels)
       for (const e of fs.graph.edges) {
@@ -514,8 +689,9 @@ export function renderSvg(fs: FibredSurface, layout: Layout, options: RenderOpti
           line[Math.max(0, i - 1)] as Complex,
         );
         const normal = t.abs() === 0 ? Complex.I : new Complex(-t.im, t.re).scale(1 / t.abs());
-        const at = mid.add(normal.scale(widthAt(e, mid, normal) / 2 + 8 / scale));
-        group.push(label(at, e.name, css(e.color), px, 12, true));
+        const shape = nameShape(mid);
+        const at = mid.add(normal.scale(widthAt(e, mid, normal) / 2 + (8 * shape.scale) / scale));
+        group.push(label(at, e.name, css(e.color), px, 12, true, nameShape(at)));
       }
     parts.push(`<g opacity="${opacity}">${group.join("")}</g>`);
   };
@@ -587,8 +763,7 @@ function decoration(
       const mid = d.from.add(d.to).scale(0.5);
       const along = d.to.sub(d.from);
       const outward = new Complex(along.im, -along.re).scale(0.06 / (along.abs() || 1)); // the polygon is counterclockwise
-      const text = labels ? label(toDisplay(mid.add(outward)), d.label, css(d.color), px, 13, true) : "";
-      return text; // the side itself is drawn by `renderSvg`, with its width in the hyperbolic metric
+      return labels ? label(toDisplay(mid.add(outward)), d.label, css(d.color), px, 13, true) : "";
     }
     case "puncture": {
       const [x, y] = px(toDisplay(d.at)).split(",");
@@ -609,6 +784,12 @@ function decoration(
   }
 }
 
+/** How a name is drawn at its place: scaled, or (Klein) mapped by a symmetric linear map [a, b, c, d]. */
+interface NameShape {
+  readonly scale: number;
+  readonly matrix?: readonly [number, number, number, number];
+}
+
 function label(
   at: Complex,
   text: string,
@@ -616,9 +797,16 @@ function label(
   px: (z: Complex) => string,
   fontSize: number,
   italic = false,
+  shape: NameShape = { scale: 1 },
 ): string {
+  if (fontSize * shape.scale < 2.5) return ""; // too small to read
   const [x, y] = px(at).split(",");
-  return `<text x="${x}" y="${y}" fill="${color}" font-size="${fontSize}" text-anchor="middle" dominant-baseline="middle" stroke="#ffffff" stroke-width="2.5" stroke-opacity="0.8" stroke-linejoin="round" paint-order="stroke"${italic ? ' font-style="italic"' : ""}>${escape(text)}</text>`;
+  if (shape.matrix) {
+    const [a, b, c, d] = shape.matrix.map(fmt4);
+    return `<g transform="translate(${x} ${y}) matrix(${a} ${b} ${c} ${d} 0 0)">${label(Complex.ZERO, text, color, () => "0,0", fontSize, italic)}</g>`;
+  }
+  const size = fmt(fontSize * shape.scale);
+  return `<text x="${x}" y="${y}" fill="${color}" font-size="${size}" text-anchor="middle" dominant-baseline="middle" stroke="#ffffff" stroke-width="2.5" stroke-opacity="0.8" stroke-linejoin="round" paint-order="stroke"${italic ? ' font-style="italic"' : ""}>${escape(text)}</text>`;
 }
 
 // ─── Geometry helpers ───────────────────────────────────────────────────────────────────────
@@ -728,7 +916,6 @@ function averagePortPixels(chart: Chart, toDisplay: (z: Complex) => Complex): nu
 function deckCopies(
   chart: Chart,
   depth: number,
-  toDisplay: (z: Complex) => Complex,
 ): { applyKlein: (z: Complex) => Complex; inverseKlein: (z: Complex) => Complex }[] {
   const deck = chart.deck;
   if (deck === undefined || depth <= 0) return [];
@@ -765,7 +952,7 @@ function deckCopies(
         const u = t.after(generator);
         const c = u.applyKlein(Complex.ZERO);
         const key = `${c.re.toFixed(6)},${c.im.toFixed(6)}`;
-        if (seen.has(key) || toDisplay(c).abs() > 0.995) continue;
+        if (seen.has(key) || kleinToPoincare(c).abs() > 0.995) continue; // (in any display model)
         seen.add(key);
         next.push(u);
         result.push(u);
@@ -943,5 +1130,31 @@ function dashes(
     if (drawing) current.push(b);
   }
   if (drawing && current.length > 1) result.push(current);
+  return result;
+}
+
+function fmt4(x: number): string {
+  return Number.isFinite(x) ? x.toFixed(4) : "0";
+}
+
+/**
+ * Maps a chart polyline to the display, halving each chart segment whose image is longer than `maxStep` until it is
+ * short enough (at most 8 times).
+ */
+function refine(line: readonly Complex[], map: (z: Complex) => Complex, maxStep: number): Complex[] {
+  if (line.length === 0) return [];
+  const result = [map(line[0] as Complex)];
+  const add = (a: Complex, b: Complex, A: Complex, B: Complex, depth: number) => {
+    if (depth < 8 && B.sub(A).abs() > maxStep) {
+      const m = a.add(b).scale(0.5);
+      const M = map(m);
+      add(a, m, A, M, depth + 1);
+      add(m, b, M, B, depth + 1);
+    } else result.push(B);
+  };
+  for (let i = 1; i < line.length; i++) {
+    const [a, b] = [line[i - 1] as Complex, line[i] as Complex];
+    add(a, b, result.at(-1) as Complex, map(b), 0);
+  }
   return result;
 }

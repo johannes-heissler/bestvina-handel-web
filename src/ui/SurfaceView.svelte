@@ -21,6 +21,9 @@
   let model = $state<HyperbolicModel>("poincare");
   let smoothing = $state<Smoothing>("spline");
   let sideStyle = $state<SideStyle>("dashed");
+  let dashUntil = $state(0.3);
+  let scaleNames = $state(true);
+  let kleinNames = $state(false);
   let deckDepth = $state(0);
   let widthExponent = $state(0);
   let toScale = $state(false);
@@ -38,6 +41,9 @@
       model,
       smoothing,
       sideStyle,
+      dashUntil,
+      scaleNames,
+      kleinNames,
       deckDepth,
       widthExponent,
       labels,
@@ -167,12 +173,27 @@
         <option value="solid">Solid</option>
       </select></label
     >
+    {#if hyperbolic && sideStyle !== "solid"}
+      <label title="Down to which width (pixels) the sides are dashed; thinner, towards the boundary, they fade"
+        >until <input type="range" min="0.1" max="1.5" step="0.05" bind:value={dashUntil} /> {dashUntil.toFixed(2)} px</label
+      >
+    {/if}
     <label title="Copies of the polygon by deck transformations">Copies <input type="number" min="0" max="4" bind:value={deckDepth} /></label>
     <label title="Strand widths w(e)^c: 0 spaces them evenly"
       >Widths c <input type="range" min="0" max="1" step="0.1" bind:value={widthExponent} /></label
     >
     <label><input type="checkbox" bind:checked={toScale} /> To scale</label>
     <label><input type="checkbox" bind:checked={labels} /> Names</label>
+    {#if hyperbolic && labels}
+      <label title="Scale the names with the hyperbolic metric (the copies then get names too)"
+        ><input type="checkbox" bind:checked={scaleNames} /> scaled</label
+      >
+      {#if model === "klein" && scaleNames}
+        <label title="Shape the names like the Klein metric: squeezed towards the boundary"
+          ><input type="checkbox" bind:checked={kleinNames} /> Klein-shaped</label
+        >
+      {/if}
+    {/if}
     <span class="spacer"></span>
     <button onclick={reset} title="Reset pan and zoom">⟲</button>
     <select bind:value={exportFormat} aria-label="Export format">

@@ -234,3 +234,28 @@ to the target.
   disk.
 - **Strip names** sit beside their strips (on the left, half the width plus 8 pixels away) with a light halo, instead
   of on them.
+
+### Geodesics, sides along them, the models, scaled names
+
+- **`Geodesic`** (`hyperbolic.ts`, the C# `HyperbolicGeodesicSegment` extended to complete geodesics): stored as
+  the isometry M of the Poincaré disk that maps the diameter (−1, 1) onto it, so that M(tanh(t/2)) is the point at
+  arc length t from the base point M(0). Constructors from two points (either may be ideal), two ideal points (base
+  point: the point closest to the centre), a point and a tangent vector; it gives the parameter of a point, the
+  ideal points, the Möbius transformation, and the circle in the disk (centre and radius, orthogonal to the unit
+  circle, or a diameter) and in the half-plane (a half-circle on the real axis, or a vertical line).
+- **Sides** are drawn along their geodesics, sampled by arc length (steps of about 3 pixels, at most 0.1) right up to
+  their ideal points (until they are within a pixel of them, or leave the picture): before, they were sampled
+  uniformly in Klein coordinates, which near the boundary gives long display steps, so they looked straight there.
+  The polygon (and each copy) is filled along the same samples. Dashes and dots are placed by arc length down to
+  the width set by the slider next to "Sides" (0.3 pixels by default); beyond, the side fades to a faint solid line.
+  The side width is at most 3 pixels, the strip width at most twice its width at the centre (in the half-plane
+  both would grow without bound towards ∞).
+- **Strips** are refined adaptively: a chart segment whose image is longer than 4 pixels is halved in Klein
+  coordinates (where it is a geodesic) until it is short enough.
+- **Deck copies in the Klein and half-plane models:** copies were kept only if their centre was within 0.995 of the
+  centre _in the display_, which in the half-plane dropped all of them and in the Klein model most. Now the Poincaré
+  radius decides, in every model.
+- **Names** can be scaled with the metric ("scaled", on by default); then the copies get names too (below 2.5 pixels
+  they are left out). In the Klein model, "Klein-shaped" maps each name by the linear map that takes the unit circle
+  of the Euclidean metric to that of the Klein metric: the Klein metric has the eigenvalues 1/(1 − r²)² radially and
+  1/(1 − r²) tangentially, so the map is (1 − r²) radially and √(1 − r²) tangentially (an SVG `matrix`).

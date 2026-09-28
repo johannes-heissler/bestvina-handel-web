@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { Complex } from "../math/complex";
 import {
+  Geodesic,
   type HyperbolicModel,
   lengthFactor,
   DiskIsometry,
@@ -82,5 +83,45 @@ describe("the metric in the display models", () => {
     expect(lengthIn("poincare")).toBeCloseTo(lengthIn("klein") as number, 9);
     expect(lengthIn("halfplane")).toBeCloseTo(lengthIn("klein") as number, 9);
     expect(lengthFactor("poincare", Complex.ZERO, Complex.ONE)).toBe(2);
+  });
+});
+
+describe("geodesics", () => {
+  const distance = (p: Complex, q: Complex) => {
+    // d(p, q) = 2 artanh |p − q| / |1 − p̄q| in the Poincaré disk.
+    return 2 * Math.atanh(p.sub(q).abs() / Complex.ONE.sub(p.conj().mul(q)).abs());
+  };
+
+  it("passes through two points, parametrized by arc length", () => {
+    const [p, q] = [new Complex(0.3, -0.2), new Complex(-0.5, 0.6)];
+    const g = Geodesic.throughPoints(p, q);
+    expect(g.pointAt(0).sub(p).abs()).toBeLessThan(1e-12);
+    const t = g.parameterOf(q);
+    expect(t).toBeCloseTo(distance(p, q), 10);
+    expect(g.pointAt(t).sub(q).abs()).toBeLessThan(1e-10);
+    expect(distance(g.pointAt(0.4), g.pointAt(1.1))).toBeCloseTo(0.7, 10);
+  });
+
+  it("lies on its circle in the disk and in the half-plane, orthogonal to the boundary", () => {
+    const g = Geodesic.fromIdealPoints(Complex.fromPolar(1, 0.3), Complex.fromPolar(1, 2.2));
+    const { centre, radius } = g.diskCircle();
+    for (const t of [-3, -0.5, 0, 1, 4]) expect(g.pointAt(t).sub(centre!).abs()).toBeCloseTo(radius, 10);
+    expect(centre!.abs2()).toBeCloseTo(1 + radius * radius, 10); // orthogonal to the unit circle
+    const h = g.halfPlaneCircle();
+    for (const t of [-2, 0, 3]) {
+      const z = diskToHalfPlane(g.pointAt(t));
+      expect(Math.hypot(z.re - h.centre!, z.im)).toBeCloseTo(h.radius, 8);
+    }
+    const [a, b] = g.idealPoints;
+    expect(a.sub(Complex.fromPolar(1, 0.3)).abs()).toBeLessThan(1e-12);
+    expect(b.sub(Complex.fromPolar(1, 2.2)).abs()).toBeLessThan(1e-12);
+  });
+
+  it("starts in the direction of a tangent vector", () => {
+    const p = new Complex(0.2, 0.4);
+    const v = Complex.fromPolar(1, 1.3);
+    const g = Geodesic.fromTangent(p, v);
+    const direction = g.pointAt(1e-6).sub(p);
+    expect(direction.arg()).toBeCloseTo(1.3, 5);
   });
 });
