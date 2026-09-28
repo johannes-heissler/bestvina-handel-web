@@ -150,7 +150,8 @@
       <button disabled={!node.parent} onclick={() => node.parent && app.select(node.parent)}>
         ↑ Back{#if node.move}: <TextView text={describeMove(node.move)} surface={node.parent?.surface} />{/if}
       </button>
-      <button onclick={() => (app.showHistory = !app.showHistory)}>{app.showHistory ? "Hide" : "Show"} the tree</button>
+      <button onclick={() => (app.showHistory = !app.showHistory)}>{app.showHistory ? "Hide" : "Show"} the tree</button
+      >
     </div>
     {#if node.children.length > 0}
       <ul class="options">

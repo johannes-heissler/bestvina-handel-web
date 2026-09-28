@@ -33,7 +33,6 @@ test("applies a step and goes back in the history", async ({ page }) => {
   await startExample(page, "Point push");
   await page.getByRole("button", { name: "Apply" }).first().click();
   await expect(page.getByRole("button", { name: /↑ Back:/ })).toBeEnabled();
-  await page.getByRole("button", { name: "History", exact: true }).click();
   await expect.poll(() => page.locator(".history circle").count()).toBeGreaterThanOrEqual(2);
   await page.getByRole("button", { name: /↑ Back:/ }).click();
   await expect(page.getByRole("button", { name: /↓/ })).toBeVisible();

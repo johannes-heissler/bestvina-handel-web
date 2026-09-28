@@ -150,3 +150,10 @@
   Beyond λ^(P−1) ≈ 1e10 no cut is found (Point push: a period-4 orbit of 3-pronged singularities, P = 12, λ ≈ 22.5, so
   λ¹¹ ≈ 8·10¹⁴; `cutOptions` took 2.4 s to find nothing). A finer tolerance alone doesn't help (the images of the tiny
   pieces don't fit either); a real fix needs exact or rescaled arithmetic in the cut, or avoiding the tiny preimages.
+
+### Three panes
+
+The window is split into three resizable panes: the **analysis** (gates, graph map g, state, transition matrix,
+punctures and periphery, embedding μ) on the left, the **views** in the middle, and the **algorithm** (next step or
+result, with the history tree below it in its own resizable pane, shown by default) on the right. "Swap panels"
+exchanges the two sides; the header button shows or hides the history tree.

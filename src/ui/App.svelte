@@ -63,9 +63,9 @@
     <label class="button">Open <input type="file" accept="application/json,.json" onchange={open} hidden /></label>
     <button onclick={copyLink} disabled={!app.session}>Copy link</button>
     <button onclick={() => (secondView = !secondView)}>{secondView ? "One view" : "Two views"}</button>
-    <button onclick={() => (app.showHistory = !app.showHistory)}>History</button>
-    <button onclick={() => (app.sidebarLeft = !app.sidebarLeft)} title="Move the panel with the algorithm to the other side"
-      >Panel {app.sidebarLeft ? "right" : "left"}</button
+    <button onclick={() => (app.showHistory = !app.showHistory)}>{app.showHistory ? "Hide" : "Show"} the history tree</button>
+    <button onclick={() => (app.sidebarLeft = !app.sidebarLeft)} title="Swap the panel of the algorithm and the panel of the analysis"
+      >Swap panels</button
     >
   </nav>
 </header>
@@ -82,24 +82,13 @@
 
 <main>
   {#if app.session}
-    <PaneGroup direction="vertical">
-      <Pane defaultSize={75}>
-        <PaneGroup direction="horizontal" autoSaveId={app.sidebarLeft ? "layout-left" : "layout-right"}>
-          {#if app.sidebarLeft}
-            <Pane defaultSize={36} minSize={20}>{@render sidebar()}</Pane>
-            <PaneResizer class="resizer" />
-            <Pane defaultSize={64} minSize={30}>{@render views()}</Pane>
-          {:else}
-            <Pane defaultSize={64} minSize={30}>{@render views()}</Pane>
-            <PaneResizer class="resizer" />
-            <Pane defaultSize={36} minSize={20}>{@render sidebar()}</Pane>
-          {/if}
-        </PaneGroup>
-      </Pane>
-      {#if app.showHistory}
-        <PaneResizer class="resizer" />
-        <Pane defaultSize={25} minSize={10}><HistoryView /></Pane>
-      {/if}
+    <!-- The analysis on one side, the view in the middle, the algorithm (with its history) on the other side. -->
+    <PaneGroup direction="horizontal" autoSaveId={app.sidebarLeft ? "layout-3-swapped" : "layout-3"}>
+      <Pane defaultSize={24} minSize={12}>{#if app.sidebarLeft}{@render algorithm()}{:else}{@render analysis()}{/if}</Pane>
+      <PaneResizer class="resizer" />
+      <Pane defaultSize={52} minSize={25}>{@render views()}</Pane>
+      <PaneResizer class="resizer" />
+      <Pane defaultSize={24} minSize={12}>{#if app.sidebarLeft}{@render analysis()}{:else}{@render algorithm()}{/if}</Pane>
     </PaneGroup>
   {:else}
     <p class="empty">
@@ -121,9 +110,20 @@
   {/if}
 {/snippet}
 
-{#snippet sidebar()}
-  <div class="sidebar" class:left={app.sidebarLeft}>
-    <SuggestionPanel />
+{#snippet algorithm()}
+  <PaneGroup direction="vertical" autoSaveId="algorithm">
+    <Pane defaultSize={app.showHistory ? 65 : 100} minSize={20}>
+      <div class="sidebar"><SuggestionPanel /></div>
+    </Pane>
+    {#if app.showHistory}
+      <PaneResizer class="resizer" />
+      <Pane defaultSize={35} minSize={10}><HistoryView /></Pane>
+    {/if}
+  </PaneGroup>
+{/snippet}
+
+{#snippet analysis()}
+  <div class="sidebar">
     <GatesPanel />
     <MapEditor />
     <InfoPanel />
