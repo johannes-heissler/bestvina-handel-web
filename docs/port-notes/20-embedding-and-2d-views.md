@@ -197,3 +197,9 @@ to the target.
 - **Lanes of a single gate:** a single gate was cut at its widest gap for its direction, but its lanes still started
   where the star starts, so they could be in the wrong order (v in your second example). The lanes now use the same
   order as the direction.
+
+- **Junctions close to other strips:** when a strip is subdivided out of a bundle of parallel strips, the new junction
+  can lie right next to (or on the wrong side of) a neighbouring strip. After the Tutte layout, a junction whose
+  straight segment to one of its ports crosses another strip is moved towards that port, past the crossing (a few
+  rounds). The radius of the junction disk and the caps of the bending arcs are now bounded by the distance to the
+  nearest other junction *or strip not ending there*, so the bends don't reach across a strip passing close by.

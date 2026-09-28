@@ -122,29 +122,63 @@ export function layout(fs: FibredSurface, chart: Chart, options: LayoutOptions =
   const switches = new Map(fs.graph.orientedEdges.map((x) => [x, position.get(switchNode(x)) as Complex]));
 
   // 3. The strips.
-  const strips = new Map<Edge, Piece[]>();
-  for (const e of fs.graph.edges) {
-    const letters = fs.mu.image(e.forward).letters;
-    const pieces: Complex[][] = [[junctions.get(e.source) as Complex]];
-    letters.forEach((x, k) => {
-      const current = pieces.at(-1) as Complex[];
-      const exit = portPoint(e, k, x);
-      const entry = portPoint(e, k, x.reversed);
-      const band = chart.bands.get(x.edge);
-      if (band?.kind === "path") {
-        const u = (lateral.get(strandKey({ edge: e, index: k })) as number) * (x.isForward ? 1 : -1);
-        const centerline = x.isForward ? band.centerline : band.centerline.toReversed();
-        current.push(...offset(centerline, u * band.halfWidth));
-      } else {
-        const [out, back] = [chart.ports.get(x) as Port, chart.ports.get(x.reversed) as Port];
-        current.push(exit);
-        if (out.stub > 0) current.push(exit.add(out.outward.scale(out.stub)));
-        pieces.push(back.stub > 0 ? [entry.add(back.outward.scale(back.stub)), entry] : [entry]);
+  const buildStrips = (junctions: ReadonlyMap<Vertex, Complex>): Map<Edge, Piece[]> => {
+    const strips = new Map<Edge, Piece[]>();
+    for (const e of fs.graph.edges) {
+      const letters = fs.mu.image(e.forward).letters;
+      const pieces: Complex[][] = [[junctions.get(e.source) as Complex]];
+      letters.forEach((x, k) => {
+        const current = pieces.at(-1) as Complex[];
+        const exit = portPoint(e, k, x);
+        const entry = portPoint(e, k, x.reversed);
+        const band = chart.bands.get(x.edge);
+        if (band?.kind === "path") {
+          const u = (lateral.get(strandKey({ edge: e, index: k })) as number) * (x.isForward ? 1 : -1);
+          const centerline = x.isForward ? band.centerline : band.centerline.toReversed();
+          current.push(...offset(centerline, u * band.halfWidth));
+        } else {
+          const [out, back] = [chart.ports.get(x) as Port, chart.ports.get(x.reversed) as Port];
+          current.push(exit);
+          if (out.stub > 0) current.push(exit.add(out.outward.scale(out.stub)));
+          pieces.push(back.stub > 0 ? [entry.add(back.outward.scale(back.stub)), entry] : [entry]);
+        }
+      });
+      (pieces.at(-1) as Complex[]).push(junctions.get(e.target) as Complex);
+      strips.set(e, pieces);
+    }
+    return strips;
+  };
+
+  // 4. No junction on the wrong side of another strip. The barycentric placement only knows a junction's own
+  // neighbours; if it was subdivided out of a bundle of parallel strips, it can land beyond one of them, and then its own
+  // strips cross it. So while a segment from a junction to its first port crosses a segment of another strip, the
+  // junction moves across that strip, to between the crossing and the port.
+  for (let round = 0; round < 12; round++) {
+    const current = buildStrips(junctions);
+    let moved = false;
+    for (const v of fs.graph.vertices) {
+      const j = junctions.get(v) as Complex;
+      const own = new Set(fs.graph.star(v).map((x) => x.edge));
+      const others = fs.graph.edges
+        .filter((e) => !own.has(e))
+        .flatMap((e) => segments(current.get(e) as Piece[]));
+      for (const x of fs.graph.star(v)) {
+        const pieces = current.get(x.edge) as Piece[];
+        const port = x.isForward ? (pieces[0] as Piece)[1] : (pieces.at(-1) as Piece).at(-2);
+        if (port === undefined) continue;
+        const crossing = others
+          .map(([p, q]) => intersection(j, port, p, q))
+          .find((point) => point !== undefined);
+        if (crossing) {
+          junctions.set(v, crossing.add(port.sub(crossing).scale(0.35)));
+          moved = true;
+          break;
+        }
       }
-    });
-    (pieces.at(-1) as Complex[]).push(junctions.get(e.target) as Complex);
-    strips.set(e, pieces);
+    }
+    if (!moved) break;
   }
+  const strips = buildStrips(junctions);
   return { chart, order, junctions, switches, strips, relativeWidth };
 }
 
@@ -179,4 +213,24 @@ export function offset(line: readonly Complex[], distance: number): Complex[] {
     if (length === 0) return p;
     return p.add(new Complex(-tangent.im, tangent.re).scale(distance / length));
   });
+}
+
+/** The segments of polylines. */
+function segments(pieces: readonly Piece[]): [Complex, Complex][] {
+  return pieces.flatMap((piece) =>
+    piece.slice(1).map((q, i) => [piece[i] as Complex, q] as [Complex, Complex]),
+  );
+}
+
+/** The point where the segments ab and cd cross (in their interiors), if they do. */
+function intersection(a: Complex, b: Complex, c: Complex, d: Complex): Complex | undefined {
+  const r = b.sub(a);
+  const s = d.sub(c);
+  const denominator = r.re * s.im - r.im * s.re;
+  if (Math.abs(denominator) < 1e-12) return undefined;
+  const ca = c.sub(a);
+  const t = (ca.re * s.im - ca.im * s.re) / denominator;
+  const u = (ca.re * r.im - ca.im * r.re) / denominator;
+  const margin = 1e-6;
+  return t > margin && t < 1 - margin && u > margin && u < 1 - margin ? a.add(r.scale(t)) : undefined;
 }

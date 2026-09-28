@@ -99,14 +99,23 @@ export function renderSvg(fs: FibredSurface, layout: Layout, options: RenderOpti
   const stripLines = (e: Edge, transform?: (z: Complex) => Complex) =>
     (layout.strips.get(e) ?? []).map((piece) => display(piece, transform));
 
-  /** For each junction, the distance to the nearest other junction in the chart (Infinity if there is none). */
+  /**
+   * For each junction, the distance in the chart to the nearest other junction or strip that doesn't end there (Infinity
+   * if there is none): its disk and the bends of its strips stay well within it, so they don't reach across a strip
+   * passing close by (e.g. when the junction was subdivided out of a bundle of parallel strips).
+   */
   const nearest = new Map<Vertex, number>(
     fs.graph.vertices.map((v) => {
       const p = layout.junctions.get(v) as Complex;
-      const distances = fs.graph.vertices
+      const toJunctions = fs.graph.vertices
         .filter((u) => u !== v)
         .map((u) => (layout.junctions.get(u) as Complex).sub(p).abs());
-      return [v, Math.min(Infinity, ...distances)];
+      const own = new Set(fs.graph.star(v).map((x) => x.edge));
+      const toStrips = fs.graph.edges
+        .filter((e) => !own.has(e))
+        .flatMap((e) => layout.strips.get(e) ?? [])
+        .flatMap((piece) => piece.slice(1).map((q, i) => distanceToSegment(p, piece[i] as Complex, q)));
+      return [v, Math.min(Infinity, ...toJunctions, ...toStrips)];
     }),
   );
 
@@ -695,4 +704,13 @@ function arcTowards(end: StripEnd, target: Complex): { arc: Complex[]; tangent: 
     c.add(Complex.fromPolar(rho, theta0 + (sweep * (i + 1)) / n)),
   );
   return { arc, tangent: arc.at(-1) as Complex };
+}
+
+/** The distance from p to the segment ab. */
+function distanceToSegment(p: Complex, a: Complex, b: Complex): number {
+  const ab = b.sub(a);
+  const length2 = ab.abs2();
+  const t =
+    length2 === 0 ? 0 : Math.max(0, Math.min(1, ((p.re - a.re) * ab.re + (p.im - a.im) * ab.im) / length2));
+  return p.sub(a.add(ab.scale(t))).abs();
 }
