@@ -28,6 +28,7 @@
   let widthExponent = $state(0);
   let toScale = $state(false);
   let labels = $state(true);
+  let showOptions = $state(true);
 
   const node = $derived.by(() => {
     void app.version;
@@ -134,7 +135,7 @@
   const highlight = $derived(
     app.hovered === undefined
       ? ""
-      : `<style>.surface [data-edge="${CSS.escape(app.hovered)}"] { stroke-width: 5px; stroke-opacity: 1; }</style>`,
+      : `<style>.surface [data-edge="${CSS.escape(app.hovered)}"] { stroke-width: var(--grow, 2px); stroke-opacity: 1; }</style>`,
   );
 </script>
 
@@ -157,44 +158,10 @@
         </select></label
       >
     {/if}
-    <label
-      >Curves
-      <select bind:value={smoothing}>
-        <option value="spline">Smooth</option>
-        <option value="rounded">Rounded corners</option>
-        <option value="none">Straight</option>
-      </select></label
-    >
-    <label
-      >Sides
-      <select bind:value={sideStyle}>
-        <option value="dashed">Dashed</option>
-        <option value="dotted">Dotted</option>
-        <option value="solid">Solid</option>
-      </select></label
-    >
-    {#if hyperbolic && sideStyle !== "solid"}
-      <label title="Down to which width (pixels) the sides are dashed; thinner, towards the boundary, they fade"
-        >until <input type="range" min="0.1" max="1.5" step="0.05" bind:value={dashUntil} /> {dashUntil.toFixed(2)} px</label
-      >
-    {/if}
-    <label title="Copies of the polygon by deck transformations">Copies <input type="number" min="0" max="4" bind:value={deckDepth} /></label>
-    <label title="Strand widths w(e)^c: 0 spaces them evenly"
-      >Widths c <input type="range" min="0" max="1" step="0.1" bind:value={widthExponent} /></label
-    >
-    <label><input type="checkbox" bind:checked={toScale} /> To scale</label>
-    <label><input type="checkbox" bind:checked={labels} /> Names</label>
-    {#if hyperbolic && labels}
-      <label title="Scale the names with the hyperbolic metric (the copies then get names too)"
-        ><input type="checkbox" bind:checked={scaleNames} /> scaled</label
-      >
-      {#if model === "klein" && scaleNames}
-        <label title="Shape the names like the Klein metric: squeezed towards the boundary"
-          ><input type="checkbox" bind:checked={kleinNames} /> Klein-shaped</label
-        >
-      {/if}
-    {/if}
     <span class="spacer"></span>
+    <button onclick={() => (showOptions = !showOptions)} aria-expanded={showOptions} title="Show or hide the graphics options"
+      >{showOptions ? "▾" : "▸"} Graphics options</button
+    >
     <button onclick={reset} title="Reset pan and zoom">⟲</button>
     <select bind:value={exportFormat} aria-label="Export format">
       <option value="svg">SVG</option>
@@ -204,6 +171,50 @@
     </select>
     <button onclick={exportView}>Export</button>
   </div>
+  {#if showOptions}
+    <div class="toolbar options">
+      <label
+        >Strips
+        <select bind:value={smoothing}>
+          <option value="spline">Smooth</option>
+          <option value="rounded">Rounded corners</option>
+          <option value="none">Straight</option>
+        </select></label
+      >
+      <label
+        >Sides
+        <select bind:value={sideStyle}>
+          <option value="dashed">Dashed</option>
+          <option value="dotted">Dotted</option>
+          <option value="solid">Solid</option>
+        </select></label
+      >
+      {#if hyperbolic && sideStyle !== "solid"}
+        <label title="Down to which width (pixels) the sides are dashed; thinner, towards the boundary, they fade"
+          >dashed down to <input type="range" min="0.1" max="1.5" step="0.05" bind:value={dashUntil} /> {dashUntil.toFixed(2)} px</label
+        >
+      {/if}
+      <label title="Copies of the polygon by deck transformations">Copies <input type="number" min="0" max="4" bind:value={deckDepth} /></label>
+      <label
+        title="Where the strands cross a side: their lateral positions are spaced by the weights w(e)^c, with the Perron–Frobenius widths w (c = 0: evenly). Only sides crossed by several strands change; a single strand stays in the middle."
+        >Strand spacing c <input type="range" min="0" max="1" step="0.1" bind:value={widthExponent} /></label
+      >
+      <label title="Draw the strips as wide as their share of the sides they cross (their weights w(e)^c)"
+        ><input type="checkbox" bind:checked={toScale} /> Strip widths to scale</label
+      >
+      <label><input type="checkbox" bind:checked={labels} /> Show names</label>
+      {#if hyperbolic && labels}
+        <label title="Scale the names with the hyperbolic metric (the copies then get names too)"
+          ><input type="checkbox" bind:checked={scaleNames} /> Names scaled by the metric</label
+        >
+        {#if model === "klein" && scaleNames}
+          <label title="Shape the names and junctions like the Klein metric: squeezed towards the boundary"
+            ><input type="checkbox" bind:checked={kleinNames} /> Names and junctions shaped by the Klein metric</label
+          >
+        {/if}
+      {/if}
+    </div>
+  {/if}
   <div
     class="canvas"
     onwheel={onWheel}

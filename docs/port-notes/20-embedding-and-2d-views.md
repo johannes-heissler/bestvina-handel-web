@@ -259,3 +259,14 @@ to the target.
   they are left out). In the Klein model, "Klein-shaped" maps each name by the linear map that takes the unit circle
   of the Euclidean metric to that of the Klein metric: the Klein metric has the eigenvalues 1/(1 − r²)² radially and
   1/(1 − r²) tangentially, so the map is (1 − r²) radially and √(1 − r²) tangentially (an SVG `matrix`).
+
+### Options panel, hover, junctions in the Klein model
+
+- The graphics options are a collapsible second row; the checkboxes say what they refer to (names, strip widths,
+  junctions). "Strand spacing c" (formerly "Widths c") explains in its tooltip that it only moves strands on sides that
+  several strands cross.
+- Names are left out only below 1 pixel.
+- Hovering a strip makes it 1.5 times as wide (an outline of a quarter of its width on each side, via a CSS variable
+  per strip), instead of a fixed 5 pixels.
+- With "Names and junctions shaped by the Klein metric", the junction disks become ellipses of the same area, shaped
+  like the metric, and their switches lie on the ellipse.

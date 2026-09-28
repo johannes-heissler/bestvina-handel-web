@@ -197,6 +197,14 @@ export function renderSvg(fs: FibredSurface, layout: Layout, options: RenderOpti
   /** The region between the offsets from·w and to·w across a display polyline of e (w: the width of e there). */
   const band = (e: Edge, line: readonly Complex[], from: number, to: number): string =>
     bandPath(line, (z, n) => widthAt(e, z, n), from, to);
+  /**
+   * The outline width that makes a strip 1.5 times as wide when it is highlighted (its width in the middle of the
+   * line, times `factor` for wider ribbons).
+   */
+  const grow = (e: Edge, line: readonly Complex[], factor: number) => {
+    const middle = line[Math.floor(line.length / 2)];
+    return `${fmt(middle ? 0.5 * factor * widthAt(e, middle, Complex.ONE) * scale : 1)}px`;
+  };
   /** The same for any width function (display units at a display point, across a unit direction). */
   const bandPath = (
     line: readonly Complex[],
@@ -406,6 +414,27 @@ export function renderSvg(fs: FibredSurface, layout: Layout, options: RenderOpti
     return { scale: centreMetric / metric(z, Complex.ONE) };
   };
 
+  /**
+   * With names shaped by the Klein metric, the junction disks are shaped the same way (as ellipses of the same area):
+   * the map of the disk in screen coordinates, or undefined.
+   */
+  const junctionShape = (center: Complex): readonly [number, number, number, number] | undefined => {
+    if (!(model === "klein" && options.kleinNames && scaleNames)) return undefined;
+    const matrix = nameShape(center).matrix;
+    if (!matrix) return undefined;
+    const [a, b, , d] = matrix;
+    const det = Math.sqrt(Math.max(1e-12, a * d - b * b));
+    return [a / det, b / det, b / det, d / det];
+  };
+  /** An offset from a junction's centre (display coordinates), shaped like its disk. */
+  const shapedOffset = (center: Complex, offset: Complex): Complex => {
+    const m = junctionShape(center);
+    if (!m) return offset;
+    // The matrix acts on screen coordinates, where y points down: conjugate by the reflection.
+    const [a, b, , d] = m;
+    return new Complex(a * offset.re - b * offset.im, -b * offset.re + d * offset.im);
+  };
+
   /** Moves the ends of the strips at junctions onto the switch points of their gates. */
   const attachToSwitches = (
     lines: Map<Edge, Complex[][]>,
@@ -479,7 +508,7 @@ export function renderSvg(fs: FibredSurface, layout: Layout, options: RenderOpti
         const psi = toScreen(junctionInChart.add(Complex.fromPolar(1e-4, psiInChart)))
           .sub(toScreen(junctionInChart))
           .arg();
-        points.set(s, center.add(Complex.fromPolar(junctionRadius, psi)));
+        points.set(s, center.add(shapedOffset(center, Complex.fromPolar(junctionRadius, psi))));
       }
       switchPoints.set(v, points);
       // The strips of a gate leave their switch side by side, perpendicular to the circle (like the branches of a
@@ -579,6 +608,14 @@ export function renderSvg(fs: FibredSurface, layout: Layout, options: RenderOpti
     return switchPoints;
   };
 
+  /** SVG content around a junction's centre, mapped like its disk (see `junctionShape`). */
+  const shaped = (center: Complex, content: string) => {
+    const m = junctionShape(center);
+    if (!m) return content;
+    const [x, y] = px(center).split(",");
+    return `<g transform="translate(${x} ${y}) matrix(${m.map(fmt4).join(" ")} 0 0) translate(-${x} -${y})">${content}</g>`;
+  };
+
   const drawSurface = (transform: ((z: Complex) => Complex) | undefined, opacity: number) => {
     const group: string[] = [];
     // The copies get names only when they are scaled with the metric.
@@ -624,7 +661,7 @@ export function renderSvg(fs: FibredSurface, layout: Layout, options: RenderOpti
       for (const e of fs.graph.edges) {
         for (const line of lines.get(e) ?? [])
           group.push(
-            `<path data-edge="${escape(e.name)}" d="${band(e, line, -1.1, 1.1)}" fill="${css(e.color)}" fill-opacity="0.18" stroke="${css(e.color)}" stroke-width="0"/>`,
+            `<path data-edge="${escape(e.name)}" d="${band(e, line, -1.1, 1.1)}" fill="${css(e.color)}" fill-opacity="0.18" stroke="${css(e.color)}" stroke-width="0" style="--grow:${grow(e, line, 2.2)}"/>`,
           );
         const list = stripes?.along.get(e) ?? [];
         list.forEach((s, i) => {
@@ -645,7 +682,7 @@ export function renderSvg(fs: FibredSurface, layout: Layout, options: RenderOpti
       for (const e of fs.graph.edges)
         for (const line of lines.get(e) ?? [])
           group.push(
-            `<path data-edge="${escape(e.name)}" d="${band(e, line, -0.5, 0.5)}" fill="${css(e.color)}" stroke="${css(e.color)}" stroke-width="0"/>`,
+            `<path data-edge="${escape(e.name)}" d="${band(e, line, -0.5, 0.5)}" fill="${css(e.color)}" stroke="${css(e.color)}" stroke-width="0" style="--grow:${grow(e, line, 1)}"/>`,
           );
     }
 
@@ -658,7 +695,10 @@ export function renderSvg(fs: FibredSurface, layout: Layout, options: RenderOpti
       // In the copies, the outline, the branches and the switches shrink with the disk.
       const k = localScale(layout.junctions.get(v) as Complex, transform);
       group.push(
-        `<circle cx="${px(center).split(",")[0]}" cy="${px(center).split(",")[1]}" r="${fmt(radius)}" fill="${transparent ? "#ffffff" : "#fafafa"}" fill-opacity="${transparent ? 0.35 : 1}" stroke="${JUNCTION_COLOR}" stroke-width="${fmt(k)}"/>`,
+        shaped(
+          center,
+          `<circle cx="${px(center).split(",")[0]}" cy="${px(center).split(",")[1]}" r="${fmt(radius)}" fill="${transparent ? "#ffffff" : "#fafafa"}" fill-opacity="${transparent ? 0.35 : 1}" stroke="${JUNCTION_COLOR}" stroke-width="${fmt(k)}" vector-effect="non-scaling-stroke"/>`,
+        ),
       );
       if (transparent)
         for (const [a, b] of gatesOf(v).infinitesimal) {
@@ -799,7 +839,7 @@ function label(
   italic = false,
   shape: NameShape = { scale: 1 },
 ): string {
-  if (fontSize * shape.scale < 2.5) return ""; // too small to read
+  if (fontSize * shape.scale < 1) return ""; // too small to see
   const [x, y] = px(at).split(",");
   if (shape.matrix) {
     const [a, b, c, d] = shape.matrix.map(fmt4);
