@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { closedGenus2OneCusp, conjugatedTorusAnosov } from "../examples/maps";
+import { buildPreset, PRESETS } from "../examples/presets";
 import { FibredSurface } from "./fibred-surface";
 import { applyMove, type Move } from "./move";
 import { perronFrobenius } from "./perron-frobenius";
@@ -163,5 +164,21 @@ describe("autopilot", () => {
     expect(surface.isClosed).toBe(true);
     expect(stoppedAt.classification).toMatchObject({ kind: "pseudo-Anosov" });
     expect(growth(surface)).toBeCloseTo(4.2121, 3);
+  });
+});
+
+describe("a finished result with a single cusp at the only puncture", () => {
+  it("offers cutting along a singular leaf; for the point push, f relative to the singularity is reducible", () => {
+    const { surface, stoppedAt } = autopilot(buildPreset(PRESETS.find((p) => p.name === "Point push")!));
+    expect(stoppedAt.kind).toBe("finished");
+    expect(stoppedAt.classification).toMatchObject({ kind: "pseudo-Anosov" });
+    const cut = stoppedAt.options.find((o) => o.move.kind === "cut along a singular leaf" && o.rating === 1);
+    expect(cut).toBeDefined();
+    // On the closed surface the point push is isotopic to the identity; relative to the fixed singularity it is then
+    // a point push of that point, which is reducible, with the identity on the first piece.
+    const cutOpen = autopilot(applyMove(surface.copy(), cut!.move));
+    expect(cutOpen.stoppedAt.kind).toBe("reducible");
+    const reduced = autopilot(applyMove(cutOpen.surface.copy(), cutOpen.stoppedAt.options[0]!.move));
+    expect(reduced.stoppedAt.classification).toMatchObject({ kind: "finite order", order: 1 });
   });
 });

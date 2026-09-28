@@ -84,7 +84,10 @@ export type SuggestionKind =
 export interface Suggestion {
   readonly kind: SuggestionKind;
   readonly description: Text;
-  /** The options; the first one is the default (what the autopilot applies). Empty when finished. */
+  /**
+   * The options; the first one is the default (what the autopilot applies). Empty when finished, except for moves that
+   * go beyond the result (the closed-surface moves when τ has a single cusp at the only puncture).
+   */
   readonly options: readonly MoveOption[];
   /** Whether several options can be selected and applied together ({@link combine}). */
   readonly multiple: boolean;
@@ -272,36 +275,16 @@ function nextStep(fs: FibredSurface, context: SuggestionContext): Suggestion {
       multiple: false,
     };
 
-  if (fs.isClosed && hasOneCuspPuncture(fs)) {
-    const singularities = polygonSingularities(fs); // sorted by period
+  const oneCusp = hasOneCuspPuncture(fs);
+  if (fs.isClosed && oneCusp)
     return {
       kind: "closed surface",
       description: [
         "The map is efficient, but τ has only one cusp at the artificial puncture. Replace it by the orbit of a singularity q.",
       ],
-      options: [
-        ...singularities.map((q) => ({
-          move: { kind: "cut along a singular leaf" as const, junction: q.junction.name },
-          label: [
-            "Cut along a leaf from ",
-            { junction: q.junction.name },
-            ` (period ${q.orbit.length})`,
-          ] as Text,
-          rating: q.orbit.length,
-        })),
-        ...singularities.map((q) => ({
-          move: { kind: "replace puncture by singularity" as const, junction: q.junction.name },
-          label: [
-            "Shortcut: fill the puncture at ",
-            { junction: q.junction.name },
-            ` (period ${q.orbit.length})`,
-          ] as Text,
-          rating: q.orbit.length,
-        })),
-      ],
+      options: closedSurfaceOptions(fs),
       multiple: false,
     };
-  }
 
   if (!fs.ignoreReducible) {
     const disconnected = disconnectedJunctions(fs);
@@ -309,12 +292,47 @@ function nextStep(fs: FibredSurface, context: SuggestionContext): Suggestion {
   }
 
   const { growth } = perronFrobenius(fs, { essentialOnly: true });
-  return growth > 1 + 1e-9
-    ? finished(["g is an efficient train-track map with growth ", growth.toFixed(6), "."], {
-        kind: "pseudo-Anosov",
-        growth,
-      })
-    : finished(["No step applies, but the growth is 1."], { kind: "undecided" });
+  if (growth <= 1 + 1e-9) return finished(["No step applies, but the growth is 1."], { kind: "undecided" });
+  const result = finished(
+    [
+      "f is pseudo-Anosov: g is an efficient train-track map with efficient maximal periphery and growth λ = ",
+      growth.toFixed(6),
+      ", and τ is connected at every junction.",
+    ],
+    { kind: "pseudo-Anosov", growth },
+  );
+  // With a single cusp at the only puncture, the puncture might be one that the surface doesn't really have: offer the
+  // moves of the closed-surface case anyway, to see what the mapping class would be on the closed surface.
+  if (!oneCusp) return result;
+  return {
+    ...result,
+    description: [
+      ...result.description,
+      " τ has only one cusp at the puncture: if the surface is meant to be closed, fill it in (cut along a singular leaf) and continue on the closed surface.",
+    ],
+    options: closedSurfaceOptions(fs),
+  };
+}
+
+/** The moves of the closed-surface case: cut along a leaf from a singularity, or the shortcut, by period. */
+function closedSurfaceOptions(fs: FibredSurface): MoveOption[] {
+  const singularities = polygonSingularities(fs); // sorted by period
+  return [
+    ...singularities.map((q) => ({
+      move: { kind: "cut along a singular leaf" as const, junction: q.junction.name },
+      label: ["Cut along a leaf from ", { junction: q.junction.name }, ` (period ${q.orbit.length})`] as Text,
+      rating: q.orbit.length,
+    })),
+    ...singularities.map((q) => ({
+      move: { kind: "replace puncture by singularity" as const, junction: q.junction.name },
+      label: [
+        "Shortcut: fill the puncture at ",
+        { junction: q.junction.name },
+        ` (period ${q.orbit.length})`,
+      ] as Text,
+      rating: q.orbit.length,
+    })),
+  ];
 }
 
 /**

@@ -121,3 +121,24 @@
   k = 0 or 2 a cusp, angle 2π; k ≥ 3 a multicusp, angle kπ). The **pretrivial strips** are listed on their own and
   are not counted in the layers of the (pre-)periphery; each section is shown only when it is not empty.
 - Headings are bold instead of italic; junction names are mathematical symbols (italic) in dark green.
+
+### Result, choices shown automatically, drawing cache
+
+- When the algorithm is finished, the panel is headed **Result** instead of "Next step", states the result (for a
+  pseudo-Anosov map: efficient train-track map with efficient maximal periphery, λ, and τ connected at every junction),
+  and has no Apply or "Run to the end" button, unless the result offers moves beyond it:
+- **One cusp at the only puncture:** even if the surface isn't marked closed, the finished result offers the moves of
+  the closed-surface case (cut along a singular leaf, or the shortcut), to see what the mapping class would be on the
+  closed surface. For "Point push", cutting at v₀ (period 1) puts the puncture at that fixed singularity; the algorithm
+  then finds f reducible there, with the identity on the first piece, as expected for a map isotopic to the identity
+  on the closed surface (relative to a fixed point it is a point push, i.e. reducible). Known limitation: for its
+  period-4 singularities the existing closed-surface moves fail ("No cut found for the singularity", or errors in the
+  shortcut).
+- **Choices** (formerly "More choices…"): the further choices of the selected option are computed right after the panel
+  is drawn (deferred with a timeout) and listed under "Choices for the selected option"; the button is gone.
+  Measured: suggestions take 1–7 ms and choices under 3 ms; the time goes into drawing (170–220 ms with 10 rounds of
+  straightening and 2 copies).
+- **Cache** (`ui/drawing.ts`): the layout (per surface, model and layout options, 6 per surface) and the SVG (per
+  surface, model and all options, 12 per surface) are kept in weak maps keyed by the surface, so going back and forth
+  in the history or switching an option back draws nothing again. The surfaces of the history are never changed in
+  place, so they can be keys. A Web Worker (e.g. to show the growth after each option) is for later.

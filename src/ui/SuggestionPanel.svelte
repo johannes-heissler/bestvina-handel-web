@@ -34,26 +34,36 @@
   });
 
   let selected = $state<number[]>([0]);
-  let choices = $state<MoveOption[] | undefined>(undefined);
   $effect(() => {
     void suggestion;
     selected = [0];
+  });
+  // The further choices of the selected option (e.g. how to fold), computed after the panel is drawn: some need the
+  // move to be tried on a copy.
+  let choices = $state<MoveOption[] | undefined>(undefined);
+  $effect(() => {
+    const option = suggestion?.options[selected[0] ?? 0];
+    const surface = node?.surface;
     choices = undefined;
+    if (!option || !surface || selected.length !== 1) return;
+    const timer = setTimeout(() => {
+      try {
+        choices = variants(surface, option.move);
+      } catch {
+        choices = [];
+      }
+    }, 0);
+    return () => clearTimeout(timer);
   });
 
   function toggle(i: number) {
     if (!suggestion?.multiple) selected = [i];
     else selected = selected.includes(i) ? selected.filter((j) => j !== i) : [...selected, i];
-    choices = undefined;
   }
   function applySelected() {
     if (!suggestion) return;
     const moves = selected.map((i) => suggestion.options[i]?.move).filter((m) => m !== undefined);
     if (moves.length > 0) app.apply(combine(moves), { thenAutomatic: true });
-  }
-  function showChoices() {
-    const option = suggestion?.options[selected[0] ?? 0];
-    if (option && node) choices = variants(node.surface, option.move);
   }
   function toggleAutomatic(kind: SuggestionKind) {
     app.automatic = app.automatic.includes(kind) ? app.automatic.filter((k) => k !== kind) : [...app.automatic, kind];
@@ -64,7 +74,7 @@
 </script>
 
 <section class="panel">
-  <h2>Next step</h2>
+  <h2>{suggestion?.kind === "finished" ? "Result" : "Next step"}</h2>
   {#if suggestion}
     <p><TextView text={suggestion.description} /></p>
     {#if suggestion.options.length > 0}
@@ -89,19 +99,17 @@
       </ul>
     {/if}
   {/if}
-  <div class="buttons">
-    <button class="primary" onclick={applySelected} disabled={!suggestion?.options.length}>Apply</button>
-    <button
-      onclick={showChoices}
-      disabled={!suggestion?.options.length}
-      title="Further choices for the selected option, e.g. how to fold">More choices…</button
-    >
-    <button onclick={runToTheEnd} title="Apply the default of every step until the algorithm stops">Run to the end</button>
-  </div>
-  {#if choices}
-    {#if choices.length === 0}
-      <p class="note">No further choices for this option.</p>
-    {:else}
+  {#if suggestion?.options.length || suggestion?.kind !== "finished"}
+    <div class="buttons">
+      {#if suggestion?.options.length}<button class="primary" onclick={applySelected}>Apply</button>{/if}
+      {#if suggestion?.kind !== "finished"}
+        <button onclick={runToTheEnd} title="Apply the default of every step until the algorithm stops">Run to the end</button>
+      {/if}
+    </div>
+  {/if}
+  {#if choices?.length}
+    <h3>Choices for the selected option</h3>
+    {#if choices}
       <ul class="options">
         {#each choices as choice, i (i)}
           <li>
