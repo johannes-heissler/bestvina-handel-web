@@ -96,3 +96,14 @@ carry the choice; the suggestion label says "Move the junction along γ".
 
 All results pass `checkIntegrity()`. Its check that μ preserves the boundary words is what confirms the cyclic order
 at the merged junctions.
+
+## Update: names and colours after folding (as in C#)
+
+Folding initial segments subdivides a into a₁ a₂ and b into b₁ b₂, and folds a₁ with b₁. Afterwards:
+
+- **the folded segment gets a new letter** (the next free name, no digits) and the **least used colour**;
+- **the remaining segments a₂, b₂ are called a and b again**, with their colours.
+
+If one strip is folded completely, it is the folded segment itself and keeps its name. So names with digits or +/−
+only remain from other subdivisions. The palette has 16 colours now (the 8 of C# and 8 more), so that as far as
+possible every strip has its own colour.

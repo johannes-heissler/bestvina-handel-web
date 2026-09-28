@@ -9,7 +9,7 @@
  * @module
  */
 import type { FibredSurface } from "../fibred/fibred-surface";
-import { applyMove, type Move } from "../fibred/move";
+import { applyMove, type FollowUp, type Move } from "../fibred/move";
 import { autopilot, type AutopilotOptions, nextSuggestion, type Suggestion } from "../fibred/suggestions";
 import { type FibredSurfaceOptions, initialFibredSurface, type SurfaceModel } from "../examples/models";
 import { buildPreset, PRESETS, randomGenus2 } from "../examples/presets";
@@ -34,6 +34,11 @@ export interface HistoryNode {
   readonly surface: FibredSurface;
   /** The model to draw this state in (a closed-surface move replaces it by the ribbon graph of the new spine). */
   readonly model: SurfaceModel;
+  /**
+   * After a fold step (and the automatic steps after it): the inefficiency it followed and the strips of its next
+   * fold, so that this fold is suggested first.
+   */
+  readonly followUp?: FollowUp;
 }
 
 export class Session {
@@ -62,7 +67,7 @@ export class Session {
 
   /** The suggestion at the current state. */
   suggestion(): Suggestion {
-    return nextSuggestion(this.current.surface);
+    return nextSuggestion(this.current.surface, { followUp: this.current.followUp });
   }
 
   /**
@@ -77,10 +82,11 @@ export class Session {
     if (existing !== undefined) return this.select(existing);
     const copy = this.current.surface.copy();
     copy.onError = () => {};
-    const result = applyMove(copy, move);
+    const hint: { followUp?: FollowUp } = {};
+    const result = applyMove(copy, move, { followUp: (point) => (hint.followUp = point) });
     const problems = result.checkIntegrity();
     if (problems.length > 0) throw new Error(problems.join("\n"));
-    return this.select(this.addChild(this.current, move, result));
+    return this.select(this.addChild(this.current, move, result, hint.followUp));
   }
 
   /**
@@ -95,7 +101,9 @@ export class Session {
       ...options,
       onStep: (move, surface) => {
         const existing = node.children.find((c) => JSON.stringify(c.move) === JSON.stringify(move));
-        node = existing ?? this.addChild(node, move, surface.copy());
+        // Bookkeeping steps keep the hint of the fold before them (the strips of the next fold keep their names).
+        const keep = move.kind === "fold" || move.kind === "remove inefficiency" ? undefined : node.followUp;
+        node = existing ?? this.addChild(node, move, surface.copy(), keep);
       },
     });
     this.select(node);
@@ -154,9 +162,22 @@ export class Session {
     return { session, skipped };
   }
 
-  private addChild(parent: HistoryNode, move: Move, surface: FibredSurface): HistoryNode {
+  private addChild(
+    parent: HistoryNode,
+    move: Move,
+    surface: FibredSurface,
+    followUp?: FollowUp,
+  ): HistoryNode {
     const model = surface.spine0 === parent.surface.spine0 ? parent.model : ribbonModelOf(surface);
-    const node: HistoryNode = { id: this.nextId++, parent, move, children: [], surface, model };
+    const node: HistoryNode = {
+      id: this.nextId++,
+      parent,
+      move,
+      children: [],
+      surface,
+      model,
+      ...(followUp && { followUp }),
+    };
     parent.children.push(node);
     return node;
   }

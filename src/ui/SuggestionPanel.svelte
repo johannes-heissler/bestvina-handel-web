@@ -70,7 +70,7 @@
     {#if suggestion.options.length > 0}
       <ul class="options">
         {#each suggestion.options as option, i (i)}
-          <li>
+          <li class:continues={typeof option.label[0] === "string" && option.label[0].startsWith("Next fold")}>
             <label>
               <input
                 type={suggestion.multiple ? "checkbox" : "radio"}

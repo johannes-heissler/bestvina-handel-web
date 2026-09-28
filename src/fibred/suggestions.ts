@@ -7,7 +7,7 @@
  */
 import type { Edge, OrientedEdge, Vertex } from "../graph/ribbon-graph";
 import type { FibredSurface } from "./fibred-surface";
-import { applyMove, type FoldRef, foldRef, type Move, type MoveKind, strip } from "./move";
+import { applyMove, type FollowUp, type FoldRef, foldRef, type Move, type MoveKind, strip } from "./move";
 import { needsAbsorbing } from "./moves/absorb-periphery";
 import { candidateCenters, invariantSubforests, isPeripheryFriendlyForest } from "./moves/collapse-forest";
 import { cutOptions, prongsOfOrbit } from "./moves/cut-closed-surface";
@@ -88,8 +88,14 @@ export interface Suggestion {
   readonly autopilotMove?: Move;
 }
 
+/** What is known from the previous step. */
+export interface SuggestionContext {
+  /** After a fold step: the inefficiency it followed and the strips of its next fold (see `MoveHooks.followUp`). */
+  readonly followUp?: FollowUp | undefined;
+}
+
 /** The next suggestion, in the priority order of the C# `NextSuggestion`. */
-export function nextSuggestion(fs: FibredSurface): Suggestion {
+export function nextSuggestion(fs: FibredSurface, context: SuggestionContext = {}): Suggestion {
   const forests = invariantSubforests(fs);
   if (forests.length > 0) {
     const union = new Set(forests.flatMap((f) => [...f]));
@@ -188,6 +194,18 @@ export function nextSuggestion(fs: FibredSurface): Suggestion {
     };
 
   const folds = foldCandidates(fs);
+  // The natural next step after a fold: the next fold of the inefficiency it followed, first and marked.
+  // Matched by its place in the images, or (after pulling tight, which changes the images) by the strips to fold.
+  const followUp = context.followUp;
+  const continues = (c: FoldCandidate) =>
+    followUp !== undefined &&
+    (c.places.includes(`${followUp.point.strip}@${followUp.point.index}`) ||
+      sameNames(
+        c.edgesToFold.map((e) => e.name),
+        followUp.strips,
+      ));
+  const next = folds.findIndex(continues);
+  if (next > 0) folds.unshift(...folds.splice(next, 1));
   if (folds.length > 0)
     return {
       kind: "fold",
@@ -212,7 +230,7 @@ export function nextSuggestion(fs: FibredSurface): Suggestion {
             strips: c.edgesToFold.map((e) => e.name),
             ...(at && { at: { strip: at.edge.name, index: at.index } }),
           },
-          label: foldLabel(fs, c),
+          label: [...(continues(c) ? ["Next fold of the last inefficiency: "] : []), ...foldLabel(fs, c)],
           ...(c.order !== undefined && { rating: c.order }),
         };
       }),
@@ -284,6 +302,10 @@ function foldLabel(fs: FibredSurface, c: FoldCandidate): Text {
           ...(c.peripheral ? ["; peripheral"] : []),
         ];
   return [...what, ...why];
+}
+
+function sameNames(a: readonly string[], b: readonly string[]): boolean {
+  return a.length === b.length && [...a].sort().join(" ") === [...b].sort().join(" ");
 }
 
 function finished(description: Text, classification: Classification): Suggestion {

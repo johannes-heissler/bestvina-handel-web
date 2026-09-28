@@ -5,7 +5,9 @@
  * @module
  */
 import { EdgePath } from "../../graph/edge-path";
-import type { OrientedEdge, Vertex } from "../../graph/ribbon-graph";
+import type { Edge, OrientedEdge, Vertex } from "../../graph/ribbon-graph";
+import type { Color } from "../../math/color";
+import { EDGE_COLORS, leastUsedColor } from "../names-and-colors";
 import { EdgePoint } from "../edge-point";
 import type { FibredSurface } from "../fibred-surface";
 import { isCyclicInterval } from "../fibred-surface";
@@ -149,6 +151,11 @@ export function foldInitialSegments(
   const splitPoints = new Map(
     edges.filter((e) => !full.includes(e)).map((e) => [e, new EdgePoint(e, i).normalized(fs)]),
   );
+  // The names and colours of the strips folded partially: their remaining second segments get them back.
+  const original = new Map(
+    [...splitPoints.keys()].map((e) => [e, { name: e.edge.name, color: e.edge.color }]),
+  );
+  const remainders = new Map<OrientedEdge, Edge>();
   for (const [e, point] of splitPoints) {
     const atV = segments.get(e) as OrientedEdge;
     if (atV.edge !== point.edge.edge)
@@ -163,6 +170,7 @@ export function foldInitialSegments(
     transforms.push(transform);
     for (const [key, value] of segments)
       if (value.edge === first) segments.set(key, value.isForward ? first.forward : second.backward);
+    remainders.set(e, (segments.get(e) as OrientedEdge).edge === first ? second : first);
     for (const [key, p] of splitPoints) splitPoints.set(key, transform(p));
     isotopeJunction(fs, junction, c);
   }
@@ -171,8 +179,23 @@ export function foldInitialSegments(
     isotopeJunction(fs, e.target, gamma);
   }
 
-  const kept = segments.get(options.kept ?? (edges[0] as OrientedEdge)) as OrientedEdge;
+  // A strip that is folded completely is the folded segment itself, and keeps its name and colour.
+  const kept = segments.get(full[0] ?? options.kept ?? (edges[0] as OrientedEdge)) as OrientedEdge;
   transforms.push(foldEdges(fs, [...segments.values()], kept));
+  // Names (as in C#): the remaining second segments are called like the strips they come from, with their colours;
+  // a folded segment made only of first segments gets a new letter and the least used colour.
+  for (const [e, remainder] of remainders) {
+    const { name, color } = original.get(e) as { name: string; color: Color };
+    remainder.name = name;
+    remainder.color = color;
+  }
+  if (full.length === 0) {
+    kept.edge.name = fs.nextEdgeName();
+    kept.edge.color = leastUsedColor(
+      EDGE_COLORS,
+      fs.graph.edges.filter((x) => x !== kept.edge).map((x) => x.color),
+    );
+  }
   return { folded: kept, transform: (point) => transforms.reduce((p, t) => t(p), point) };
 }
 

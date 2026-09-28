@@ -133,3 +133,10 @@ The suggestions "fold peripheral inefficiency" and "remove inefficiency" are mer
   inefficiency at once".
 - **The autopilot** still removes whole inefficiencies at once (`Suggestion.autopilotMove`). Recomputing all candidates
   after every single fold is too slow on the large graphs of the closed-surface cuts.
+
+## Update: the natural next fold comes first
+
+After a fold step, the step reports the inefficiency it followed (now of order k − 1) and the strips of its next fold
+(`MoveHooks.followUp`). The session stores this hint at the new node and **passes it on through the automatic steps**
+after the fold: pulling tight changes the images, but not the names of the strips to fold. The next suggestion puts
+that fold first, marked "Next fold of the last inefficiency", with an accent bar in the UI.

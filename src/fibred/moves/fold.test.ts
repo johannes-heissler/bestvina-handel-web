@@ -98,15 +98,22 @@ describe("folding initial segments", () => {
     const c = parseEdgePath("a", nameTable(fs.spine0));
     const { folded } = foldInitialSegments(fs, [edge(fs, "a"), edge(fs, "b")], 2, { c, kept: edge(fs, "a") });
     expect(String(folded)).toBe("a");
-    expect(images(fs)).toBe("a:a a b2, b2:a b2");
-    expect(images(fs, "mu")).toBe("a:a, b2:A b");
+    expect(images(fs)).toBe("a:a a b, b:a b"); // the rest of b is called b again
+    expect(images(fs, "mu")).toBe("a:a, b:A b");
     expect(fs.graph.vertexCount).toBe(1);
     expect(fs.checkIntegrity()).toEqual([]);
   });
 
   it("folds two partial strips (the partial-partial case) without moving junctions", () => {
     const fs = make();
-    foldInitialSegments(fs, [edge(fs, "a"), edge(fs, "b")], 1);
+    const colors = new Map(fs.graph.edges.map((e) => [e.name, e.color]));
+    const { folded } = foldInitialSegments(fs, [edge(fs, "a"), edge(fs, "b")], 1);
+    // The folded first segments get a new letter and a new colour; the rest of a and b keep their names and colours.
+    expect(fs.graph.edges.map((e) => e.name).sort()).toEqual(["a", "b", "c"]);
+    expect(folded.edge.name).toBe("c");
+    expect(edge(fs, "a").edge.color).toBe(colors.get("a"));
+    expect(edge(fs, "b").edge.color).toBe(colors.get("b"));
+    expect([colors.get("a"), colors.get("b")]).not.toContain(folded.edge.color);
     expect(fs.graph.edgeCount).toBe(3);
     expect(fs.mu.totalLength()).toBe(2); // the default c is the common prefix of μ(a) = a and μ(b) = b: empty
     expect(fs.checkIntegrity()).toEqual([]);

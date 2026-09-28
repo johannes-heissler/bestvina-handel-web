@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { plainText } from "../fibred/suggestions";
 import { Session } from "./session";
 import { decodeSession, encodeSession } from "./share";
 
@@ -70,3 +71,55 @@ function modelTorus() {
     closed: false,
   } as const;
 }
+
+describe("the next fold after a fold step", () => {
+  it("is suggested first and marked", () => {
+    // In BH 6.1, after three folds (with the bookkeeping in between) there is a fold of order 2.
+    const session = Session.create({ kind: "preset", preset: "Bestvina–Handel example 6.1" });
+    const bookkeeping = new Set([
+      "pull tight",
+      "collapse invariant subforest",
+      "remove valence-1 junction",
+      "remove valence-2 junctions",
+      "absorb into periphery",
+    ] as const);
+    let deep;
+    for (let k = 0; k < 10 && !deep; k++) {
+      session.runAutopilot({ automatic: bookkeeping });
+      const suggestion = session.suggestion();
+      deep = suggestion.options.find((o) => o.move.kind === "fold" && (o.rating ?? 0) >= 2);
+      if (!deep) session.apply(suggestion.options[0]!.move);
+    }
+    expect(deep).toBeDefined();
+    session.apply(deep!.move);
+    expect(session.current.followUp).toBeDefined();
+    const next = session.suggestion();
+    expect(next.kind).toBe("fold");
+    expect(plainText(next.options[0]!.label)).toMatch(/^Next fold of the last inefficiency: .*order 1/);
+  });
+});
+
+describe("the hint for the next fold", () => {
+  it("survives the automatic steps after the fold", () => {
+    const session = Session.create({ kind: "preset", preset: "Bestvina–Handel example 6.1" });
+    const bookkeeping = new Set([
+      "pull tight",
+      "collapse invariant subforest",
+      "remove valence-1 junction",
+      "remove valence-2 junctions",
+      "absorb into periphery",
+    ] as const);
+    let deep;
+    for (let k = 0; k < 10 && !deep; k++) {
+      session.runAutopilot({ automatic: bookkeeping });
+      const suggestion = session.suggestion();
+      deep = suggestion.options.find((o) => o.move.kind === "fold" && (o.rating ?? 0) >= 2);
+      if (!deep) session.apply(suggestion.options[0]!.move);
+    }
+    session.apply(deep!.move);
+    session.runAutopilot({ automatic: bookkeeping });
+    const next = session.suggestion();
+    if (next.kind === "fold")
+      expect(plainText(next.options[0]!.label)).toMatch(/^Next fold of the last inefficiency/);
+  });
+});

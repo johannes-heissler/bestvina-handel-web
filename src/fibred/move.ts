@@ -122,7 +122,26 @@ export type MoveKind = Move["kind"];
  * Applies a move. Most moves change `fs` in place and return it; the closed-surface moves return a new fibred
  * surface. Throws if a name doesn't resolve.
  */
-export function applyMove(fs: FibredSurface, move: Move): FibredSurface {
+/** After a fold step: the inefficiency the fold followed (now of order k − 1), and the strips of its next fold. */
+export interface FollowUp {
+  readonly point: PointRef;
+  readonly strips: readonly string[];
+}
+
+/** What a move tells about itself, for suggesting the natural next step. */
+export interface MoveHooks {
+  readonly followUp?: (followUp: FollowUp) => void;
+}
+
+export function applyMove(fs: FibredSurface, move: Move, hooks: MoveHooks = {}): FibredSurface {
+  const reportFollowUp = (next: ReturnType<typeof removeInefficiencyStep>) => {
+    if (next === undefined || next.order === 0) return;
+    const point = next.point.normalized(fs);
+    hooks.followUp?.({
+      point: { strip: point.edge.name, index: point.index },
+      strips: next.edgesToFold.map((e) => e.name),
+    });
+  };
   switch (move.kind) {
     case "collapse invariant subforest": {
       const centers = new Set(move.centers ?? []);
@@ -176,7 +195,7 @@ export function applyMove(fs: FibredSurface, move: Move): FibredSurface {
       else {
         const p = inefficiencyAt(fs, new EdgePoint(strip(fs, move.at.strip), move.at.index));
         if (p === undefined) throw new Error(`There is no inefficiency at ${move.at.strip}@${move.at.index}`);
-        removeInefficiencyStep(fs, p, choose);
+        reportFollowUp(removeInefficiencyStep(fs, p, choose));
       }
       return fs;
     }
@@ -191,7 +210,7 @@ export function applyMove(fs: FibredSurface, move: Move): FibredSurface {
       const p = inefficiencyAt(fs, new EdgePoint(strip(fs, move.at.strip), move.at.index));
       if (p === undefined) throw new Error(`There is no inefficiency at ${move.at.strip}@${move.at.index}`);
       const choose = foldChoice(fs, move.fold);
-      if (move.steps === "one") removeInefficiencyStep(fs, p, choose);
+      if (move.steps === "one") reportFollowUp(removeInefficiencyStep(fs, p, choose));
       else {
         let first = true; // the chosen fold applies to the first step only
         removeInefficiency(fs, p, (options) =>

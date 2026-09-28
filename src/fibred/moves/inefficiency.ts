@@ -229,6 +229,8 @@ export interface FoldCandidate {
   readonly representative: Inefficiency | undefined;
   /** Whether Dg of the strips lies in the pre-periphery. */
   readonly peripheral: boolean;
+  /** The places of all inefficiencies behind this fold, as "strip@index" (forward orientation). */
+  readonly places: readonly string[];
 }
 
 /**
@@ -276,6 +278,7 @@ export function foldCandidates(fs: FibredSurface): FoldCandidate[] {
       count: lowest.length,
       representative: lowest[0],
       peripheral: isPeripheral(edges),
+      places: found.map((p) => `${p.point.edge.name}@${p.point.index}`),
     };
   });
   for (const group of peripheralInefficiencies(fs)) {
@@ -288,6 +291,7 @@ export function foldCandidates(fs: FibredSurface): FoldCandidate[] {
       count: 0,
       representative: undefined,
       peripheral: true,
+      places: [],
     });
   }
   const rank = (c: FoldCandidate) => [c.peripheral ? 0 : 1, c.order ?? 0, -c.count] as const;

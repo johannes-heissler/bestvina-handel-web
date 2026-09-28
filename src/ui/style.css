@@ -196,6 +196,10 @@ input[type="number"] {
 .options li {
   padding: 0.12rem 0;
 }
+.options li.continues {
+  border-left: 3px solid var(--accent);
+  padding-left: 0.35rem;
+}
 .heading {
   display: flex;
   align-items: baseline;

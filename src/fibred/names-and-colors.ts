@@ -33,6 +33,15 @@ export const EDGE_COLORS: readonly Color[] = [
   Color.fromBytes(255, 123, 0),
   Color.fromBytes(108, 108, 108),
   Color.fromBytes(47, 196, 107),
+  // More colours, so that as far as possible every strip has its own.
+  Color.fromBytes(0, 137, 123),
+  Color.fromBytes(141, 85, 58),
+  Color.fromBytes(211, 47, 47),
+  Color.fromBytes(0, 172, 236),
+  Color.fromBytes(124, 150, 0),
+  Color.fromBytes(94, 53, 177),
+  Color.fromBytes(240, 98, 146),
+  Color.fromBytes(0, 83, 150),
 ];
 
 /** Colours for vertices. */
