@@ -306,3 +306,11 @@ to the target.
   corner, so the strands on the inner side folded back into small hooks. Now the centreline leaves the port along a
   short Bézier curve onto a tangent of the circle, goes around it counterclockwise, and returns along the tangent
   through the other port: smooth, and bending gently enough for the offset strands.
+- **Straight as drawn:** the layout straightens each crossing towards the _switch nodes_ of the Tutte layout, but the
+  drawn strip leaves its junction along its lane and an arc and runs straight only from the arc's tangent point T. So
+  after straightening the drawn curve had a kink at the side (e.g. "Reducible map" in the Klein model). Now the
+  renderer moves each crossing next to a junction to where the side meets the line from T to Φ(F), F being the next
+  point beyond the gluing (the other end's tangent point, or the next crossing), alternating with the arcs for a few
+  rounds, and moves its partner on the other side with it. It does this only for straightened layouts, and only up to
+  halfway to the neighbouring crossings on the same side, so the order is kept. The layout now exposes its gluing
+  maps and its number of rounds for this.

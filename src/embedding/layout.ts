@@ -54,6 +54,16 @@ export interface Layout {
   readonly strips: ReadonlyMap<Edge, readonly Piece[]>;
   /** The lateral width of each strip's strands, as a fraction of its port's width (for drawing to scale). */
   readonly relativeWidth: ReadonlyMap<Edge, number>;
+  /** For each glued port x: the isometry of the chart carrying the other side of the gluing beyond x (step 2′). */
+  readonly gluing: ReadonlyMap<OrientedEdge, Gluing>;
+  /** The rounds of straightening done (0: the crossings are evenly spaced). */
+  readonly straightening: number;
+}
+
+/** An isometry of the chart and its inverse. */
+export interface Gluing {
+  readonly apply: (z: Complex) => Complex;
+  readonly inverse: (z: Complex) => Complex;
 }
 
 export function layout(fs: FibredSurface, chart: Chart, options: LayoutOptions = {}): Layout {
@@ -281,7 +291,7 @@ export function layout(fs: FibredSurface, chart: Chart, options: LayoutOptions =
     if (!moved) break;
   }
   const strips = buildStrips(junctions);
-  return { chart, order, junctions, switches, strips, relativeWidth };
+  return { chart, order, junctions, switches, strips, relativeWidth, gluing, straightening: rounds };
 }
 
 /** w(e)^c, with the Perron–Frobenius widths (strips of width 0 or without one get the smallest positive width). */
@@ -397,7 +407,7 @@ function gluingMaps(
 }
 
 /** The parameter s of the point p + s(q − p) where the line through a and b meets the line through p and q. */
-function lineParameter(a: Complex, b: Complex, p: Complex, q: Complex): number | undefined {
+export function lineParameter(a: Complex, b: Complex, p: Complex, q: Complex): number | undefined {
   const d = b.sub(a);
   const r = q.sub(p);
   const denominator = d.re * r.im - d.im * r.re;

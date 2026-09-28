@@ -27,7 +27,7 @@ import {
   toKlein,
 } from "../geometry/hyperbolic";
 import type { Chart, Decoration } from "../embedding/chart";
-import type { Layout } from "../embedding/layout";
+import { type Layout, lineParameter } from "../embedding/layout";
 import { strandOrder } from "../embedding/strand-order";
 
 export type ViewKind = "trainTrack" | "standard" | "striped";
@@ -443,6 +443,7 @@ export function renderSvg(fs: FibredSurface, layout: Layout, options: RenderOpti
     junctionAt: (v: Vertex) => Complex,
     radiusOf: (v: Vertex) => number,
     toScreen: (z: Complex) => Complex,
+    transform: ((z: Complex) => Complex) | undefined,
   ): Map<Vertex, Map<Vertex, Complex>> => {
     const switchPoints = new Map<Vertex, Map<Vertex, Complex>>();
     const ends = new Map<OrientedEdge, StripEnd>();
@@ -567,21 +568,117 @@ export function renderSvg(fs: FibredSurface, layout: Layout, options: RenderOpti
         .add(layout.junctions.get(x.target) as Complex)
         .scale(0.5);
     };
+    // Where a strip end reaches a glued side right away, its crossing moves so that the drawn strip runs straight
+    // through the gluing: to where the side meets the line from the tangent point of its arc to Φ(F), F being the next
+    // point beyond the gluing (the other end's tangent point, or the next crossing). The layout straightens towards
+    // the switch nodes instead, which the drawn curves don't pass through. Found together with the arcs, in rounds.
+    const crossings = new Map<OrientedEdge, Complex>(); // for such ends: the crossing (chart)
+    /** The parameters (0 at right, 1 at left) of the crossings of the layout on each glued port, sorted. */
+    const onPort = new Map<OrientedEdge, number[]>();
+    for (const [y, port] of chart.ports) {
+      if (!layout.gluing.has(y)) continue;
+      const along = port.left.sub(port.right);
+      const parameters: number[] = [];
+      for (const pieces of layout.strips.values())
+        for (const piece of pieces)
+          for (const p of [piece[0], piece.at(-1)]) {
+            if (p === undefined) continue;
+            const w = p.sub(port.right);
+            const t = (w.re * along.re + w.im * along.im) / along.abs2();
+            if (
+              Math.abs(w.re * along.im - w.im * along.re) < 1e-9 * along.abs2() &&
+              t > -1e-9 &&
+              t < 1 + 1e-9
+            )
+              parameters.push(t);
+          }
+      onPort.set(
+        y,
+        [...new Set(parameters.map((t) => Number(t.toFixed(12))))].sort((a, b) => a - b),
+      );
+    }
+    /** How far a crossing at parameter t0 on the port of y may move: up to halfway to its neighbours. */
+    const room = (y: OrientedEdge, t0: number): [number, number] => {
+      const list = onPort.get(y) ?? [];
+      const i = list.findIndex((t) => Math.abs(t - t0) < 1e-9);
+      const lower = i > 0 ? ((list[i - 1] as number) + t0) / 2 : 0.02;
+      const upper = i >= 0 && i < list.length - 1 ? ((list[i + 1] as number) + t0) / 2 : 0.98;
+      return [lower, upper];
+    };
+    const firstGluing = (x: OrientedEdge) => {
+      if (layout.straightening === 0) return undefined;
+      const letters = fs.mu.image(x.edge.forward).letters;
+      if (letters.length === 0) return undefined;
+      const y = x.isForward ? (letters[0] as OrientedEdge) : (letters.at(-1) as OrientedEdge).reversed;
+      const port = chart.ports.get(y);
+      const map = layout.gluing.get(y);
+      return port && map && port.stub === 0 ? { y, port, map, single: letters.length === 1 } : undefined;
+    };
+    /** The point after the gluing of x's first crossing, when the strip crosses more than one side (chart). */
+    const beyond = (x: OrientedEdge): Complex => {
+      const pieces = layout.strips.get(x.edge) as readonly (readonly Complex[])[];
+      return x.isForward
+        ? ((pieces[1] as readonly Complex[])[1] as Complex)
+        : ((pieces.at(-2) as readonly Complex[]).at(-2) as Complex);
+    };
+    const updateCrossings = (tangent: Map<OrientedEdge, Complex>) => {
+      for (const x of ends.keys()) {
+        const g = firstGluing(x);
+        const t = tangent.get(x);
+        if (g === undefined || t === undefined) continue;
+        if (g.single && !x.isForward) continue; // one crossing: set from the forward end
+        const far = g.single ? tangent.get(x.reversed) : beyond(x);
+        if (far === undefined) continue;
+        const s = lineParameter(t, g.map.apply(far), g.port.right, g.port.left);
+        if (s === undefined || !Number.isFinite(s)) continue;
+        const along = g.port.left.sub(g.port.right);
+        const pieces = layout.strips.get(x.edge) as readonly (readonly Complex[])[];
+        const current = (
+          x.isForward ? (pieces[0] as readonly Complex[]).at(-1) : (pieces.at(-1) as readonly Complex[])[0]
+        ) as Complex;
+        const w = current.sub(g.port.right);
+        const [lower, upper] = room(g.y, (w.re * along.re + w.im * along.im) / along.abs2());
+        const point = g.port.right.add(along.scale(Math.min(upper, Math.max(lower, s))));
+        crossings.set(x, point);
+        if (g.single) crossings.set(x.reversed, g.map.inverse(point));
+      }
+    };
     const arcs = new Map<OrientedEdge, { arc: Complex[]; tangent: Complex } | undefined>();
     let tangentPoints = new Map<OrientedEdge, Complex>();
-    for (let round = 0; round < 2; round++) {
+    for (let round = 0; round < 4; round++) {
       const next = new Map<OrientedEdge, Complex>();
       for (const [x, end] of ends) {
-        const arc = arcTowards(end, targetOf(x, tangentPoints));
+        const arc = arcTowards(end, crossings.get(x) ?? targetOf(x, tangentPoints));
         arcs.set(x, arc);
         if (arc) next.set(x, arc.tangent);
       }
       tangentPoints = next;
+      if (round < 3) updateCrossings(tangentPoints);
+    }
+    // The partners of moved crossings on the far side of the gluing start (or end) the next piece of their strip.
+    for (const [x, point] of crossings) {
+      const g = firstGluing(x);
+      if (g === undefined || g.single) continue;
+      const pieces = lines.get(x.edge) as Complex[][];
+      const chartPieces = layout.strips.get(x.edge) as readonly (readonly Complex[])[];
+      const i = x.isForward ? 1 : chartPieces.length - 2;
+      const piece = [...(chartPieces[i] as readonly Complex[])];
+      if (x.isForward) piece[0] = g.map.inverse(point);
+      else piece[piece.length - 1] = g.map.inverse(point);
+      // (Both ends of a strip with two crossings change the same middle piece.)
+      const other = crossings.get(x.reversed);
+      const og = firstGluing(x.reversed);
+      if (i === (x.isForward ? chartPieces.length - 2 : 1) && other && og && !og.single) {
+        if (x.isForward) piece[piece.length - 1] = og.map.inverse(other);
+        else piece[0] = og.map.inverse(other);
+      }
+      pieces[i] = display(piece, transform);
     }
     for (const [x, end] of ends) {
       const { line, atStart } = endAt(lines, x);
       const displayPath = atStart ? [...line] : line.toReversed();
-      const target = targetOf(x, tangentPoints);
+      const moved = crossings.get(x);
+      const target = moved ?? targetOf(x, tangentPoints);
       const arc = arcs.get(x);
       let result: Complex[];
       if (arc === undefined) {
@@ -602,7 +699,8 @@ export function renderSvg(fs: FibredSurface, layout: Layout, options: RenderOpti
           toScreen(end.radialEnd),
           ...arc.arc.map(toScreen),
           ...straight.map(toScreen),
-          ...displayPath.slice(k),
+          // A moved crossing ends this piece; otherwise the rest of the strip follows.
+          ...(moved ? [toScreen(moved)] : displayPath.slice(k)),
         ];
       }
       line.splice(0, line.length, ...(atStart ? result : result.toReversed()));
@@ -653,6 +751,7 @@ export function renderSvg(fs: FibredSurface, layout: Layout, options: RenderOpti
             junctionAt,
             (v) => radiusOf(v, transform),
             (z) => toDisplay(transform ? transform(z) : z),
+            transform,
           );
     // Round the corners of the drawn curves (where they enter bands, cross sides that aren't straightened, …).
     const cornerRadius = { none: 0, rounded: 6, spline: 14 }[smoothing] / scale;
