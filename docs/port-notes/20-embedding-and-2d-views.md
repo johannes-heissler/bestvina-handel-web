@@ -150,3 +150,18 @@ The bends after the straight part are now drawn **in polar coordinates around th
 
 So at every angle a strand that turns more lies inside, and the bends are nested without crossings, even for turns of
 more than 90°.
+
+## Update: smooth bends
+
+The bends are now constructed **in the chart**:
+
+- **Why:** in the Klein model each strip leaves its junction as a straight ray, while in the Poincaré disk it doesn't. A
+  bend constructed in the display therefore met the strip at an angle.
+- **The shape:** in polar coordinates around the junction, the radius grows linearly, and the angle turns from the
+  gate's direction to the strip's with the easing 6t⁵ − 15t⁴ + 10t³. It starts and ends radially, i.e. exactly in the
+  direction of the straight bundle and of the strip beyond.
+- **Length:** the bends are long enough that the radius grows noticeably while they turn. Otherwise the turn from
+  sideways to radial happens within a short stretch and looks like a corner.
+- **Nesting:** strands that turn further still end closer to the junction, so the bends stay nested.
+
+The points are mapped to the display afterwards, which keeps the curve smooth.
