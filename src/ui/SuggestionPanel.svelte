@@ -69,6 +69,19 @@
     const moves = selected.map((i) => suggestion.options[i]?.move).filter((m) => m !== undefined);
     if (moves.length > 0) app.apply(combine(moves), { thenAutomatic: true });
   }
+  /**
+   * The last moves up to the current state, back to the last one that explains what it did (usually the move chosen,
+   * followed by the automatic steps after it), at most five.
+   */
+  const recent = $derived.by(() => {
+    const list: NonNullable<typeof node>[] = [];
+    for (let n = node; n?.parent !== undefined && list.length < 5; n = n.parent) {
+      list.unshift(n);
+      if (n.steps?.length) break;
+    }
+    return list.some((n) => n.steps?.length) ? list : [];
+  });
+
   function toggleAutomatic(kind: SuggestionKind) {
     app.automatic = app.automatic.includes(kind) ? app.automatic.filter((k) => k !== kind) : [...app.automatic, kind];
   }
@@ -98,6 +111,7 @@
               />
               <TextView text={option.label} />
             </label>
+            {#if option.details}<div class="hint option-details"><TextView text={option.details} /></div>{/if}
           </li>
         {/each}
       </ul>
@@ -153,6 +167,23 @@
       <button onclick={() => (app.showHistory = !app.showHistory)}>{app.showHistory ? "Hide" : "Show"} the tree</button
       >
     </div>
+    {#if recent.length > 0}
+      <details class="what-happened" open>
+        <summary>What happened</summary>
+        {#each recent as step (step.id)}
+          <div class="happened">
+            <div class="happened-move">
+              {#if step.move}<TextView text={describeMove(step.move)} surface={step.parent?.surface} />{/if}
+            </div>
+            {#if step.steps?.length}
+              <ol>
+                {#each step.steps as text, i (i)}<li><TextView text={text} surface={step.surface} /></li>{/each}
+              </ol>
+            {/if}
+          </div>
+        {/each}
+      </details>
+    {/if}
     {#if node.children.length > 0}
       <ul class="options">
         {#each node.children as child (child.id)}

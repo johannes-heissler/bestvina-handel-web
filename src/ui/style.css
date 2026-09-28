@@ -534,3 +534,29 @@ details.panel > summary h2 {
 .options li.discouraged {
   opacity: 0.55;
 }
+
+/* The details of an option (e.g. the inefficiency points of a fold). */
+.option-details {
+  margin: 0 0 0.3rem 1.6rem;
+  font-size: 0.8rem;
+}
+/* What the last moves did, step by step. */
+.what-happened summary {
+  cursor: pointer;
+  font-weight: 600;
+  margin: 0.5rem 0 0.3rem;
+}
+.happened {
+  margin: 0.3rem 0 0.6rem;
+}
+.happened-move {
+  font-style: italic;
+}
+.happened ol {
+  margin: 0.2rem 0 0 1.2rem;
+  padding: 0;
+  font-size: 0.85rem;
+}
+.happened li {
+  margin: 0.15rem 0;
+}

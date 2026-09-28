@@ -10,7 +10,14 @@
  */
 import type { FibredSurface } from "../fibred/fibred-surface";
 import { applyMove, type FollowUp, type Move } from "../fibred/move";
-import { autopilot, type AutopilotOptions, nextSuggestion, type Suggestion } from "../fibred/suggestions";
+import {
+  autopilot,
+  type AutopilotOptions,
+  nextSuggestion,
+  type Suggestion,
+  type Text,
+} from "../fibred/suggestions";
+import { narrated } from "../fibred/narration";
 import { type FibredSurfaceOptions, initialFibredSurface, type SurfaceModel } from "../examples/models";
 import { buildPreset, PRESETS, randomGenus2 } from "../examples/presets";
 
@@ -39,6 +46,8 @@ export interface HistoryNode {
    * fold, so that this fold is suggested first.
    */
   readonly followUp?: FollowUp;
+  /** What the move did, step by step (subdivisions, isotopies, folds, …); empty if it doesn't say. */
+  readonly steps?: readonly Text[];
 }
 
 export class Session {
@@ -83,10 +92,12 @@ export class Session {
     const copy = this.current.surface.copy();
     copy.onError = () => {};
     const hint: { followUp?: FollowUp } = {};
-    const result = applyMove(copy, move, { followUp: (point) => (hint.followUp = point) });
+    const { result, steps } = narrated(() =>
+      applyMove(copy, move, { followUp: (point) => (hint.followUp = point) }),
+    );
     const problems = result.checkIntegrity();
     if (problems.length > 0) throw new Error(problems.join("\n"));
-    return this.select(this.addChild(this.current, move, result, hint.followUp));
+    return this.select(this.addChild(this.current, move, result, hint.followUp, steps));
   }
 
   /**
@@ -99,11 +110,12 @@ export class Session {
     let node = this.current;
     const { stoppedAt } = autopilot(copy, {
       ...options,
-      onStep: (move, surface) => {
+      ...(this.current.followUp && { followUp: this.current.followUp }),
+      onStep: (move, surface, steps) => {
         const existing = node.children.find((c) => JSON.stringify(c.move) === JSON.stringify(move));
         // Bookkeeping steps keep the hint of the fold before them (the strips of the next fold keep their names).
         const keep = move.kind === "fold" || move.kind === "remove inefficiency" ? undefined : node.followUp;
-        node = existing ?? this.addChild(node, move, surface.copy(), keep);
+        node = existing ?? this.addChild(node, move, surface.copy(), keep, steps);
       },
     });
     this.select(node);
@@ -167,6 +179,7 @@ export class Session {
     move: Move,
     surface: FibredSurface,
     followUp?: FollowUp,
+    steps?: readonly Text[],
   ): HistoryNode {
     const model = surface.spine0 === parent.surface.spine0 ? parent.model : ribbonModelOf(surface);
     const node: HistoryNode = {
@@ -177,6 +190,7 @@ export class Session {
       surface,
       model,
       ...(followUp && { followUp }),
+      ...(steps && steps.length > 0 && { steps }),
     };
     parent.children.push(node);
     return node;

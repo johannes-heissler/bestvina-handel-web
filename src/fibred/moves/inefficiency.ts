@@ -12,6 +12,7 @@ import { findGates } from "../gates";
 import { type FoldOption, foldInitialSegments, foldOptions, type PointTransform } from "./fold";
 import { pullTight, pullTightExtremalJunction } from "./pull-tight";
 import { subdivide } from "./subdivide";
+import { narrate } from "../narration";
 
 /**
  * An inefficiency: a point inside an image g(e) where g turns illegally, i.e. the strips a = Dg-before and
@@ -102,20 +103,52 @@ export function removeInefficiencyStep(
 ): Inefficiency | undefined {
   const source = p.edgesToFold[0]?.source;
   if (p.order === 0 || source === undefined) {
+    narrate([
+      "The inefficiency at ",
+      p.point.describe(fs),
+      " has order 0: it is a backtracking. Pull it tight.",
+    ]);
     pullTight(fs, new Set([p.point.dgAfter(fs) as OrientedEdge]));
     return undefined;
   }
   if (p.edgesToFold.length === fs.graph.valence(source)) {
+    narrate([
+      "All images at the junction ",
+      { junction: source.name },
+      " start alike, so instead of folding them, pull tight there (move the junction along their common start).",
+    ]);
     pullTightExtremalJunction(fs, source); // all images at the junction start alike: pull tight instead of folding
     return undefined;
   }
+  narrate([
+    `The inefficiency at ${p.point.describe(fs)} has order ${p.order}: the strips on both sides of this point are mapped by Dg`,
+    p.order > 1 ? superscript(p.order) : "",
+    " to the same strip, so g",
+    p.order > 1 ? superscript(p.order) : "",
+    " maps the point to a backtracking. Removing it starts by folding the initial segments of ",
+    ...p.edgesToFold.flatMap((e, j) => [...(j === 0 ? [] : [", "]), { strip: e.name }]),
+    " at ",
+    { junction: source.name },
+    p.initialSegment === 1
+      ? ", whose images agree in their first letter."
+      : `, whose images agree in the first ${p.initialSegment} letters.`,
+  ]);
 
   let point = p.point.normalized(fs);
   let edgesToFold = [...p.edgesToFold];
   // The subdivision points must differ from the inefficiency point itself.
   let i = p.initialSegment;
   while (i > 0 && edgesToFold.some((e) => new EdgePoint(e, i).equals(point, fs))) i--;
+  if (i > 0 && i < p.initialSegment)
+    narrate([
+      `Folding all ${p.initialSegment} letters would put a subdivision point exactly onto the inefficiency point (the point that is mapped to the backtracking), and the next step could not continue there. So fold only the first ${i}.`,
+    ]);
   if (i === 0) {
+    narrate([
+      "Case 2 of the thesis: the images agree only in their first letter, and folding it would put the new junction exactly onto the inefficiency point, so that the next fold would undo it. So first make the first letter shorter: subdivide c = Dg(",
+      { strip: (edgesToFold[0] as OrientedEdge).name },
+      ") after the first letter of its image (and first the strips Dg(c), Dg²(c), … if the image of c is a single strip), then fold that shorter segment.",
+    ]);
     // Split c = Dg(edgesToFold) (or, if g(c) is a single strip, its first iterate with a longer image) after one
     // letter, so that the images to fold start with a shorter strip.
     ({ point, edgesToFold } = splitFirstStrip(fs, edgesToFold, point));
@@ -132,6 +165,14 @@ export function removeInefficiencyStep(
   });
 
   const next = inefficiencyAt(fs, transform(point));
+  if (next !== undefined && next.order === p.order - 1)
+    narrate(
+      next.order === 0
+        ? ["The point is now a backtracking (order 0): pulling tight removes it."]
+        : [
+            `The point is now an inefficiency of order ${next.order}, at ${next.point.describe(fs)}: fold again there next.`,
+          ],
+    );
   if (next === undefined || next.order !== p.order - 1)
     fs.reportInconsistency(
       `Folding did not lower the order of the inefficiency at ${p.point.describe(fs)} from ${p.order} to ${p.order - 1}`,
@@ -173,6 +214,13 @@ function splitFirstStrip(
     const e = toSplit[j] as OrientedEdge;
     const length = fs.g.image(e).length; // the images of the later strips got longer through the earlier splits
     const { first, second, transform } = subdivide(fs, e.edge, e.isForward ? 1 : length - 1);
+    narrate([
+      "Subdivide it after the first letter of its image, into ",
+      { strip: first.name },
+      " and ",
+      { strip: second.name },
+      ".",
+    ]);
     transforms.push(transform);
     // A strip end at the source of the subdivided strip now belongs to the first part, one at its target to
     // the second part.
@@ -299,4 +347,9 @@ export function foldCandidates(fs: FibredSurface): FoldCandidate[] {
     const [ra, rb] = [rank(a), rank(b)];
     return ra[0] - rb[0] || ra[1] - rb[1] || ra[2] - rb[2];
   });
+}
+
+/** A number as superscript digits (for powers in explanations). */
+function superscript(n: number): string {
+  return [...String(n)].map((d) => "⁰¹²³⁴⁵⁶⁷⁸⁹"[Number(d)]).join("");
 }

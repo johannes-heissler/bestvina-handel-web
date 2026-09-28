@@ -26,6 +26,7 @@ import { disconnectedJunctions, type SplitPiece, splitJunctions } from "./moves/
 import { finiteOrder, type ReductionCandidate, reductionCandidates } from "./moves/reducibility";
 import { valenceOneJunctions, valenceTwoJunctions } from "./moves/valence";
 import { EdgePoint } from "./edge-point";
+import { narrated } from "./narration";
 import { perronFrobenius } from "./perron-frobenius";
 import { prongs } from "./singular-leaves";
 import { trainTrack } from "./train-track";
@@ -67,6 +68,8 @@ export interface MoveOption {
   readonly rating?: number;
   /** Possible, but not the step of the algorithm now (shown greyed out). */
   readonly discouraged?: boolean;
+  /** More about the option, shown under it (e.g. the inefficiency points behind a fold). */
+  readonly details?: Text;
 }
 
 export type SuggestionKind =
@@ -216,7 +219,21 @@ function nextStep(fs: FibredSurface, context: SuggestionContext): Suggestion {
       };
   }
 
-  const valenceTwo = valenceTwoJunctions(fs);
+  // While an inefficiency of higher order is being removed fold by fold, its next fold needs the junctions of valence
+  // 2 that the previous fold created (the subdivision points): removing them would undo the fold, and the same fold
+  // would be suggested again and again. So they wait until the inefficiency is gone.
+  const followUp = context.followUp;
+  const pending =
+    followUp !== undefined &&
+    foldCandidates(fs).some(
+      (c) =>
+        c.places.includes(`${followUp.point.strip}@${followUp.point.index}`) ||
+        sameNames(
+          c.edgesToFold.map((e) => e.name),
+          followUp.strips,
+        ),
+    );
+  const valenceTwo = pending ? [] : valenceTwoJunctions(fs);
   if (valenceTwo.length > 0)
     return {
       kind: "remove valence-2 junctions",
@@ -234,7 +251,6 @@ function nextStep(fs: FibredSurface, context: SuggestionContext): Suggestion {
   const folds = foldCandidates(fs);
   // The natural next step after a fold: the next fold of the inefficiency it followed, first and marked.
   // Matched by its place in the images, or (after pulling tight, which changes the images) by the strips to fold.
-  const followUp = context.followUp;
   const continues = (c: FoldCandidate) =>
     followUp !== undefined &&
     (c.places.includes(`${followUp.point.strip}@${followUp.point.index}`) ||
@@ -270,6 +286,7 @@ function nextStep(fs: FibredSurface, context: SuggestionContext): Suggestion {
           },
           label: [...(continues(c) ? ["Next fold of the last inefficiency: "] : []), ...foldLabel(fs, c)],
           ...(c.order !== undefined && { rating: c.order }),
+          ...(c.places.length > 0 && { details: placesText(fs, c.places) }),
         };
       }),
       multiple: false,
@@ -464,6 +481,16 @@ function splitPieces(fs: FibredSurface): { pieces: readonly SplitPiece[]; curves
     return { pieces: [], curves: [] };
   }
   return { pieces, curves: copy.reductionCurves.map(String).filter((c) => !before.has(c)) };
+}
+
+/** The inefficiency points behind a fold ("strip@index"), as the images with the point marked by "|". */
+function placesText(fs: FibredSurface, places: readonly string[]): Text {
+  const described = places.flatMap((place) => {
+    const at = place.lastIndexOf("@");
+    const edge = fs.graph.edges.find((e) => e.name === place.slice(0, at));
+    return edge ? [new EdgePoint(edge.forward, Number(place.slice(at + 1))).describe(fs)] : [];
+  });
+  return [`Inefficiency ${described.length === 1 ? "point" : "points"}: `, described.join("; ")];
 }
 
 function sameNames(a: readonly string[], b: readonly string[]): boolean {
@@ -666,11 +693,13 @@ export const DEFAULT_AUTOMATIC: ReadonlySet<SuggestionKind> = new Set<Suggestion
 ]);
 
 export interface AutopilotOptions {
+  /** The follow-up of the fold before the start (see `SuggestionContext`); bookkeeping steps keep it. */
+  readonly followUp?: FollowUp;
   /** The suggestion kinds whose default is applied without asking; the autopilot stops at any other. */
   readonly automatic?: ReadonlySet<SuggestionKind>;
   readonly maxSteps?: number;
   /** Called after each move with the resulting surface, e.g. to add it to the history (copy it there). */
-  readonly onStep?: (move: Move, surface: FibredSurface) => void;
+  readonly onStep?: (move: Move, surface: FibredSurface, steps: readonly Text[]) => void;
 }
 
 export interface AutopilotResult {
@@ -693,15 +722,21 @@ export function autopilot(fs: FibredSurface, options: AutopilotOptions = {}): Au
   const maxSteps = options.maxSteps ?? 20 * fs.graph.edgeCount + 20;
   const moves: Move[] = [];
   let surface = fs;
-  let suggestion = nextSuggestion(surface);
+  let followUp = options.followUp;
+  let suggestion = nextSuggestion(surface, { followUp });
   while (automatic.has(suggestion.kind) && moves.length < maxSteps) {
     const move = suggestion.autopilotMove ?? (suggestion.options[0] as MoveOption).move;
-    surface = applyMove(surface, move);
+    // A fold starts a new follow-up (or ends it); the bookkeeping steps in between keep it.
+    const folds = move.kind === "fold" || move.kind === "remove inefficiency";
+    let next: FollowUp | undefined;
+    const done = narrated(() => applyMove(surface, move, { followUp: (point) => (next = point) }));
+    surface = done.result;
+    if (folds) followUp = next;
     moves.push(move);
     const problems = surface.checkIntegrity();
     if (problems.length > 0) throw new Error(`After "${move.kind}":\n${problems.join("\n")}`);
-    options.onStep?.(move, surface);
-    suggestion = nextSuggestion(surface);
+    options.onStep?.(move, surface, done.steps);
+    suggestion = nextSuggestion(surface, { followUp });
   }
   return { surface, moves, stoppedAt: suggestion };
 }

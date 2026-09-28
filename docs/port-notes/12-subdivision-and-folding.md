@@ -107,3 +107,21 @@ Folding initial segments subdivides a into a₁ a₂ and b into b₁ b₂, and f
 If one strip is folded completely, it is the folded segment itself and keeps its name. So names with digits or +/−
 only remain from other subdivisions. The palette has 16 colours now (the 8 of C# and 8 more), so that as far as
 possible every strip has its own colour.
+
+### Later changes: folding step by step with automatic steps; explaining the moves
+
+- **The loop with "Apply":** a fold step of an inefficiency of order k ≥ 2 creates junctions of valence 2 (the
+  subdivision points) that the next fold of the same inefficiency needs. With the automatic steps after "Apply",
+  "Remove valence-2 junctions" (which comes before folds in the priority order) removed them again, collapsing the
+  resulting invariant forest undid the rest, and the same fold was suggested forever. Now, while the follow-up of the
+  last fold (its inefficiency, now of order k − 1) is still among the fold candidates, junctions of valence 2 are not
+  suggested for removal. The autopilot (which runs the automatic steps) now gets and passes on this follow-up; before,
+  it asked for suggestions without it. The Case 2 check itself (the subdivision point may not be the inefficiency
+  point) was already done for single fold steps as well.
+- **What happened:** moves narrate their steps while they run (`narration.ts`: `narrate`, collected by `narrated`;
+  trying options on copies runs `quietly`). A fold step explains the inefficiency and its order, the Case 2 (why the
+  first letter is split first, and the subdivisions it takes), each subdivision (with the image split at the point),
+  the isotopies of junctions along paths in G₀ (so that μ fits), the fold itself with the name of the result, and the
+  order of the inefficiency afterwards. The steps are stored with the history node and shown under "What happened"
+  in the panel of the algorithm, for the last moves back to the one that explains itself. Fold options list their
+  inefficiency points (the images with the point marked by "|").

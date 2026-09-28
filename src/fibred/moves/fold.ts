@@ -12,6 +12,8 @@ import { EdgePoint } from "../edge-point";
 import type { FibredSurface } from "../fibred-surface";
 import { isCyclicInterval } from "../fibred-surface";
 import { isotopeJunction } from "./isotopy";
+import { narrate, quietly } from "../narration";
+import type { TextPart } from "../suggestions";
 import { subdivide } from "./subdivide";
 
 /** Maps forward-normalized edge points from before a move to after it (see {@link subdivide}). */
@@ -132,7 +134,17 @@ export function foldInitialSegments(
     if (fs.g.image(e).length < i || !fs.g.image(e).slice(0, i).equals(prefix))
       throw new Error(`g(${e}) doesn't start with ${prefix}`);
   inCyclicOrder(fs, edges); // checks adjacency before anything changes
-  if (options.move !== undefined) isotopeJunction(fs, v, options.move);
+  const startNames = edges.map((e) => e.name);
+  if (options.move !== undefined) {
+    narrate([
+      "Isotopy: move the junction ",
+      { junction: v.name },
+      " along γ = ",
+      pathText(options.move),
+      " in G₀ first (a loop is folded completely, so its μ-image has to become the μ-image of the folded segment).",
+    ]);
+    isotopeJunction(fs, v, options.move);
+  }
   const c = options.c ?? commonPrefix(edges.map((e) => fs.mu.image(e)));
   if (c.source !== undefined && c.source !== fs.mu.vertexImage(v))
     throw new Error(`${c} doesn't start at μ(${v})`);
@@ -158,6 +170,21 @@ export function foldInitialSegments(
   const remainders = new Map<OrientedEdge, Edge>();
   for (const [e, point] of splitPoints) {
     const atV = segments.get(e) as OrientedEdge;
+    const letters = fs.g.image(e).letters;
+    narrate([
+      "Subdivide ",
+      { strip: e.edge.name },
+      i === 1 ? " after the first letter" : ` after the first ${i} letters`,
+      " of its image: g(",
+      { strip: e.name },
+      ") = ",
+      ...letterText(letters.slice(0, i)),
+      " | ",
+      ...letterText(letters.slice(i)),
+      ". The new junction (of valence 2) sits at the subdivision point; the second part keeps the name ",
+      { strip: e.edge.name },
+      ".",
+    ]);
     if (atV.edge !== point.edge.edge)
       throw new Error(`The initial segments of both ends of ${e.edge} overlap; they can't be folded`);
     // Subdivide so that the part at v has an empty μ-image, then move the new junction along c.
@@ -172,10 +199,34 @@ export function foldInitialSegments(
       if (value.edge === first) segments.set(key, value.isForward ? first.forward : second.backward);
     remainders.set(e, (segments.get(e) as OrientedEdge).edge === first ? second : first);
     for (const [key, p] of splitPoints) splitPoints.set(key, transform(p));
+    if (!c.isEmpty)
+      narrate([
+        "Isotopy: move the new junction along c = ",
+        pathText(c),
+        " in G₀, so that the initial segment crosses the sides like the folded segment will (μ = c) and the rest has μ = c̄ μ(",
+        { strip: e.edge.name },
+        ").",
+      ]);
     isotopeJunction(fs, junction, c);
   }
   for (const e of full) {
     const gamma = fs.mu.image(e).inverse.concat(c).reduced(); // move t(e) so that μ(e) becomes c
+    if (!gamma.isEmpty)
+      narrate([
+        "Isotopy: move the junction ",
+        { junction: e.target.name },
+        " at the end of ",
+        { strip: e.name },
+        " along γ = μ(",
+        { strip: e.name },
+        ")⁻¹ c = ",
+        pathText(gamma),
+        " in G₀, so that μ(",
+        { strip: e.name },
+        ") = c = ",
+        pathText(c),
+        " (this changes μ of the other strips there as well).",
+      ]);
     isotopeJunction(fs, e.target, gamma);
   }
 
@@ -196,7 +247,40 @@ export function foldInitialSegments(
       fs.graph.edges.filter((x) => x !== kept.edge).map((x) => x.color),
     );
   }
+  narrate([
+    "Fold the initial segments of ",
+    ...nameList(startNames),
+    " at ",
+    { junction: v.name },
+    " (image under g: ",
+    ...letterText(fs.g.image(kept).letters),
+    "; μ = ",
+    pathText(c),
+    ") into one strip ",
+    { strip: kept.edge.name },
+    full.length === 0 ? " (a new name and colour)." : ` (the strip folded completely keeps its name).`,
+  ]);
   return { folded: kept, transform: (point) => transforms.reduce((p, t) => t(p), point) };
+}
+
+/** Names of strips as structured text: "a, b and c". */
+function nameList(names: readonly string[]): TextPart[] {
+  return names.flatMap((name, i) => [
+    ...(i === 0 ? [] : i === names.length - 1 ? [" and "] : [", "]),
+    { strip: name },
+  ]);
+}
+
+/** The letters of a path in G as structured text (the names of the strips). */
+function letterText(letters: readonly OrientedEdge[]): TextPart[] {
+  return letters.length === 0
+    ? ["·"]
+    : letters.flatMap((x, i) => (i === 0 ? [{ strip: x.name }] : [" ", { strip: x.name }]));
+}
+
+/** A path in G₀ as text (its letters are sides of the model, not strips). */
+function pathText(path: EdgePath): string {
+  return path.isEmpty ? "(empty)" : String(path);
 }
 
 /** A way to fold initial segments, and how many side crossings (the length of μ) there are afterwards. */
@@ -235,10 +319,12 @@ export function foldOptions(fs: FibredSurface, edges: readonly OrientedEdge[], i
       seen.add(c.key);
       const { copy, correspondence } = fs.copyWithCorrespondence();
       try {
-        foldInitialSegments(copy, edges.map(correspondence.orient), i, {
-          c, // c lives in G₀, which the copy shares
-          kept: correspondence.orient(preferred),
-        });
+        quietly(() =>
+          foldInitialSegments(copy, edges.map(correspondence.orient), i, {
+            c, // c lives in G₀, which the copy shares
+            kept: correspondence.orient(preferred),
+          }),
+        );
       } catch {
         continue; // e.g. an unsupported loop fold
       }
@@ -273,10 +359,12 @@ function loopFoldOptions(
       isotopeJunction(copy, correspondence.vertexMap.get(v) as Vertex, move);
       const c = copy.mu.image(correspondence.orient(loop));
       try {
-        foldInitialSegments(copy, edges.map(correspondence.orient), i, {
-          c,
-          kept: correspondence.orient(loop),
-        });
+        quietly(() =>
+          foldInitialSegments(copy, edges.map(correspondence.orient), i, {
+            c,
+            kept: correspondence.orient(loop),
+          }),
+        );
       } catch {
         continue; // e.g. two loops with different μ-images after the move
       }
