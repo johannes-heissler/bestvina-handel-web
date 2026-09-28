@@ -36,8 +36,6 @@ export interface LayoutOptions {
   readonly widthExponent?: number;
   /** Rounds of moving the crossings of glued sides so that the strips run straight through them (step 2′). */
   readonly smoothing?: number;
-  /** Whether the strips are drawn to scale: then straightening keeps room for their widths between the strands. */
-  readonly toScale?: boolean;
 }
 
 /** A polyline in chart coordinates, without gluing jumps. */
@@ -86,21 +84,9 @@ export function layout(fs: FibredSurface, chart: Chart, options: LayoutOptions =
       relativeWidth.set(s.strand.edge, Math.max(relativeWidth.get(s.strand.edge) ?? 0, w / total));
       position += w + gap;
     });
-    // Drawn to scale, strand i is 2 wᵢ/total wide in these coordinates: keep that room, plus 30% of the gaps between
-    // them. Otherwise they are thin: 30% of the first spacing is enough, and they may use the port up to 10% of its
-    // width from its ends.
-    const share = (i: number) => (2 * (weights[i] as number)) / total;
-    const g = (2 * gap) / total;
-    spacing.set(
-      edge,
-      options.toScale
-        ? {
-            gaps: us.slice(1).map((_, i) => share(i) / 2 + share(i + 1) / 2 + 0.3 * g),
-            lo: -1 + share(0) / 2 + 0.3 * g,
-            hi: 1 - share(us.length - 1) / 2 - 0.3 * g,
-          }
-        : { gaps: us.slice(1).map((u, i) => 0.3 * (u - (us[i] as number))), lo: -0.9, hi: 0.9 },
-    );
+    // Straightening keeps 30% of the first spacing between neighbours, within 90% of the port. (The widths drawn to
+    // scale are then shrunk to fit the positions, see `relativeWidth` below; the positions don't depend on them.)
+    spacing.set(edge, { gaps: us.slice(1).map((u, i) => 0.3 * (u - (us[i] as number))), lo: -0.9, hi: 0.9 });
   }
   /** The port coordinate (−1 right … +1 left, looking outwards) of the strand (e, k) at the port of y. */
   const portCoordinate = (e: Edge, k: number, y: OrientedEdge): number => {
@@ -219,6 +205,21 @@ export function layout(fs: FibredSurface, chart: Chart, options: LayoutOptions =
     }
     solve(60);
   }
+  // Drawn to scale, the strands must fit between their neighbours at their final positions: shrink all widths by one
+  // factor (so they stay proportional to w(e)^c) until none overlaps its neighbour or the end of its port.
+  let fit = 1;
+  for (const list of order.along.values())
+    for (const side of [front, back]) {
+      const us = list.map((p) => side.get(strandKey(p.strand)) as number);
+      const half = list.map((p) => relativeWidth.get(p.strand.edge) as number); // half the width, in u
+      us.forEach((u, i) => {
+        if (i === 0) fit = Math.min(fit, (u + 1) / (half[0] as number));
+        if (i === us.length - 1) fit = Math.min(fit, (1 - u) / (half[i] as number));
+        if (i > 0)
+          fit = Math.min(fit, (u - (us[i - 1] as number)) / ((half[i] as number) + (half[i - 1] as number)));
+      });
+    }
+  if (fit < 1) for (const [e, w] of relativeWidth) relativeWidth.set(e, w * Math.max(0, fit) * 0.9);
   const junctions = new Map(fs.graph.vertices.map((v) => [v, position.get(junctionNode(v)) as Complex]));
   const switches = new Map(fs.graph.orientedEdges.map((x) => [x, position.get(switchNode(x)) as Complex]));
 

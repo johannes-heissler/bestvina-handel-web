@@ -3,6 +3,7 @@
  * Node for tests and exports, and the UI puts it into the page.
  *
  * Views (your description of D3):
+ * - **standard**: the strips run to the centres of the junctions, drawn as small green disks;
  * - **trainTrack**: the train track τ: the strips, ending at the switches of their gates on a small transparent disk
  *   around each junction, with the infinitesimal branches of τ between the switches;
  * - **striped**: each strip as a ribbon with one stripe per piece of the image f(F) inside it, in the colour of the
@@ -29,7 +30,7 @@ import type { Chart, Decoration } from "../embedding/chart";
 import type { Layout } from "../embedding/layout";
 import { strandOrder } from "../embedding/strand-order";
 
-export type ViewKind = "trainTrack" | "striped";
+export type ViewKind = "trainTrack" | "standard" | "striped";
 export type Smoothing = "none" | "spline" | "rounded";
 
 export interface RenderOptions {
@@ -644,12 +645,20 @@ export function renderSvg(fs: FibredSurface, layout: Layout, options: RenderOpti
       toDisplay(
         transform ? transform(layout.junctions.get(v) as Complex) : (layout.junctions.get(v) as Complex),
       );
-    const switchPoints = attachToSwitches(
-      lines,
-      junctionAt,
-      (v) => radiusOf(v, transform),
-      (z) => toDisplay(transform ? transform(z) : z),
-    );
+    const switchPoints =
+      view === "standard"
+        ? new Map(fs.graph.vertices.map((v) => [v, new Map<Vertex, Complex>()]))
+        : attachToSwitches(
+            lines,
+            junctionAt,
+            (v) => radiusOf(v, transform),
+            (z) => toDisplay(transform ? transform(z) : z),
+          );
+    // Round the corners of the drawn curves (where they enter bands, cross sides that aren't straightened, …).
+    const cornerRadius = { none: 0, rounded: 6, spline: 14 }[smoothing] / scale;
+    if (cornerRadius > 0)
+      for (const pieces of lines.values())
+        for (const line of pieces) line.splice(0, line.length, ...roundCorners(line, cornerRadius));
 
     if (view === "striped") {
       let stripes: ReturnType<typeof strandOrder> | undefined;
@@ -693,6 +702,19 @@ export function renderSvg(fs: FibredSurface, layout: Layout, options: RenderOpti
       const transparent = view === "trainTrack";
       const radius = radiusOf(v, transform) * scale;
       if (radius < 0.3) continue;
+      if (view === "standard") {
+        // A plain disk over the ends of the strips.
+        const [x, y] = px(center).split(",");
+        group.push(
+          shaped(center, `<circle cx="${x}" cy="${y}" r="${fmt(radius * 0.7)}" fill="${JUNCTION_COLOR}"/>`),
+        );
+        if (labels) {
+          const offset = radiusOf(v, transform) * 1.3;
+          const at = center.add(new Complex(offset, offset));
+          group.push(label(at, v.name, JUNCTION_COLOR, px, 11, true, nameShape(at)));
+        }
+        continue;
+      }
       // In the copies, the outline, the branches and the switches shrink with the disk.
       const k = localScale(layout.junctions.get(v) as Complex, transform);
       group.push(
@@ -1199,6 +1221,68 @@ function refine(line: readonly Complex[], map: (z: Complex) => Complex, maxStep:
   for (let i = 1; i < line.length; i++) {
     const [a, b] = [line[i - 1] as Complex, line[i] as Complex];
     add(a, b, result.at(-1) as Complex, map(b), 0);
+  }
+  return result;
+}
+
+/**
+ * The polyline with its corners rounded: every vertex where the direction turns by more than about 8° is replaced by a
+ * quadratic Bézier curve from the point `radius` before it to the point `radius` after it (along the line), with the
+ * radius limited to 45% of the distance to the neighbouring corners and to the ends.
+ */
+function roundCorners(line: readonly Complex[], radius: number): Complex[] {
+  if (line.length < 3) return [...line];
+  const at = [0];
+  for (let i = 1; i < line.length; i++)
+    at.push((at[i - 1] as number) + (line[i] as Complex).sub(line[i - 1] as Complex).abs());
+  const total = at.at(-1) as number;
+  const corners: number[] = [];
+  for (let i = 1; i < line.length - 1; i++) {
+    const [a, p, b] = [line[i - 1] as Complex, line[i] as Complex, line[i + 1] as Complex];
+    const [u, v] = [p.sub(a), b.sub(p)];
+    if (u.abs() === 0 || v.abs() === 0) continue;
+    const turn = Math.abs(Math.atan2(u.re * v.im - u.im * v.re, u.re * v.re + u.im * v.im));
+    if (turn > 0.14) corners.push(i);
+  }
+  if (corners.length === 0) return [...line];
+  /** The point at arc length s along the line. */
+  const pointAt = (s: number): Complex => {
+    let i = 1;
+    while (i < line.length - 1 && (at[i] as number) < s) i++;
+    const [s0, s1] = [at[i - 1] as number, at[i] as number];
+    const t = s1 > s0 ? (s - s0) / (s1 - s0) : 0;
+    return (line[i - 1] as Complex).add((line[i] as Complex).sub(line[i - 1] as Complex).scale(t));
+  };
+  const spans = corners.map((i, k) => {
+    const s = at[i] as number;
+    const before = k > 0 ? s - (at[corners[k - 1] as number] as number) : s;
+    const after = k < corners.length - 1 ? (at[corners[k + 1] as number] as number) - s : total - s;
+    const r = Math.min(radius, 0.45 * before, 0.45 * after);
+    return { i, from: s - r, to: s + r };
+  });
+  const result: Complex[] = [];
+  let k = 0;
+  for (let i = 0; i < line.length; i++) {
+    const span = spans[k];
+    const s = at[i] as number;
+    if (span !== undefined && s > span.from && s < span.to) {
+      if (i === span.i) {
+        const [a, p, b] = [pointAt(span.from), line[i] as Complex, pointAt(span.to)];
+        for (let j = 0; j <= 8; j++) {
+          const t = j / 8;
+          result.push(
+            a
+              .scale((1 - t) * (1 - t))
+              .add(p.scale(2 * t * (1 - t)))
+              .add(b.scale(t * t)),
+          );
+        }
+        k++;
+      }
+      continue;
+    }
+    if (span !== undefined && s >= span.to) k++;
+    result.push(line[i] as Complex);
   }
   return result;
 }

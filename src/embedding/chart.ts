@@ -197,18 +197,34 @@ function planeChart(model: PlaneModel, spine: Spine): Chart {
   const petal = (x: OrientedEdge, p: Complex) => {
     const [out, back] = [ports.get(x) as Port, ports.get(x.reversed) as Port];
     const [start, end] = [out.right.add(out.left).scale(0.5), back.right.add(back.left).scale(0.5)];
-    const towardBase = start.add(end).scale(0.5).sub(p).arg();
-    const alpha = 0.35;
+    // Onto the circle around p along a tangent through the port, counterclockwise around it, and back along the tangent
+    // through the other port: the band then bends only gently (with a corner, or a sharp bend, the strands on its inner
+    // side would fold back). Short cubic Bézier curves make it leave and enter the ports perpendicularly.
+    const ccw = (phi: number) => Complex.fromPolar(1, phi + Math.PI / 2);
+    const tangentAngle = (q: Complex, arriving: boolean) => {
+      const d = q.sub(p);
+      const beta = Math.acos(Math.min(1, loopRadius / d.abs()));
+      return [d.arg() + beta, d.arg() - beta].find((phi) => {
+        const t = p.add(Complex.fromPolar(loopRadius, phi));
+        const along = arriving ? t.sub(q) : q.sub(t);
+        return along.re * ccw(phi).re + along.im * ccw(phi).im > 0;
+      }) as number;
+    };
+    const [phiIn, phiOut] = [tangentAngle(start, true), tangentAngle(end, false)];
+    const sweep = (((phiOut - phiIn) % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI) || 2 * Math.PI;
     const arc = Array.from({ length: 33 }, (_, i) =>
-      p.add(Complex.fromPolar(loopRadius, towardBase + alpha + ((2 * Math.PI - 2 * alpha) * i) / 32)),
+      p.add(Complex.fromPolar(loopRadius, phiIn + (sweep * i) / 32)),
     );
-    const centerline = [
-      start,
-      start.add(out.outward.scale(loopRadius * 0.3)),
-      ...arc,
-      end.add(back.outward.scale(loopRadius * 0.3)),
+    const [first, last] = [arc[0] as Complex, arc.at(-1) as Complex];
+    const [hIn, hOut] = [first.sub(start).abs() * 0.3, last.sub(end).abs() * 0.3];
+    const into = bezier(start, start.add(out.outward.scale(hIn)), first.sub(ccw(phiIn).scale(hIn)), first);
+    const outOf = bezier(
+      last,
+      last.add(ccw(phiIn + sweep).scale(hOut)),
+      end.add(back.outward.scale(hOut)),
       end,
-    ];
+    );
+    const centerline = [...into.slice(0, -1), ...arc, ...outOf.slice(1)];
     bands.set(x.edge, {
       kind: "path",
       centerline: x.isForward ? centerline : centerline.toReversed(),
@@ -399,6 +415,19 @@ function ribbonChart(spine: Spine): Chart {
 }
 
 // ─── Helpers ────────────────────────────────────────────────────────────────────────────────
+
+/** The cubic Bézier curve with these control points, sampled at 13 points. */
+function bezier(p0: Complex, p1: Complex, p2: Complex, p3: Complex): Complex[] {
+  return Array.from({ length: 13 }, (_, i) => {
+    const t = i / 12;
+    const u = 1 - t;
+    return p0
+      .scale(u * u * u)
+      .add(p1.scale(3 * u * u * t))
+      .add(p2.scale(3 * u * t * t))
+      .add(p3.scale(t * t * t));
+  });
+}
 
 /**
  * The convex region bounded by the chords of the circle (c, r) centred at the given directions, each spanning the angle

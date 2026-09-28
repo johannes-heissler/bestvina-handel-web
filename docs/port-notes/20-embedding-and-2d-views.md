@@ -289,3 +289,20 @@ to the target.
 - **Ribbon model:** a junction of valence k is a rounded k-gon: its ports are chords of its circle (nearly the sides
   of the inscribed regular k-gon, at most 1.5 radii long) joined by arcs, and the bands and half-bands are as wide as
   the ports, so nearly as wide as the junctions (petals at most half a radius, so that they don't overlap the disk).
+
+### Standard view again, corners, widths to scale, petals
+
+- **Standard view** (back): the strips run to the centres of the junctions, drawn as small filled green disks; no
+  gates, switches or infinitesimal branches.
+- **Corners** (formerly "Strips: smooth / rounded / straight", which hardly mattered any more because the spline
+  acted on the chart polylines before the renderer rebuilt the strip ends): the drawn curves themselves are rounded
+  where they turn by more than about 8° at a vertex, by a quadratic Bézier between the points r before and after it
+  (r = 14, 6 or 0 pixels for smooth, rounded, sharp, at most 45% of the distance to the neighbouring corners).
+- **Strip widths to scale no longer move the strands**: straightening keeps 30% of the first spacing between
+  neighbours, whether or not the widths are drawn to scale; drawn to scale, all widths w(e)^c are shrunk by one factor
+  until they fit between their neighbours and the ends of their ports. "Width exponent c" (formerly "Strand spacing
+  c") sets these widths, and the spacing only with 0 rounds of straightening.
+- **Petals of the plane model** were a straight stub from the port joined to the circle around the puncture at a
+  corner, so the strands on the inner side folded back into small hooks. Now the centreline leaves the port along a
+  short Bézier curve onto a tangent of the circle, goes around it counterclockwise, and returns along the tangent
+  through the other port: smooth, and bending gently enough for the offset strands.

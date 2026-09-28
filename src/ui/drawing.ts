@@ -64,7 +64,6 @@ export function draw(model: SurfaceModel, surface: FibredSurface, options: DrawO
     const layoutOptions: LayoutOptions = {
       widthExponent: options.widthExponent ?? 0,
       smoothing: options.straightening ?? 0,
-      toScale: options.stripWidth === "toScale",
     };
     const id = modelId(model);
     return renders.get(surface, JSON.stringify([id, options]), () =>

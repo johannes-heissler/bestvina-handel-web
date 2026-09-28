@@ -148,6 +148,7 @@
       >View
       <select bind:value={view}>
         <option value="trainTrack">Train track τ</option>
+        <option value="standard">Standard</option>
         <option value="striped">Striped f(F) ⊆ F</option>
       </select></label
     >
@@ -177,11 +178,12 @@
   {#if showOptions}
     <div class="toolbar options">
       <label
-        >Strips
+        title="How the corners of the strips are drawn, e.g. where they enter a band or cross a side that isn't straightened"
+        >Corners
         <select bind:value={smoothing}>
           <option value="spline">Smooth</option>
-          <option value="rounded">Rounded corners</option>
-          <option value="none">Straight</option>
+          <option value="rounded">Rounded</option>
+          <option value="none">Sharp</option>
         </select></label
       >
       <label
@@ -199,14 +201,15 @@
       {/if}
       <label title="Copies of the polygon by deck transformations">Copies <input type="number" min="0" max="4" bind:value={deckDepth} /></label>
       <label
-        title="The spacing of the strands where they cross a side, by the weights w(e)^c with the Perron–Frobenius widths w (c = 0: evenly). With straightening, it only sets the smallest gaps between neighbouring strands (room for the widths to scale)."
-        >Strand spacing c <input type="range" min="0" max="1" step="0.1" bind:value={widthExponent} /></label
+        title="The weights w(e)^c of the strips, with the Perron–Frobenius widths w (c = 0: all equal): the widths drawn with 'Strip widths to scale', and the spacing of the strands on the sides before straightening (with 0 rounds)."
+        >Width exponent c <input type="range" min="0" max="1" step="0.1" bind:value={widthExponent} /></label
       >
       <label
         title="Rounds of moving the crossings with the glued sides so that the strips run straight (geodesically) through them, keeping their order and staying on the side (0: evenly spaced crossings)"
         >Straightening <input type="range" min="0" max="30" step="1" bind:value={straightening} /> {straightening}</label
       >
-      <label title="Draw the strips as wide as their share of the sides they cross (their weights w(e)^c)"
+      <label
+        title="Draw the strips with widths proportional to w(e)^c, as wide as fits between their neighbours (the positions don't change)"
         ><input type="checkbox" bind:checked={toScale} /> Strip widths to scale</label
       >
       <label title="The dot under the mouse, shown in the polygon and in every copy; its radius in pixels at the centre of the model, shrinking with the metric (0: no dot)"
