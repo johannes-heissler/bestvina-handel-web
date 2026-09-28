@@ -57,4 +57,16 @@ describe("findGates", () => {
     expect([...pretrivialEdges(rose, g)].map((e) => e.name)).toEqual(["c"]);
     expect(gateNames(findGates(rose, g))).toEqual(["A", "B", "a", "b", "cC"]);
   });
+
+  it("puts pretrivial edges between two edges of one gate into that gate", () => {
+    const rose = new RibbonGraph();
+    const v = rose.addVertex();
+    const [a, b, c] = ["a", "b", "c"].map((name) => rose.addEdge(v, v, { name }));
+    // The star a c b A C B: c lies between a and b, C between A and B.
+    rose.setStar(v, [a!.forward, c!.forward, b!.forward, a!.backward, c!.backward, b!.backward]);
+    // Dg*: a ↦ a, b ↦ a; A ↦ B, B ↦ B (g(A) = g(B) = B A); c is pretrivial. So the gates stay consecutive:
+    // {a, c, b} and {A, C, B}.
+    const g = mapOf(rose, "a -> a b, b -> a b, c -> ");
+    expect(gateNames(findGates(rose, g))).toEqual(["ACB", "acb"]);
+  });
 });

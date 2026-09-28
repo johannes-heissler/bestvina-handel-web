@@ -217,3 +217,10 @@ Dg* can take the two edges of a turn to different junctions (skipping a pretrivi
 forest). The train track follows the closure of the infinitesimal branches under Dg* only while both switches are at
 the same junction; otherwise the pair is a turn only in the quotient by the pretrivial forest and gives no branch.
 The inefficiencies still use Dg for their order and fold, since folding works on the actual first letters.
+
+**Gates of pretrivial edges.** Dg* says nothing about pretrivial edges, and one gate of all pretrivial edges at a
+junction (as in C#) could split another gate: at q in one of your examples, the pretrivial end B lay between d and z,
+which Dg* puts into one gate (z ↦ C ↦ A1 ↦ d), so the gate was not consecutive and could not be drawn without a
+crossing. Now a run of pretrivial edges in the star whose neighbours on both sides are in the same gate joins that
+gate (collapsing the pretrivial forest brings those ends together anyway); any other run is a gate of its own. So
+gates are consecutive whenever the gates of the other edges are.

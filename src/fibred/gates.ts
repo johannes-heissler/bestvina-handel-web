@@ -45,8 +45,13 @@ export function reducedDerivative(
 
 /**
  * The gates of g : G → G. Two oriented edges e, e′ with the same source are in the same gate iff
- * Dg*ᵏ(e) = Dg*ᵏ(e′) for some k ≥ 0 (see `reducedDerivative`). The pretrivial edges at a junction form one gate,
- * as in the C# version.
+ * Dg*ᵏ(e) = Dg*ᵏ(e′) for some k ≥ 0 (see `reducedDerivative`).
+ *
+ * Dg* says nothing about the pretrivial edges, so their gates are a convention, chosen so that gates stay consecutive
+ * in the cyclic order: a run of pretrivial edges in the star whose neighbours on both sides are in the same gate joins
+ * that gate (collapsing the pretrivial edges would bring the ends there together anyway); any other run of pretrivial
+ * edges is a gate of its own. (The C# version put all pretrivial edges at a junction into one gate, which could split
+ * other gates.)
  *
  * It suffices to compare Dg*ᴺ(e) and Dg*ᴺ(e′) for N = the number of oriented edges: Dg* maps the non-pretrivial
  * edges to themselves, so after N steps both are periodic, and Dg* is injective on periodic edges, so if they agree
@@ -72,14 +77,39 @@ export function findGates<K = Vertex>(
     return limit.get(e);
   };
 
-  const gates = new Map<K, Map<OrientedEdge | undefined, OrientedEdge[]>>();
-  for (const v of graph.vertices)
-    for (const e of graph.star(v)) {
+  const gates = new Map<K, Map<OrientedEdge | string, OrientedEdge[]>>();
+  for (const v of graph.vertices) {
+    const star = graph.star(v);
+    const limits = star.map(dgPowerN);
+    /** The limit of the nearest edge in the star that is not pretrivial, going in the direction `step` from i. */
+    const nearest = (i: number, step: number): OrientedEdge | undefined => {
+      for (let k = 1; k < star.length; k++) {
+        const limit = limits[(((i + step * k) % star.length) + star.length) % star.length];
+        if (limit !== undefined) return limit;
+      }
+      return undefined;
+    };
+    star.forEach((e, i) => {
       const key = groupOf(v);
       if (!gates.has(key)) gates.set(key, new Map());
-      const byLimit = gates.get(key) as Map<OrientedEdge | undefined, OrientedEdge[]>;
-      const target = dgPowerN(e);
+      const byLimit = gates.get(key) as Map<OrientedEdge | string, OrientedEdge[]>;
+      let target: OrientedEdge | string | undefined = limits[i];
+      if (target === undefined) {
+        const [before, after] = [nearest(i, -1), nearest(i, 1)];
+        if (before !== undefined && before === after) target = before;
+        else {
+          // Its own gate: named after the first edge of its run of pretrivial edges.
+          let first = i;
+          while (
+            limits[(first - 1 + star.length) % star.length] === undefined &&
+            (first - 1 + star.length) % star.length !== i
+          )
+            first = (first - 1 + star.length) % star.length;
+          target = `pretrivial ${v.id} ${first}`;
+        }
+      }
       byLimit.set(target, [...(byLimit.get(target) ?? []), e]);
-    }
+    });
+  }
   return [...gates].flatMap(([at, byLimit]) => [...byLimit.values()].map((edges) => ({ at, edges })));
 }

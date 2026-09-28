@@ -222,3 +222,15 @@ to the target.
   point back to the chart, finds the copy of the polygon containing it, and returns the same point in the polygon
   and in every drawn copy, with the radius of a dot of constant hyperbolic size. The view draws them on an overlay.
 - Junction disks and names are drawn in the dark green of the C# junctions (26, 105, 58).
+
+### Sides, junctions in the copies, labels
+
+- **Polygon sides** are bands of constant hyperbolic width too (1.5 pixels at the centre), in a style the view lets you
+  choose: dashed (the default), dotted or solid. Dashes and dots have constant hyperbolic length. Towards an ideal
+  vertex a side is infinitely long, so where it is thinner than 0.6 pixels it is drawn solid (dashes there would be
+  invisible, and there would be tens of thousands of them; a long display segment is never cut at all).
+- **Junctions in the copies:** their disks were left out below one pixel of radius, so the second ring of copies had
+  none; now the limit is 0.3 pixels, and the outline, the infinitesimal branches and the switch dots shrink with the
+  disk.
+- **Strip names** sit beside their strips (on the left, half the width plus 8 pixels away) with a light halo, instead
+  of on them.

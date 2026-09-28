@@ -5,7 +5,7 @@
 <script lang="ts">
   import { untrack } from "svelte";
   import type { HyperbolicModel } from "../geometry/hyperbolic";
-  import type { Smoothing, ViewKind } from "../render/svg";
+  import type { SideStyle, Smoothing, ViewKind } from "../render/svg";
   import type { FibredSurface } from "../fibred/fibred-surface";
   import type { Text } from "../fibred/suggestions";
   import { matrixInfo, type MatrixInfo } from "../session/analysis";
@@ -20,6 +20,7 @@
   let view = $state<ViewKind>(untrack(() => initialView)); // the prop only sets the initial view
   let model = $state<HyperbolicModel>("poincare");
   let smoothing = $state<Smoothing>("spline");
+  let sideStyle = $state<SideStyle>("dashed");
   let deckDepth = $state(0);
   let widthExponent = $state(0);
   let toScale = $state(false);
@@ -36,6 +37,7 @@
       view,
       model,
       smoothing,
+      sideStyle,
       deckDepth,
       widthExponent,
       labels,
@@ -155,6 +157,14 @@
         <option value="spline">Smooth</option>
         <option value="rounded">Rounded corners</option>
         <option value="none">Straight</option>
+      </select></label
+    >
+    <label
+      >Sides
+      <select bind:value={sideStyle}>
+        <option value="dashed">Dashed</option>
+        <option value="dotted">Dotted</option>
+        <option value="solid">Solid</option>
       </select></label
     >
     <label title="Copies of the polygon by deck transformations">Copies <input type="number" min="0" max="4" bind:value={deckDepth} /></label>

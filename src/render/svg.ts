@@ -36,7 +36,11 @@ export interface RenderOptions {
   readonly labels?: boolean;
   /** "uniform": thin lines; "toScale": as wide as their share of the ports (with the layout's width exponent c). */
   readonly stripWidth?: "uniform" | "toScale";
+  /** How the sides of the polygon are drawn (with constant hyperbolic width, like the strips). */
+  readonly sideStyle?: SideStyle;
 }
+
+export type SideStyle = "solid" | "dashed" | "dotted";
 
 export interface Rendered {
   readonly svg: string;
@@ -170,7 +174,15 @@ export function renderSvg(fs: FibredSurface, layout: Layout, options: RenderOpti
   /** The width of e in display units at the display point z, across the unit direction n (at least 0.4 pixels). */
   const widthAt = (e: Edge, z: Complex, n: Complex) => Math.max(0.4 / scale, trueWidth(e) / metric(z, n));
   /** The region between the offsets from·w and to·w across a display polyline of e (w: the width of e there). */
-  const band = (e: Edge, line: readonly Complex[], from: number, to: number): string => {
+  const band = (e: Edge, line: readonly Complex[], from: number, to: number): string =>
+    bandPath(line, (z, n) => widthAt(e, z, n), from, to);
+  /** The same for any width function (display units at a display point, across a unit direction). */
+  const bandPath = (
+    line: readonly Complex[],
+    width: (z: Complex, n: Complex) => number,
+    from: number,
+    to: number,
+  ): string => {
     const left: Complex[] = [];
     const right: Complex[] = [];
     line.forEach((p, i) => {
@@ -178,11 +190,52 @@ export function renderSvg(fs: FibredSurface, layout: Layout, options: RenderOpti
       const length = t.abs();
       if (length === 0) return;
       const normal = new Complex(-t.im / length, t.re / length);
-      const w = widthAt(e, p, normal);
+      const w = width(p, normal);
       left.push(p.add(normal.scale(from * w)));
       right.push(p.add(normal.scale(to * w)));
     });
     return left.length < 2 ? "" : `M${[...left, ...right.toReversed()].map(px).join("L")}Z`;
+  };
+
+  // The sides of the polygon: 1.5 pixels wide at the centre, constant in the hyperbolic metric; solid, or dashes and
+  // dots whose lengths are constant in the hyperbolic metric as well.
+  const sideWidth = (1.5 / scale) * centreMetric;
+  const sideWidthAt = (z: Complex, n: Complex) => Math.max(0.3 / scale, sideWidth / metric(z, n));
+  /** The hyperbolic length of the display segment from a to b (display units for flat charts). */
+  const lengthOf = (a: Complex, b: Complex) => {
+    const step = b.sub(a);
+    const length = step.abs();
+    return length === 0 ? 0 : length * metric(a.add(b).scale(0.5), step.scale(1 / length));
+  };
+  const side = (line: readonly Complex[], color: string): string => {
+    const style = options.sideStyle ?? "solid";
+    const solid = (piece: readonly Complex[]) =>
+      `<path d="${bandPath(piece, sideWidthAt, -0.5, 0.5)}" fill="${color}"/>`;
+    if (style === "solid") return solid(line);
+    const [on, off] = style === "dashed" ? [7 * sideWidth, 4 * sideWidth] : [0, 3.5 * sideWidth];
+    // Towards an ideal vertex (and in the copies) the sides get arbitrarily long and thin; where they are thinner than
+    // 0.6 pixels, dashes can't be seen (and there would be many of them), so they are drawn solid there.
+    const visible = (p: Complex) => sideWidthAt(p, Complex.ONE) * scale >= 0.6;
+    const runs: { visible: boolean; points: Complex[] }[] = [];
+    for (const p of line) {
+      const last = runs.at(-1);
+      if (last && last.visible === visible(p)) last.points.push(p);
+      else runs.push({ visible: visible(p), points: last ? [last.points.at(-1) as Complex, p] : [p] });
+    }
+    return runs
+      .map((run) => {
+        if (!run.visible) return solid(run.points);
+        const pieces = dashes(run.points, lengthOf, on, off);
+        if (style === "dashed") return pieces.map(solid).join("");
+        return pieces
+          .map((piece) => {
+            const at = piece[0] as Complex;
+            const [x, y] = px(at).split(",");
+            return `<circle cx="${x}" cy="${y}" r="${fmt(sideWidthAt(at, Complex.ONE) * 0.6 * scale)}" fill="${color}"/>`;
+          })
+          .join("");
+      })
+      .join("");
   };
 
   /** Moves the ends of the strips at junctions onto the switch points of their gates. */
@@ -361,8 +414,11 @@ export function renderSvg(fs: FibredSurface, layout: Layout, options: RenderOpti
   const drawSurface = (transform: ((z: Complex) => Complex) | undefined, opacity: number) => {
     const group: string[] = [];
     const labels = (options.labels ?? true) && transform === undefined; // copies get no labels
-    for (const d of chart.decorations)
-      group.push(decoration(d, (z) => toDisplay(transform ? transform(z) : z), px, scale, labels));
+    for (const d of chart.decorations) {
+      const toScreen = (z: Complex) => toDisplay(transform ? transform(z) : z);
+      if (d.kind === "side") group.push(side(densify([d.from, d.to], 0.01).map(toScreen), css(d.color)));
+      group.push(decoration(d, toScreen, px, scale, labels));
+    }
 
     const lines = new Map<Edge, Complex[][]>(fs.graph.edges.map((e) => [e, stripLines(e, transform)]));
     const junctionAt = (v: Vertex) =>
@@ -417,20 +473,24 @@ export function renderSvg(fs: FibredSurface, layout: Layout, options: RenderOpti
       const points = switchPoints.get(v) as Map<Vertex, Complex>;
       const transparent = view === "trainTrack";
       const radius = radiusOf(v, transform) * scale;
-      if (radius < 1) continue;
+      if (radius < 0.3) continue;
+      // In the copies, the outline, the branches and the switches shrink with the disk.
+      const k = localScale(layout.junctions.get(v) as Complex, transform);
       group.push(
-        `<circle cx="${px(center).split(",")[0]}" cy="${px(center).split(",")[1]}" r="${fmt(radius)}" fill="${transparent ? "#ffffff" : "#fafafa"}" fill-opacity="${transparent ? 0.35 : 1}" stroke="${JUNCTION_COLOR}" stroke-width="1"/>`,
+        `<circle cx="${px(center).split(",")[0]}" cy="${px(center).split(",")[1]}" r="${fmt(radius)}" fill="${transparent ? "#ffffff" : "#fafafa"}" fill-opacity="${transparent ? 0.35 : 1}" stroke="${JUNCTION_COLOR}" stroke-width="${fmt(k)}"/>`,
       );
       if (transparent)
         for (const [a, b] of gatesOf(v).infinitesimal) {
           const [p, q] = [points.get(a), points.get(b)];
           if (p && q)
             group.push(
-              `<path d="M${px(p)}Q${px(center)} ${px(q)}" stroke="#555" stroke-width="1" fill="none"/>`,
+              `<path d="M${px(p)}Q${px(center)} ${px(q)}" stroke="#555" stroke-width="${fmt(k)}" fill="none"/>`,
             );
         }
       for (const p of points.values())
-        group.push(`<circle cx="${px(p).split(",")[0]}" cy="${px(p).split(",")[1]}" r="1.6" fill="#333"/>`);
+        group.push(
+          `<circle cx="${px(p).split(",")[0]}" cy="${px(p).split(",")[1]}" r="${fmt(1.6 * k)}" fill="#333"/>`,
+        );
       if (labels)
         group.push(
           label(
@@ -446,8 +506,16 @@ export function renderSvg(fs: FibredSurface, layout: Layout, options: RenderOpti
     if (labels)
       for (const e of fs.graph.edges) {
         const line = lines.get(e)?.reduce((a, b) => (b.length > a.length ? b : a), []) ?? [];
-        const mid = line[Math.floor(line.length / 2)];
-        if (mid) group.push(label(mid, e.name, css(e.color), px, 12, true));
+        const i = Math.floor(line.length / 2);
+        const mid = line[i];
+        if (!mid) continue;
+        // Beside the strip (on its left), not on it.
+        const t = (line[Math.min(line.length - 1, i + 1)] as Complex).sub(
+          line[Math.max(0, i - 1)] as Complex,
+        );
+        const normal = t.abs() === 0 ? Complex.I : new Complex(-t.im, t.re).scale(1 / t.abs());
+        const at = mid.add(normal.scale(widthAt(e, mid, normal) / 2 + 8 / scale));
+        group.push(label(at, e.name, css(e.color), px, 12, true));
       }
     parts.push(`<g opacity="${opacity}">${group.join("")}</g>`);
   };
@@ -520,7 +588,7 @@ function decoration(
       const along = d.to.sub(d.from);
       const outward = new Complex(along.im, -along.re).scale(0.06 / (along.abs() || 1)); // the polygon is counterclockwise
       const text = labels ? label(toDisplay(mid.add(outward)), d.label, css(d.color), px, 13, true) : "";
-      return `<path d="${line(densify([d.from, d.to], 0.02))}" stroke="${css(d.color)}" stroke-width="1.5" fill="none"/>${text}`;
+      return text; // the side itself is drawn by `renderSvg`, with its width in the hyperbolic metric
     }
     case "puncture": {
       const [x, y] = px(toDisplay(d.at)).split(",");
@@ -550,7 +618,7 @@ function label(
   italic = false,
 ): string {
   const [x, y] = px(at).split(",");
-  return `<text x="${x}" y="${y}" fill="${color}" font-size="${fontSize}" text-anchor="middle" dominant-baseline="middle"${italic ? ' font-style="italic"' : ""}>${escape(text)}</text>`;
+  return `<text x="${x}" y="${y}" fill="${color}" font-size="${fontSize}" text-anchor="middle" dominant-baseline="middle" stroke="#ffffff" stroke-width="2.5" stroke-opacity="0.8" stroke-linejoin="round" paint-order="stroke"${italic ? ' font-style="italic"' : ""}>${escape(text)}</text>`;
 }
 
 // ─── Geometry helpers ───────────────────────────────────────────────────────────────────────
@@ -835,4 +903,45 @@ function spreadAngles<K>(angles: ReadonlyMap<K, number>, gap: number): Map<K, nu
     if (!moved) break;
   }
   return new Map(sorted.map(([k], i) => [k, a[i] as number]));
+}
+
+/**
+ * Cuts a polyline into dashes of length `on` separated by gaps of length `off`, both measured with `lengthOf`. With
+ * on = 0, each piece is a single dot (its first point is the position).
+ */
+function dashes(
+  line: readonly Complex[],
+  lengthOf: (a: Complex, b: Complex) => number,
+  on: number,
+  off: number,
+): Complex[][] {
+  const result: Complex[][] = [];
+  if (line.length === 0 || off <= 0) return [[...line]];
+  let drawing = true;
+  let left = on; // what is left of the current dash or gap
+  let current: Complex[] = [line[0] as Complex];
+  for (let i = 1; i < line.length; i++) {
+    let a = line[i - 1] as Complex;
+    const b = line[i] as Complex;
+    let segment = lengthOf(a, b);
+    if (!(segment <= 64 * (on + off))) {
+      // Far too long to cut (near an ideal point, where everything is thinner than a pixel): a gap.
+      if (drawing && current.length > 1) result.push(current);
+      [drawing, left, current] = [false, off, []];
+      continue;
+    }
+    while (segment > 0 && segment >= left) {
+      const p = a.add(b.sub(a).scale(left / segment));
+      if (drawing) result.push([...current, p]);
+      else current = [p];
+      segment -= left;
+      a = p;
+      drawing = !drawing;
+      left = drawing ? on : off;
+    }
+    left -= segment;
+    if (drawing) current.push(b);
+  }
+  if (drawing && current.length > 1) result.push(current);
+  return result;
 }
