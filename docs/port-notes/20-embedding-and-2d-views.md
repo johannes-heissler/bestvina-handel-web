@@ -125,3 +125,28 @@ graphs, the three views, and the tessellation.
   their far ends, which was often reversed and caused avoidable self-intersections near the junctions.
 - **Arrows:** a small arrowhead in the middle of each segment of a strip, pointing along its orientation.
 - Dragging the view no longer selects the labels (`user-select: none`, and labels don't catch the mouse).
+
+## Bug fix: reversed strands in gates
+
+The strands of a gate were sometimes laid side by side in the reverse order, which gave avoidable self-intersections
+(e.g. BH 6.1 at the start). There were three causes:
+
+1. **A leftover in the layout:** the backward end of every strip still ran through the node of its gate before
+   reaching its junction (left over from an earlier version, removed at the forward end only). So backward ends (A, B,
+   …) came from a different direction than forward ends. That is why it was "sometimes right".
+2. **The gate's direction:** it came from the average position of its strands, which is arbitrary for a wide gate. Now
+   each gate leaves in the **middle of its angular span**: its strands in star order, their directions unrolled
+   counterclockwise, from the first to the last. The direction straight behind the gate then lies outside the span.
+3. **Directions measured in the display:** in the Poincaré disk, geodesics from a junction towards the far side of the
+   disk all start almost towards the centre, so their order got lost in the sampling. The directions are now taken in
+   the chart (Klein coordinates, straight lines) and only then mapped to the display. Continuous maps preserve the
+   cyclic order.
+
+The bends after the straight part are now drawn **in polar coordinates around the junction**:
+
+- the angle turns from the gate's direction to the strand's, easing in and out, so they start and end radially;
+- the radius grows to the target;
+- strands that turn further end closer to the junction.
+
+So at every angle a strand that turns more lies inside, and the bends are nested without crossings, even for turns of
+more than 90°.

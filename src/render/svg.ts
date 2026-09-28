@@ -105,21 +105,56 @@ export function renderSvg(fs: FibredSurface, layout: Layout, options: RenderOpti
     junctionAt: (v: Vertex) => Complex,
     radiusOf: (v: Vertex) => number,
     switchAt: (x: OrientedEdge) => Complex,
+    toScreen: (z: Complex) => Complex,
   ): Map<Vertex, Map<Vertex, Complex>> => {
     const switchPoints = new Map<Vertex, Map<Vertex, Complex>>();
     for (const v of fs.graph.vertices) {
       const center = junctionAt(v);
       const junctionRadius = radiusOf(v);
       const { switchOf } = gatesOf(v);
-      // Each switch lies on the circle in the direction of its gate's node in the layout.
-      const direction = new Map<Vertex, Complex>();
-      for (const x of fs.graph.star(v)) {
-        const s = switchOf.get(x) as Vertex;
-        const d = switchAt(x).sub(center);
-        direction.set(s, (direction.get(s) ?? Complex.ZERO).add(d.scale(1 / (d.abs() || 1))));
-      }
+      // Each gate leaves in the middle of its angular span: the directions of its strands, taken in the cyclic order
+      // of the star and unrolled counterclockwise, from the first to the last. Then the direction straight behind the
+      // gate lies outside its span, so that the strands side by side (in star order) don't have to cross. (The node of
+      // the gate in the layout is only a fallback: for a wide gate its direction is arbitrary.)
+      const star = fs.graph.star(v);
+      // The directions are taken in the chart (Klein coordinates for polygons), where each strip leaves straight
+      // towards its next point. Near the junction in the display model they can be almost equal: geodesics towards the
+      // far side of the Poincaré disk all start towards its centre, and their order then gets lost in the sampling.
+      const junctionInChart = layout.junctions.get(v) as Complex;
+      const chartAngle = (x: OrientedEdge) => {
+        const pieces = layout.strips.get(x.edge) as readonly (readonly Complex[])[];
+        const next = x.isForward
+          ? (pieces[0] as readonly Complex[])[1]
+          : (pieces.at(-1) as readonly Complex[]).at(-2);
+        return (next ?? junctionInChart.add(Complex.ONE)).sub(junctionInChart).arg();
+      };
+      const gateStart = (s: Vertex) =>
+        star.findIndex(
+          (y, i) =>
+            switchOf.get(y) === s &&
+            switchOf.get(star[(i - 1 + star.length) % star.length] as OrientedEdge) !== s,
+        );
       const points = new Map<Vertex, Complex>();
-      for (const [s, d] of direction) points.set(s, center.add(d.scale(junctionRadius / (d.abs() || 1))));
+      for (const s of new Set(star.map((y) => switchOf.get(y) as Vertex))) {
+        const start = Math.max(0, gateStart(s));
+        const inGate = [...star.slice(start), ...star.slice(0, start)].filter((y) => switchOf.get(y) === s);
+        let unrolled = chartAngle(inGate[0] as OrientedEdge);
+        const first = unrolled;
+        for (const y of inGate.slice(1))
+          unrolled += (((chartAngle(y) - unrolled) % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI);
+        const psiInChart = (first + unrolled) / 2;
+        // The same direction in the display.
+        const towards = toScreen(junctionInChart.add(Complex.fromPolar(1e-4, psiInChart))).sub(
+          toScreen(junctionInChart),
+        );
+        const psi =
+          inGate.length === star.length && inGate.length > 1
+            ? switchAt(inGate[0] as OrientedEdge)
+                .sub(center)
+                .arg()
+            : towards.arg();
+        points.set(s, center.add(Complex.fromPolar(junctionRadius, psi)));
+      }
       switchPoints.set(v, points);
       // The strips of a gate leave their switch side by side, perpendicular to the circle (like the branches of a
       // train track), and only then bend into their paths (the C# AdjustStartVector, done with a Bézier curve).
@@ -155,9 +190,11 @@ export function renderSvg(fs: FibredSurface, layout: Layout, options: RenderOpti
           const { line, atStart } = endAt(lines, x);
           const path = atStart ? [...line] : line.toReversed();
           // At least ~30 px, and longer for strands that turn far away from the direction of their gate.
+          // Strands that turn further from the gate's direction turn more tightly: they lie on the inside of the turn (the
+          // gate is ordered like their directions), so the bends are nested and don't cross.
           const bendLength =
             Math.max(length * 1.4, (30 * junctionRadius) / junctionPixels) *
-            (1 + (2 * Math.abs(angle)) / Math.PI);
+            (1.7 - (0.9 * Math.abs(angle)) / Math.PI);
           // Bend towards the first point beyond the bend length (or, on a short piece, towards its end).
           const found = path.findIndex((p) => p.sub(center).abs() > junctionRadius + bendLength);
           const q = found === -1 ? path.length - 1 : found;
@@ -167,15 +204,18 @@ export function renderSvg(fs: FibredSurface, layout: Layout, options: RenderOpti
             const rest = path.filter((p) => p.sub(center).abs() >= junctionRadius);
             result = [switchPoint, ...(rest.length > 0 ? rest : [path.at(-1) as Complex])];
           } else {
+            // The bend in polar coordinates around the junction: the angle turns from the gate's direction to the
+            // target (easing in, so that the strand starts out radially), the radius grows to the target's. Strands
+            // that turn further have the closer target, so at every angle they are inside: the bends don't cross.
             const target = path[q] as Complex;
-            const after = (path[q + 1] ?? target).sub(target);
-            const tangent =
-              after.abs() > 0
-                ? after.scale(1 / after.abs())
-                : target.sub(radialEnd).scale(1 / (target.sub(radialEnd).abs() || 1));
-            const h = target.sub(radialEnd).abs() * 0.5;
-            const [c1, c2] = [radialEnd.add(out.scale(h)), target.sub(tangent.scale(h))];
-            const bend = Array.from({ length: 12 }, (_, i) => cubic(radialEnd, c1, c2, target, (i + 1) / 12));
+            const [from, to] = [radialEnd.sub(center), target.sub(center)];
+            const turn = normalizeAngle(to.arg() - from.arg());
+            const bend = Array.from({ length: 16 }, (_, i) => {
+              const t = (i + 1) / 16;
+              return center.add(
+                Complex.fromPolar(from.abs() + (to.abs() - from.abs()) * t, from.arg() + turn * t * t),
+              );
+            });
             result = [switchPoint, radialStart, radialEnd, ...bend, ...path.slice(q + 1)];
           }
           line.splice(0, line.length, ...(atStart ? result : result.toReversed()));
@@ -215,6 +255,7 @@ export function renderSvg(fs: FibredSurface, layout: Layout, options: RenderOpti
         toDisplay(
           transform ? transform(layout.switches.get(x) as Complex) : (layout.switches.get(x) as Complex),
         ),
+      (z) => toDisplay(transform ? transform(z) : z),
     );
 
     if (view === "striped") {
@@ -532,16 +573,6 @@ function normalizeAngle(angle: number): number {
   if (a <= -Math.PI) a += 2 * Math.PI;
   if (a > Math.PI) a -= 2 * Math.PI;
   return a;
-}
-
-/** A point on the cubic Bézier curve with control points p0, p1, p2, p3. */
-function cubic(p0: Complex, p1: Complex, p2: Complex, p3: Complex, t: number): Complex {
-  const s = 1 - t;
-  return p0
-    .scale(s * s * s)
-    .add(p1.scale(3 * s * s * t))
-    .add(p2.scale(3 * s * t * t))
-    .add(p3.scale(t * t * t));
 }
 
 /** A small triangle pointing along the polyline at the middle of its length (undefined if it is too short). */

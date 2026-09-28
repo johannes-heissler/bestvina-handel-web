@@ -121,18 +121,11 @@ export function layout(fs: FibredSurface, chart: Chart, options: LayoutOptions =
   const junctions = new Map(fs.graph.vertices.map((v) => [v, position.get(junctionNode(v)) as Complex]));
   const switches = new Map(fs.graph.orientedEdges.map((x) => [x, position.get(switchNode(x)) as Complex]));
 
-  // 3. The strips. Each strip end first leaves its junction a short way in the direction of its gate (towards the
-  // gate's node), so that the strands of a gate start out together.
-  const leave = (x: OrientedEdge): Complex => {
-    const j = junctions.get(x.source) as Complex;
-    const d = (switches.get(x) as Complex).sub(j);
-    const length = d.abs();
-    return length === 0 ? j : j.add(d.scale(Math.min(0.5, 0.05 / length)));
-  };
+  // 3. The strips.
   const strips = new Map<Edge, Piece[]>();
   for (const e of fs.graph.edges) {
     const letters = fs.mu.image(e.forward).letters;
-    const pieces: Complex[][] = [[junctions.get(e.source) as Complex, leave(e.forward)]];
+    const pieces: Complex[][] = [[junctions.get(e.source) as Complex]];
     letters.forEach((x, k) => {
       const current = pieces.at(-1) as Complex[];
       const exit = portPoint(e, k, x);
@@ -149,10 +142,7 @@ export function layout(fs: FibredSurface, chart: Chart, options: LayoutOptions =
         pieces.push(back.stub > 0 ? [entry.add(back.outward.scale(back.stub)), entry] : [entry]);
       }
     });
-    (pieces.at(-1) as Complex[]).push(
-      switches.get(e.backward) as Complex,
-      junctions.get(e.target) as Complex,
-    );
+    (pieces.at(-1) as Complex[]).push(junctions.get(e.target) as Complex);
     strips.set(e, pieces);
   }
   return { chart, order, junctions, switches, strips, relativeWidth };

@@ -107,3 +107,9 @@
     - P and pre-P ∖ P;
     - the gates at each junction in cyclic order.
   - **Embedding μ:** coloured in the colours of the edges of G₀, with an explanation of G₀ and μ.
+- **Gates, punctures, periphery** (reordered):
+  - the gates first;
+  - each boundary word named B₀, B₁, …, with the number of infinitesimal branches at each turn written between its two
+    letters in a second line (highlighted for cusps and multicusps), and below it the permutation g: Bᵢ ↦ Bⱼ;
+  - then the layers P₀ = P, P₁, P₂, … of the pre-periphery.
+- **Embedding μ:** the cyclic order of G₀ above it, and the total number of side crossings below it.

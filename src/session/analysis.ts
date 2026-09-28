@@ -143,11 +143,9 @@ export function gatesInfo(fs: FibredSurface): { junction: Vertex; gates: Oriente
   });
 }
 
-/** The strips of the periphery P and of the pre-periphery (eventually mapped into P) outside P. */
-export function peripheryInfo(fs: FibredSurface): { peripheral: Edge[]; prePeripheral: Edge[] } {
-  const pre = fs.prePeriphery();
-  return {
-    peripheral: fs.graph.edges.filter((e) => fs.peripheral.has(e)),
-    prePeripheral: fs.graph.edges.filter((e) => pre.has(e) && !fs.peripheral.has(e)),
-  };
+/**
+ * The layers of the pre-periphery: P₀ = P, and Pᵢ the strips outside the earlier layers that g maps into P₀ ∪ ⋯ ∪ Pᵢ₋₁.
+ */
+export function peripheryInfo(fs: FibredSurface): { layers: Edge[][] } {
+  return { layers: fs.prePeripheralLayers().map((layer) => fs.graph.edges.filter((e) => layer.has(e))) };
 }

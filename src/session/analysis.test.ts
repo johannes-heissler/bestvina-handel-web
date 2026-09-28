@@ -32,7 +32,7 @@ describe("analysis for the side panel", () => {
     const fs = buildPreset(PRESETS.find((p) => p.name === "Bestvina–Handel example 6.2")!);
     expect(
       peripheryInfo(fs)
-        .peripheral.map((e) => e.name)
+        .layers[0]!.map((e) => e.name)
         .sort(),
     ).toEqual(["α", "β", "γ"]);
   });

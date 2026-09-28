@@ -447,26 +447,6 @@ details.panel > summary h2 {
   list-style: none;
   padding: 0;
 }
-.turns {
-  display: inline-flex;
-  gap: 2px;
-  margin-left: 0.3rem;
-}
-.turns span {
-  font-size: 0.75rem;
-  min-width: 1.1em;
-  text-align: center;
-  border-radius: 2px;
-  color: var(--muted);
-}
-.turns .cusp {
-  background: var(--accent);
-  color: var(--paper);
-}
-.turns .multicusp {
-  background: var(--error);
-  color: var(--paper);
-}
 /* Dragging the view must not select the labels. */
 .canvas,
 .canvas svg text {
@@ -494,4 +474,42 @@ details.panel > summary h2 {
 .math {
   font-variant: normal;
   font-style: italic;
+}
+
+.boundary-word {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  column-gap: 0.6rem;
+  margin: 0.45rem 0;
+}
+.word-name {
+  font-style: italic;
+  grid-row: 1 / 3;
+}
+.word-grid {
+  display: inline-grid;
+  justify-content: start;
+  column-gap: 0.05rem;
+  line-height: 1.25;
+}
+.word-grid .letter {
+  text-align: center;
+}
+.word-grid .turn {
+  font-size: 0.72rem;
+  color: var(--muted);
+  text-align: center;
+  min-width: 0.9em;
+  border-radius: 2px;
+}
+.word-grid .turn.cusp {
+  background: var(--accent);
+  color: var(--paper);
+}
+.word-grid .turn.multicusp {
+  background: var(--error);
+  color: var(--paper);
+}
+.boundary-word > .hint {
+  grid-column: 2;
 }

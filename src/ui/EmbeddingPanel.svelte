@@ -22,7 +22,11 @@
             : letters.flatMap((x, i) => (i === 0 ? [{ strip: x.name }] : [" ", { strip: x.name }])),
       };
     });
-    return { lines, palette, polygon: node.model.kind === "polygon", total: surface.mu.totalLength() };
+    // The cyclic order at each vertex of G₀, in the colours of its edges.
+    const stars = surface.spine0.vertices.map((w): Text =>
+      surface.spine0.star(w).flatMap((x, i) => (i === 0 ? [{ strip: x.name }] : [" ", { strip: x.name }])),
+    );
+    return { lines, palette, stars, polygon: node.model.kind === "polygon", total: surface.mu.totalLength() };
   });
 </script>
 
@@ -34,12 +38,18 @@
         ? ": the rose dual to the polygon, with one loop through each pair of sides"
         : ""}. μ : G → G₀ records how G lies in the surface: μ(e) is the path in G₀ that the strip e follows{info.polygon
         ? ", i.e. the sides it crosses, in their colours"
-        : ""}. All together: {info.total}.
+        : ""}.
     </p>
+    <p class="hint">Cyclic order of G₀{info.stars.length > 1 ? " at each vertex" : ""} (counterclockwise):</p>
+    <ul class="map">
+      {#each info.stars as star, i (i)}<li>(<TextView text={star} palette={info.palette} />)</li>{/each}
+    </ul>
+    <p class="hint">μ:</p>
     <ul class="map">
       {#each info.lines as line, i (i)}
         <li><TextView text={line.strip} /> ↦ <TextView text={line.image} palette={info.palette} /></li>
       {/each}
     </ul>
+    <p class="hint">{info.total} side crossings in total.</p>
   {/if}
 </details>
