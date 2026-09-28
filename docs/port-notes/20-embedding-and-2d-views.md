@@ -270,3 +270,22 @@ to the target.
   per strip), instead of a fixed 5 pixels.
 - With "Names and junctions shaped by the Klein metric", the junction disks become ellipses of the same area, shaped
   like the metric, and their switches lie on the ellipse.
+
+### Straight through the gluings; the ribbon model's junctions
+
+- **Straightening** (layout step 2′, slider "Straightening", 10 rounds by default, 0 = the old evenly spaced
+  crossings): where a strip crosses a glued side, the crossing moves to where the segment from the previous point A to
+  Φ(B) meets the side, B being the next point and Φ the isometry of the chart that carries the other side of the gluing
+  onto the continuation beyond this one: the deck transformation of the copy across a polygon side (found as the
+  generator, or its inverse, that maps the middle of the partner port onto this one), or for glued half-bands of the
+  ribbon model the rigid motion joining their ends (there the strip gets two crossings, at both ends of the unrolled
+  band). In Klein coordinates the geodesic is a straight line, so each update is a line intersection. Tutte solves
+  and updates alternate. After each round the strands along each side are put back into their order by a
+  least-squares fit with minimal gaps (pool adjacent violators, `orderedWithGaps`) and kept within the port, which
+  lies inside the side, so on the L-shaped surface a strip whose straight continuation would leave its side stops at
+  the end of the port.
+- **Strand spacing c** now only matters with "Strip widths to scale": the gaps then leave room for the widths w(e)^c.
+  Without it the strands are thin, and the gaps are 30% of the initial spacing, within 90% of the port.
+- **Ribbon model:** a junction of valence k is a rounded k-gon: its ports are chords of its circle (nearly the sides
+  of the inscribed regular k-gon, at most 1.5 radii long) joined by arcs, and the bands and half-bands are as wide as
+  the ports, so nearly as wide as the junctions (petals at most half a radius, so that they don't overlap the disk).

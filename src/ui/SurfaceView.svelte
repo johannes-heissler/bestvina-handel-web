@@ -26,6 +26,7 @@
   let kleinNames = $state(false);
   let deckDepth = $state(0);
   let widthExponent = $state(0);
+  let straightening = $state(10);
   let toScale = $state(false);
   let labels = $state(true);
   let showOptions = $state(true);
@@ -47,6 +48,7 @@
       kleinNames,
       deckDepth,
       widthExponent,
+      straightening,
       labels,
       stripWidth: toScale ? "toScale" : "uniform",
       size: 800,
@@ -196,8 +198,12 @@
       {/if}
       <label title="Copies of the polygon by deck transformations">Copies <input type="number" min="0" max="4" bind:value={deckDepth} /></label>
       <label
-        title="Where the strands cross a side: their lateral positions are spaced by the weights w(e)^c, with the Perron–Frobenius widths w (c = 0: evenly). Only sides crossed by several strands change; a single strand stays in the middle."
+        title="The spacing of the strands where they cross a side, by the weights w(e)^c with the Perron–Frobenius widths w (c = 0: evenly). With straightening, it only sets the smallest gaps between neighbouring strands (room for the widths to scale)."
         >Strand spacing c <input type="range" min="0" max="1" step="0.1" bind:value={widthExponent} /></label
+      >
+      <label
+        title="Rounds of moving the crossings with the glued sides so that the strips run straight (geodesically) through them, keeping their order and staying on the side (0: evenly spaced crossings)"
+        >Straightening <input type="range" min="0" max="30" step="1" bind:value={straightening} /> {straightening}</label
       >
       <label title="Draw the strips as wide as their share of the sides they cross (their weights w(e)^c)"
         ><input type="checkbox" bind:checked={toScale} /> Strip widths to scale</label

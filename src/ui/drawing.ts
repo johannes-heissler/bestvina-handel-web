@@ -24,13 +24,23 @@ export function chartFor(model: SurfaceModel, surface: FibredSurface): Chart {
 
 export interface DrawOptions extends RenderOptions {
   readonly widthExponent?: number;
+  /** Rounds of straightening the strips through the glued sides (layout step 2′). */
+  readonly straightening?: number;
 }
 
 /** The SVG of a surface in a model; errors become a note instead of an exception. */
 export function draw(model: SurfaceModel, surface: FibredSurface, options: DrawOptions = {}): Rendered {
   try {
     const chart = chartFor(model, surface);
-    return renderSvg(surface, layout(surface, chart, { widthExponent: options.widthExponent ?? 0 }), options);
+    return renderSvg(
+      surface,
+      layout(surface, chart, {
+        widthExponent: options.widthExponent ?? 0,
+        smoothing: options.straightening ?? 0,
+        toScale: options.stripWidth === "toScale",
+      }),
+      options,
+    );
   } catch (e) {
     return {
       svg: "",

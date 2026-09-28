@@ -813,6 +813,8 @@ function decoration(
       const [x, y] = px(toDisplay(d.center)).split(",");
       return `<circle cx="${x}" cy="${y}" r="${fmt(d.radius * scale)}" fill="#f0f0ec" stroke="#bbb" stroke-width="0.8"/>`;
     }
+    case "region":
+      return `<path d="${line([...d.boundary, d.boundary[0] as Complex])}" fill="#f0f0ec" stroke="#bbb" stroke-width="0.8"/>`;
     case "band":
       return `<path d="${line(d.centerline)}" stroke="${css(d.color)}" stroke-opacity="0.12" stroke-width="${fmt(2 * d.halfWidth * scale)}" fill="none" stroke-linejoin="round"/>`;
     case "stub": {
@@ -930,6 +932,7 @@ function displayBounds(
         ...d.centerline.map((p) => p.sub(new Complex(d.halfWidth, d.halfWidth))),
       );
     if (d.kind === "stub") points.push(d.to.add(d.to.sub(d.from).scale(0.5)));
+    if (d.kind === "region") points.push(...d.boundary);
   }
   const shown = points
     .map(toDisplay)

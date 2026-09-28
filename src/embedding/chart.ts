@@ -58,6 +58,8 @@ export type Decoration =
     }
   | { readonly kind: "puncture"; readonly at: Complex }
   | { readonly kind: "disk"; readonly center: Complex; readonly radius: number }
+  /** A junction of a ribbon model: a convex region (a rounded polygon). */
+  | { readonly kind: "region"; readonly boundary: readonly Complex[] }
   | {
       readonly kind: "band";
       readonly centerline: readonly Complex[];
@@ -265,6 +267,10 @@ function planeChart(model: PlaneModel, spine: Spine): Chart {
  * band leaves it straight back towards the parent (a tree can be drawn this way with any cyclic orders). The other
  * edges are half-bands glued at their labelled ends (your rectangles, glued in the middle), except loops whose two ends
  * are neighbours in the cyclic order: those are drawn as petals (e.g. a peripheral circle).
+ *
+ * A vertex of valence k is a rounded k-gon: its ports are chords of its circle (nearly the sides of the inscribed
+ * regular k-gon, at most 1.5 radii long), joined by arcs of the circle; the bands are as wide as the ports, so nearly as
+ * wide as the junctions.
  */
 function ribbonChart(spine: Spine): Chart {
   const graph = spine.graph;
@@ -317,13 +323,22 @@ function ribbonChart(spine: Spine): Chart {
   const decorations: Decoration[] = [];
   for (const w of vertices) {
     const c = position(w);
-    regions.set(w, { boundary: circle(c, r, 32), center: c });
-    decorations.push({ kind: "disk", center: c, radius: r });
     const star = graph.star(w);
-    const width = Math.min((2 * Math.PI * r) / star.length, r) * 0.7;
+    // Half the length of each port: nearly half a side of the inscribed regular k-gon.
+    const half = Math.min(r * Math.sin(Math.PI / Math.max(star.length, 2)) * 0.92, 0.75 * r);
+    const width = 2 * half;
+    const depth = Math.sqrt(r * r - half * half); // the distance of the chord from the centre
+    const boundary = roundedPolygon(
+      c,
+      r,
+      star.map((x) => angle.get(x) as number),
+      Math.asin(half / r),
+    );
+    regions.set(w, { boundary, center: c });
+    decorations.push({ kind: "region", boundary });
     for (const x of star) {
       const outward = Complex.fromPolar(1, angle.get(x) as number);
-      const at = c.add(outward.scale(r));
+      const at = c.add(outward.scale(depth));
       const lateral = new Complex(-outward.im, outward.re).scale(width / 2);
       const glued = !treeEdges.has(x.edge) && !petals.has(x.edge);
       ports.set(x, {
@@ -360,7 +375,7 @@ function ribbonChart(spine: Spine): Chart {
       p.add(Complex.fromPolar(r0 + ((r1 - r0) * i) / 32, a0 + (sweep * i) / 32)),
     );
     const centerline = [start, ...arc, end];
-    const halfWidth = out.left.sub(out.right).abs() / 2;
+    const halfWidth = Math.min(out.left.sub(out.right).abs() / 2, r / 2);
     bands.set(e, {
       kind: "path",
       centerline: first.isForward ? centerline : centerline.toReversed(),
@@ -384,6 +399,27 @@ function ribbonChart(spine: Spine): Chart {
 }
 
 // ─── Helpers ────────────────────────────────────────────────────────────────────────────────
+
+/**
+ * The convex region bounded by the chords of the circle (c, r) centred at the given directions, each spanning the angle
+ * ±halfAngle, and the arcs of the circle between them (counterclockwise).
+ */
+function roundedPolygon(c: Complex, r: number, directions: readonly number[], halfAngle: number): Complex[] {
+  const sorted = [...directions]
+    .map((d) => ((d % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI))
+    .sort((a, b) => a - b);
+  const points: Complex[] = [];
+  sorted.forEach((d, i) => {
+    const next = (sorted[(i + 1) % sorted.length] as number) + (i === sorted.length - 1 ? 2 * Math.PI : 0);
+    // The chord, then the arc to the next chord.
+    points.push(c.add(Complex.fromPolar(r, d - halfAngle)), c.add(Complex.fromPolar(r, d + halfAngle)));
+    const [from, to] = [d + halfAngle, next - halfAngle];
+    const steps = Math.max(1, Math.ceil((to - from) / 0.2));
+    for (let j = 1; j < steps; j++)
+      points.push(c.add(Complex.fromPolar(r, from + ((to - from) * j) / steps)));
+  });
+  return points;
+}
 
 function circle(c: Complex, r: number, n: number): Complex[] {
   return Array.from({ length: n }, (_, i) => c.add(Complex.fromPolar(r, (2 * Math.PI * i) / n)));

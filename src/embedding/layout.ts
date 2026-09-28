@@ -4,11 +4,20 @@
  *
  * 1. **Ports.** Along each edge of G₀, the strands are placed in the order of {@link strandOrder}, with lateral widths
  *    proportional to w(e)^c for the Perron–Frobenius width w and an exponent 0 ≤ c ≤ 1 (your suggestion: c = 0 spaces
- *    them evenly, c = 1 is to scale).
+ *    them evenly, c = 1 is to scale). This is the start; see 2′ for glued sides.
  * 2. **Junctions.** Inside each region, the junctions of G are placed by a barycentric (Tutte) layout: each junction is
  *    the average of its neighbours, where the neighbours are the port points of the strands leaving it and the other
  *    junctions joined to it by strips with trivial μ. In a convex region with straight segments (Klein coordinates for
  *    hyperbolic charts: geodesics), this doesn't create crossings for a planar arrangement.
+ * 2′. **Straight through the gluings.** Where a strip crosses a glued side (a polygon side, or the glued ends of two
+ *    half-bands), the crossing moves so that the strip runs straight through it: in the universal cover, the strip
+ *    from the previous point A through the crossing to the next point B should be one geodesic, so the crossing goes
+ *    to where the segment from A to Φ(B) meets the side, Φ being the isometry of the chart that carries the other
+ *    side of the gluing onto the continuation beyond this side (a deck transformation, or the rigid motion joining
+ *    the half-bands). In Klein coordinates that is a straight line. Then the strands along each side are put back in
+ *    their order, with gaps (room for the widths when drawn to scale, else 30% of the gaps of step 1), and within the
+ *    port, which lies inside the side.
+ *    Steps 2 and 2′ alternate for `smoothing` rounds (0: the positions of step 1).
  * 3. **Strips.** A strip is a sequence of polylines ("pieces"), one per stretch between gluings: junction → port,
  *    port → (along a band) → port, …, port → junction. At a gluing the curve jumps to the partner port.
  *
@@ -25,6 +34,10 @@ import { type StrandOrder, strandKey, strandOrder } from "./strand-order";
 export interface LayoutOptions {
   /** The exponent c in w(e)^c for the lateral widths of the strands; 0 spaces them evenly. */
   readonly widthExponent?: number;
+  /** Rounds of moving the crossings of glued sides so that the strips run straight through them (step 2′). */
+  readonly smoothing?: number;
+  /** Whether the strips are drawn to scale: then straightening keeps room for their widths between the strands. */
+  readonly toScale?: boolean;
 }
 
 /** A polyline in chart coordinates, without gluing jumps. */
@@ -50,37 +63,66 @@ export function layout(fs: FibredSurface, chart: Chart, options: LayoutOptions =
   const order = strandOrder(fs.mu);
   const weight = strandWeights(fs, c);
 
-  // 1. Lateral coordinates u ∈ (−1, 1) of each strand, along the forward orientation of its edge of G₀.
-  const lateral = new Map<string, number>();
+  // 1. Lateral coordinates u ∈ (−1, 1) of each strand, along the forward orientation of its edge of G₀: `front` at the
+  // port of the forward orientation, `back` at the other one (as seen along the forward orientation, so that the
+  // port coordinate there is −back). They differ only for glued half-bands after smoothing.
+  const front = new Map<string, number>();
+  const back = new Map<string, number>();
   const relativeWidth = new Map<Edge, number>();
-  for (const [, list] of order.along) {
+  /** For each edge of G₀: the minimal gaps between consecutive strands and the bounds, for step 2′. */
+  const spacing = new Map<Edge, { gaps: number[]; lo: number; hi: number }>();
+  for (const [edge, list] of order.along) {
     const weights = list.map((s) => weight.get(s.strand.edge) as number);
     const gap = (weights.reduce((a, b) => a + b, 0) / weights.length) * 0.6;
     const total = weights.reduce((a, b) => a + b, 0) + gap * (weights.length + 1);
     let position = gap;
+    const us: number[] = [];
     list.forEach((s, i) => {
       const w = weights[i] as number;
-      lateral.set(strandKey(s.strand), -1 + (2 * (position + w / 2)) / total);
+      const u = -1 + (2 * (position + w / 2)) / total;
+      us.push(u);
+      front.set(strandKey(s.strand), u);
+      back.set(strandKey(s.strand), u);
       relativeWidth.set(s.strand.edge, Math.max(relativeWidth.get(s.strand.edge) ?? 0, w / total));
       position += w + gap;
     });
+    // Drawn to scale, strand i is 2 wᵢ/total wide in these coordinates: keep that room, plus 30% of the gaps between
+    // them. Otherwise they are thin: 30% of the first spacing is enough, and they may use the port up to 10% of its
+    // width from its ends.
+    const share = (i: number) => (2 * (weights[i] as number)) / total;
+    const g = (2 * gap) / total;
+    spacing.set(
+      edge,
+      options.toScale
+        ? {
+            gaps: us.slice(1).map((_, i) => share(i) / 2 + share(i + 1) / 2 + 0.3 * g),
+            lo: -1 + share(0) / 2 + 0.3 * g,
+            hi: 1 - share(us.length - 1) / 2 - 0.3 * g,
+          }
+        : { gaps: us.slice(1).map((u, i) => 0.3 * (u - (us[i] as number))), lo: -0.9, hi: 0.9 },
+    );
   }
-  /** Where the strand (e, k) passes through the port of the letter x (the direction it runs in, or its reverse). */
-  const portPoint = (e: Edge, k: number, x: OrientedEdge): Complex => {
-    const u = (lateral.get(strandKey({ edge: e, index: k })) as number) * (x.isForward ? 1 : -1);
-    const port = chart.ports.get(x) as Port;
-    return port.right.add(port.left.sub(port.right).scale((u + 1) / 2));
+  /** The port coordinate (−1 right … +1 left, looking outwards) of the strand (e, k) at the port of y. */
+  const portCoordinate = (e: Edge, k: number, y: OrientedEdge): number => {
+    const key = strandKey({ edge: e, index: k });
+    return y.isForward ? (front.get(key) as number) : -(back.get(key) as number);
   };
+  const pointOn = (port: Port, coordinate: number) =>
+    port.right.add(port.left.sub(port.right).scale((coordinate + 1) / 2));
+  /** Where the strand (e, k) passes through the port of the letter x (the direction it runs in, or its reverse). */
+  const portPoint = (e: Edge, k: number, x: OrientedEdge): Complex =>
+    pointOn(chart.ports.get(x) as Port, portCoordinate(e, k, x));
+  const lateral = front; // along bands, front and back agree
 
   // 2. Junctions and switches: a Tutte layout per region. As in the train track τ, each gate of a junction is a node
   // (its switch) between the junction and the strands of the gate, so that strands in a gate leave in the same
-  // direction. Each node is the average of its neighbours; the port points are fixed.
+  // direction. Each node is the average of its neighbours; the port points are fixed during a solve.
   const gateOf = new Map<OrientedEdge, number>();
   findGates(fs.graph, fs.g).forEach((gate, i) => gate.edges.forEach((x) => gateOf.set(x, i)));
   const junctionNode = (v: Vertex) => `j${v.id}`;
   const switchNode = (x: OrientedEdge) => `s${gateOf.get(x) ?? `${x.edge.id}${x.isForward ? "+" : "-"}`}`;
-  const links = new Map<string, (string | Complex)[]>();
-  const link = (node: string, other: string | Complex) => {
+  const links = new Map<string, (string | (() => Complex))[]>();
+  const link = (node: string, other: string | (() => Complex)) => {
     if (other === node) return;
     links.set(node, [...(links.get(node) ?? []), other]);
   };
@@ -106,18 +148,77 @@ export function layout(fs: FibredSurface, chart: Chart, options: LayoutOptions =
       link(to, from);
       continue;
     }
-    link(from, portPoint(e, 0, letters[0] as OrientedEdge));
-    link(to, portPoint(e, letters.length - 1, (letters.at(-1) as OrientedEdge).reversed));
+    link(from, () => portPoint(e, 0, letters[0] as OrientedEdge));
+    link(to, () => portPoint(e, letters.length - 1, (letters.at(-1) as OrientedEdge).reversed));
   }
   const position = new Map(start);
-  for (let iteration = 0; iteration < 400; iteration++)
-    for (const [node, list] of links) {
-      const sum = list.reduce<Complex>(
-        (acc, x) => acc.add(x instanceof Complex ? x : (position.get(x) as Complex)),
-        Complex.ZERO,
-      );
-      position.set(node, sum.scale(1 / list.length));
+  const solve = (iterations: number) => {
+    for (let iteration = 0; iteration < iterations; iteration++)
+      for (const [node, list] of links) {
+        const sum = list.reduce<Complex>(
+          (acc, x) => acc.add(typeof x === "string" ? (position.get(x) as Complex) : x()),
+          Complex.ZERO,
+        );
+        position.set(node, sum.scale(1 / list.length));
+      }
+  };
+  solve(400);
+
+  // 2′. Straight through the gluings.
+  const gluing = gluingMaps(chart);
+  const rounds = gluing.size > 0 ? (options.smoothing ?? 0) : 0;
+  for (let round = 0; round < rounds; round++) {
+    for (const e of fs.graph.edges) {
+      const letters = fs.mu.image(e.forward).letters;
+      letters.forEach((x, k) => {
+        const map = gluing.get(x);
+        if (map === undefined) return;
+        const a =
+          k === 0
+            ? (position.get(switchNode(e.forward)) as Complex)
+            : portPoint(e, k - 1, (letters[k - 1] as OrientedEdge).reversed);
+        const b =
+          k === letters.length - 1
+            ? (position.get(switchNode(e.backward)) as Complex)
+            : portPoint(e, k + 1, letters[k + 1] as OrientedEdge);
+        const target = map.apply(b);
+        const key = strandKey({ edge: e, index: k });
+        const [out, over] = [chart.ports.get(x) as Port, chart.ports.get(x.reversed) as Port];
+        const set = (y: OrientedEdge, coordinate: number | undefined) => {
+          if (coordinate === undefined || !Number.isFinite(coordinate)) return;
+          if (y.isForward) front.set(key, coordinate);
+          else back.set(key, -coordinate);
+        };
+        const here = lineParameter(a, target, out.right, out.left);
+        if (out.stub === 0) {
+          // One point, on both sides of the gluing.
+          if (here === undefined) return;
+          const coordinate = 2 * here - 1;
+          set(x, coordinate);
+          set(x.reversed, -coordinate);
+        } else {
+          // Two points: where the line enters the half-band of x, and where it leaves the half-band of x̄.
+          set(x, here === undefined ? undefined : 2 * here - 1);
+          const there = lineParameter(a, target, map.apply(over.right), map.apply(over.left));
+          set(x.reversed, there === undefined ? undefined : 2 * there - 1);
+        }
+      });
     }
+    // Back into their order, with gaps, inside the ports.
+    for (const [edge, list] of order.along) {
+      if (!gluing.has(edge.forward)) continue;
+      const { gaps, lo, hi } = spacing.get(edge) as { gaps: number[]; lo: number; hi: number };
+      for (const side of [front, back]) {
+        const values = list.map((p) => side.get(strandKey(p.strand)) as number);
+        orderedWithGaps(values, gaps, lo, hi).forEach((u, i) =>
+          side.set(strandKey((list[i] as { strand: { edge: Edge; index: number } }).strand), u),
+        );
+      }
+      if ((chart.ports.get(edge.forward) as Port).stub === 0)
+        for (const p of list) back.set(strandKey(p.strand), front.get(strandKey(p.strand)) as number);
+    }
+    solve(60);
+  }
   const junctions = new Map(fs.graph.vertices.map((v) => [v, position.get(junctionNode(v)) as Complex]));
   const switches = new Map(fs.graph.orientedEdges.map((x) => [x, position.get(switchNode(x)) as Complex]));
 
@@ -233,4 +334,103 @@ function intersection(a: Complex, b: Complex, c: Complex, d: Complex): Complex |
   const u = (ca.re * r.im - ca.im * r.re) / denominator;
   const margin = 1e-6;
   return t > margin && t < 1 - margin && u > margin && u < 1 - margin ? a.add(r.scale(t)) : undefined;
+}
+
+/**
+ * For each glued port x of the chart: the isometry of the chart that carries the neighbourhood of the port of x̄ to the
+ * continuation of the surface beyond the port of x (and its inverse). For a polygon it is the deck transformation of
+ * the copy across the side of x; for glued half-bands, the rigid motion that puts the half-band of x̄ onto the end of
+ * the half-band of x.
+ */
+function gluingMaps(
+  chart: Chart,
+): Map<OrientedEdge, { apply: (z: Complex) => Complex; inverse: (z: Complex) => Complex }> {
+  const result = new Map<
+    OrientedEdge,
+    { apply: (z: Complex) => Complex; inverse: (z: Complex) => Complex }
+  >();
+  const middle = (port: Port) => port.right.add(port.left).scale(0.5);
+  for (const [edge, band] of chart.bands) {
+    if (band.kind !== "glue") continue;
+    for (const x of [edge.forward, edge.backward]) {
+      const [out, over] = [chart.ports.get(x), chart.ports.get(x.reversed)];
+      if (!out || !over) continue;
+      if (out.stub > 0) {
+        // The end of the half-band of x̄ onto the end of the half-band of x, turning its outward direction around.
+        const [m, n] = [
+          middle(out).add(out.outward.scale(out.stub)),
+          middle(over).add(over.outward.scale(over.stub)),
+        ];
+        const turn = Complex.fromPolar(1, out.outward.neg().arg() - over.outward.arg());
+        result.set(x, {
+          apply: (z) => turn.mul(z.sub(n)).add(m),
+          inverse: (z) => z.sub(m).div(turn).add(n),
+        });
+        continue;
+      }
+      // A polygon: the deck transformation (or its inverse) that maps the middle of the port of x̄ to that of x.
+      const deck = chart.deck;
+      if (deck === undefined) continue;
+      const candidates: { apply: (z: Complex) => Complex; inverse: (z: Complex) => Complex }[] =
+        deck.kind === "translation"
+          ? [...deck.generators.values()].flatMap((t) => [
+              { apply: (z: Complex) => z.add(t), inverse: (z: Complex) => z.sub(t) },
+              { apply: (z: Complex) => z.sub(t), inverse: (z: Complex) => z.add(t) },
+            ])
+          : [...deck.generators.values()].flatMap((g) => {
+              const h = g.inverse();
+              return [
+                { apply: (z: Complex) => g.applyKlein(z), inverse: (z: Complex) => h.applyKlein(z) },
+                { apply: (z: Complex) => h.applyKlein(z), inverse: (z: Complex) => g.applyKlein(z) },
+              ];
+            });
+      const error = (c: (typeof candidates)[number]) => c.apply(middle(over)).sub(middle(out)).abs();
+      const best = candidates.reduce<(typeof candidates)[number] | undefined>(
+        (bestSoFar, c) => (bestSoFar === undefined || error(c) < error(bestSoFar) ? c : bestSoFar),
+        undefined,
+      );
+      if (best !== undefined && error(best) < 1e-6) result.set(x, best);
+    }
+  }
+  return result;
+}
+
+/** The parameter s of the point p + s(q − p) where the line through a and b meets the line through p and q. */
+function lineParameter(a: Complex, b: Complex, p: Complex, q: Complex): number | undefined {
+  const d = b.sub(a);
+  const r = q.sub(p);
+  const denominator = d.re * r.im - d.im * r.re;
+  if (Math.abs(denominator) < 1e-12) return undefined;
+  const w = p.sub(a);
+  return (d.im * w.re - d.re * w.im) / denominator;
+}
+
+/**
+ * The values closest to `values` (in the least-squares sense) that increase by at least `gaps[i]` from the i-th to the
+ * next and lie in [lo, hi]: subtracting the accumulated gaps turns this into an increasing fit (pool adjacent
+ * violators), which is then clamped.
+ */
+export function orderedWithGaps(
+  values: readonly number[],
+  gaps: readonly number[],
+  lo: number,
+  hi: number,
+): number[] {
+  const offsets = values.map((_, i) => gaps.slice(0, i).reduce((a, b) => a + b, 0));
+  const shifted = values.map((v, i) => v - (offsets[i] as number));
+  const blocks: { sum: number; count: number }[] = [];
+  for (const v of shifted) {
+    blocks.push({ sum: v, count: 1 });
+    while (blocks.length > 1) {
+      const [p, q] = [
+        blocks.at(-2) as { sum: number; count: number },
+        blocks.at(-1) as { sum: number; count: number },
+      ];
+      if (p.sum / p.count <= q.sum / q.count) break;
+      blocks.splice(-2, 2, { sum: p.sum + q.sum, count: p.count + q.count });
+    }
+  }
+  const fitted = blocks.flatMap((block) => Array<number>(block.count).fill(block.sum / block.count));
+  const top = hi - (offsets.at(-1) ?? 0);
+  return fitted.map((w, i) => Math.min(Math.max(w, lo), Math.max(lo, top)) + (offsets[i] as number));
 }
