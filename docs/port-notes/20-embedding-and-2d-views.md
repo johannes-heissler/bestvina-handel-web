@@ -165,3 +165,16 @@ The bends are now constructed **in the chart**:
 - **Nesting:** strands that turn further still end closer to the junction, so the bends stay nested.
 
 The points are mapped to the display afterwards, which keeps the curve smooth.
+
+## Update: close junctions and single gates
+
+- **Close junctions** (your example: v with r and p in BH 6.1 after some steps):
+  - the disk of a junction is at most 0.3 of the distance to the nearest other junction;
+  - a spiral reaches at most 0.45 of that distance, and at most 0.45 of the straight piece of its strip, so that the
+    spirals from the two ends of a short strip don't overlap.
+- **Junctions with a single gate** (all strands in one gate) used the layout's node for the gate's direction, which is
+  arbitrary. At q in that example this put the switch on the wrong side, and the strands ran through the disk. Now the
+  cyclic order is cut at the largest angular gap between consecutive strands, and the gate leaves in the middle of the
+  rest.
+- While unrolling the directions of a gate, a tiny backward step (nearly parallel strands, ≤ 20°) counts as a step
+  backward, not as almost a full turn.

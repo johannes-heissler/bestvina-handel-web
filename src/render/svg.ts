@@ -99,12 +99,22 @@ export function renderSvg(fs: FibredSurface, layout: Layout, options: RenderOpti
   const stripLines = (e: Edge, transform?: (z: Complex) => Complex) =>
     (layout.strips.get(e) ?? []).map((piece) => display(piece, transform));
 
+  /** For each junction, the distance to the nearest other junction in the chart (Infinity if there is none). */
+  const nearest = new Map<Vertex, number>(
+    fs.graph.vertices.map((v) => {
+      const p = layout.junctions.get(v) as Complex;
+      const distances = fs.graph.vertices
+        .filter((u) => u !== v)
+        .map((u) => (layout.junctions.get(u) as Complex).sub(p).abs());
+      return [v, Math.min(Infinity, ...distances)];
+    }),
+  );
+
   /** Moves the ends of the strips at junctions onto the switch points of their gates. */
   const attachToSwitches = (
     lines: Map<Edge, Complex[][]>,
     junctionAt: (v: Vertex) => Complex,
     radiusOf: (v: Vertex) => number,
-    switchAt: (x: OrientedEdge) => Complex,
     toScreen: (z: Complex) => Complex,
   ): Map<Vertex, Map<Vertex, Complex>> => {
     const switchPoints = new Map<Vertex, Map<Vertex, Complex>>();
@@ -137,24 +147,33 @@ export function renderSvg(fs: FibredSurface, layout: Layout, options: RenderOpti
       const points = new Map<Vertex, Complex>();
       const psiInChartOf = new Map<Vertex, number>();
       for (const s of new Set(star.map((y) => switchOf.get(y) as Vertex))) {
-        const start = Math.max(0, gateStart(s));
-        const inGate = [...star.slice(start), ...star.slice(0, start)].filter((y) => switchOf.get(y) === s);
+        // A counterclockwise step between consecutive strands; a tiny backward step (nearly parallel strands) stays
+        // backward instead of becoming almost a full turn.
+        const step = (from: number, to: number) => {
+          const d = (((to - from) % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI);
+          return d > 2 * Math.PI - 0.35 ? d - 2 * Math.PI : d;
+        };
+        let inGate: OrientedEdge[];
+        if (star.every((y) => switchOf.get(y) === s)) {
+          // A single gate has no boundary in the star: start after the largest gap between consecutive strands.
+          const gaps = star.map((y, i) =>
+            step(chartAngle(y), chartAngle(star[(i + 1) % star.length] as OrientedEdge)),
+          );
+          const widest = gaps.indexOf(Math.max(...gaps));
+          inGate = [...star.slice(widest + 1), ...star.slice(0, widest + 1)];
+        } else {
+          const start = Math.max(0, gateStart(s));
+          inGate = [...star.slice(start), ...star.slice(0, start)].filter((y) => switchOf.get(y) === s);
+        }
         let unrolled = chartAngle(inGate[0] as OrientedEdge);
         const first = unrolled;
-        for (const y of inGate.slice(1))
-          unrolled += (((chartAngle(y) - unrolled) % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI);
+        for (const y of inGate.slice(1)) unrolled += step(unrolled, chartAngle(y));
         const psiInChart = (first + unrolled) / 2;
         psiInChartOf.set(s, psiInChart);
         // The same direction in the display.
-        const towards = toScreen(junctionInChart.add(Complex.fromPolar(1e-4, psiInChart))).sub(
-          toScreen(junctionInChart),
-        );
-        const psi =
-          inGate.length === star.length && inGate.length > 1
-            ? switchAt(inGate[0] as OrientedEdge)
-                .sub(center)
-                .arg()
-            : towards.arg();
+        const psi = toScreen(junctionInChart.add(Complex.fromPolar(1e-4, psiInChart)))
+          .sub(toScreen(junctionInChart))
+          .arg();
         points.set(s, center.add(Complex.fromPolar(junctionRadius, psi)));
       }
       switchPoints.set(v, points);
@@ -207,7 +226,8 @@ export function renderSvg(fs: FibredSurface, layout: Layout, options: RenderOpti
             Math.max(length * 1.4, 20 * pixel) *
             (1 + Math.abs(angle) / 2) *
             (2.6 - (1.2 * Math.abs(angle)) / Math.PI);
-          const reach = Math.min(radius + bend, towards.abs() * 0.8);
+          // Capped, so that spirals don't reach a neighbouring junction or the spiral from the other end of a short strip.
+          const reach = Math.min(radius + bend, towards.abs() * 0.45, (nearest.get(v) as number) * 0.45);
           let result: Complex[];
           if (reach < radius + length * 1.2) {
             // Too short to bend: drop the points inside the disk and start at the switch.
@@ -264,15 +284,20 @@ export function renderSvg(fs: FibredSurface, layout: Layout, options: RenderOpti
       toDisplay(
         transform ? transform(layout.junctions.get(v) as Complex) : (layout.junctions.get(v) as Complex),
       );
-    const switchPoints = attachToSwitches(
-      lines,
-      junctionAt,
-      (v) => junctionRadius * localScale(layout.junctions.get(v) as Complex),
-      (x) =>
-        toDisplay(
-          transform ? transform(layout.switches.get(x) as Complex) : (layout.switches.get(x) as Complex),
-        ),
-      (z) => toDisplay(transform ? transform(z) : z),
+    /** The radius of a junction's disk in the display: fixed, but at most 0.3 of the distance to the nearest junction. */
+    const radiusOf = (v: Vertex) => {
+      const p = layout.junctions.get(v) as Complex;
+      const toScreen = (z: Complex) => toDisplay(transform ? transform(z) : z);
+      const d = nearest.get(v) as number;
+      const nearestOnScreen = Number.isFinite(d)
+        ? toScreen(p.add(new Complex(d, 0)))
+            .sub(toScreen(p))
+            .abs()
+        : Infinity;
+      return Math.min(junctionRadius * localScale(p), nearestOnScreen * 0.3);
+    };
+    const switchPoints = attachToSwitches(lines, junctionAt, radiusOf, (z) =>
+      toDisplay(transform ? transform(z) : z),
     );
 
     if (view === "striped") {
@@ -315,7 +340,7 @@ export function renderSvg(fs: FibredSurface, layout: Layout, options: RenderOpti
       const center = junctionAt(v);
       const points = switchPoints.get(v) as Map<Vertex, Complex>;
       const transparent = view === "tau";
-      const radius = junctionRadius * scale * localScale(layout.junctions.get(v) as Complex);
+      const radius = radiusOf(v) * scale;
       if (radius < 1) continue;
       group.push(
         `<circle cx="${px(center).split(",")[0]}" cy="${px(center).split(",")[1]}" r="${fmt(radius)}" fill="${transparent ? "#ffffff" : "#fafafa"}" fill-opacity="${transparent ? 0.35 : 1}" stroke="#333" stroke-width="1"/>`,
