@@ -15,9 +15,9 @@ import { Complex } from "../math/complex";
 import type { Color } from "../math/color";
 import type { FibredSurface } from "../fibred/fibred-surface";
 import { trainTrack } from "../fibred/train-track";
-import { DiskIsometry, fromKlein, type HyperbolicModel } from "../geometry/hyperbolic";
+import { DiskIsometry, fromKlein, type HyperbolicModel, lengthFactor, toKlein } from "../geometry/hyperbolic";
 import type { Chart, Decoration } from "../embedding/chart";
-import { type Layout, offset } from "../embedding/layout";
+import type { Layout } from "../embedding/layout";
 import { strandOrder } from "../embedding/strand-order";
 
 export type ViewKind = "trainTrack" | "striped";
@@ -42,9 +42,16 @@ export interface Rendered {
   readonly svg: string;
   /** Remarks for the user, e.g. why the striped view isn't available. */
   readonly notes: readonly string[];
+  /**
+   * For a point of the SVG (in its pixel coordinates), the same point of the surface in the polygon and in each drawn
+   * copy, with the radius of a dot of constant hyperbolic size there (the C# `Display(Point)`); empty outside.
+   */
+  readonly echo: (x: number, y: number) => { x: number; y: number; r: number }[];
 }
 
 const COPY_OPACITY = 0.35;
+/** The dark green of the junctions (the C# `vertexColors[1]`). */
+const JUNCTION_COLOR = "#1a693a";
 
 export function renderSvg(fs: FibredSurface, layout: Layout, options: RenderOptions = {}): Rendered {
   const size = options.size ?? 640;
@@ -66,17 +73,9 @@ export function renderSvg(fs: FibredSurface, layout: Layout, options: RenderOpti
     const dense = hyperbolic ? densify(smooth, 0.02) : smooth;
     return dense.map((z) => toDisplay(transform ? transform(z) : z));
   };
-  const path = (points: readonly Complex[]) => `M${points.map(px).join("L")}`;
 
   const parts: string[] = [];
   const copies = deckCopies(chart, options.deckDepth ?? 0, toDisplay);
-
-  // Strip widths: thin and uniform, or to scale with their share of the ports.
-  const portPixels = averagePortPixels(chart, toDisplay) * scale;
-  const strokeWidth = (e: Edge) =>
-    options.stripWidth === "toScale"
-      ? Math.max(0.8, (layout.relativeWidth.get(e) ?? 0.2) * portPixels * 0.9)
-      : 2.2;
 
   // Junction disks and the switches of the gates.
   const junctionPixels = Math.max(5, size / 110);
@@ -117,6 +116,74 @@ export function renderSvg(fs: FibredSurface, layout: Layout, options: RenderOpti
       return [v, Math.min(Infinity, ...toJunctions, ...toStrips)];
     }),
   );
+
+  /** How much a deck copy shrinks the display near the chart point z (1 for the polygon itself). */
+  const localScale = (z: Complex, transform: ((z: Complex) => Complex) | undefined) => {
+    if (transform === undefined) return 1;
+    const delta = new Complex(1e-4, 0);
+    const before = toDisplay(z.add(delta)).sub(toDisplay(z)).abs();
+    return before === 0
+      ? 1
+      : toDisplay(transform(z.add(delta)))
+          .sub(toDisplay(transform(z)))
+          .abs() / before;
+  };
+  /** The radius of a junction's disk in the display: fixed, but at most 0.3 of the distance to the nearest junction. */
+  const radiusOf = (v: Vertex, transform?: (z: Complex) => Complex) => {
+    const p = layout.junctions.get(v) as Complex;
+    const toScreen = (z: Complex) => toDisplay(transform ? transform(z) : z);
+    const d = nearest.get(v) as number;
+    const nearestOnScreen = Number.isFinite(d)
+      ? toScreen(p.add(new Complex(d, 0)))
+          .sub(toScreen(p))
+          .abs()
+      : Infinity;
+    return Math.min(junctionRadius * localScale(p, transform), nearestOnScreen * 0.3);
+  };
+
+  // Strip widths, constant in the hyperbolic metric for hyperbolic charts (so the strips get thinner towards the
+  // boundary, and in the copies): thin and uniform, or to scale with their share of the ports, measured in pixels at
+  // the centre of the model. To scale, all are scaled down so that the strands of each gate together are no wider than
+  // the disk of its junction.
+  const metric = (z: Complex, direction: Complex) => (hyperbolic ? lengthFactor(model, z, direction) : 1);
+  const centreMetric = metric(toDisplay(Complex.ZERO), Complex.ONE);
+  const portPixels = averagePortPixels(chart, toDisplay) * scale;
+  const basePixels = (e: Edge) =>
+    options.stripWidth === "toScale"
+      ? Math.max(0.8, (layout.relativeWidth.get(e) ?? 0.2) * portPixels * 0.9)
+      : 2.2;
+  let shrink = 1;
+  if (options.stripWidth === "toScale")
+    for (const v of fs.graph.vertices) {
+      // The strands of a gate leave side by side, so their widths add up (as the widths of a train track do).
+      const at = toDisplay(layout.junctions.get(v) as Complex);
+      const gateWidths = new Map<Vertex, number>();
+      for (const [x, s] of gatesOf(v).switchOf)
+        gateWidths.set(
+          s,
+          (gateWidths.get(s) ?? 0) + ((basePixels(x.edge) / scale) * centreMetric) / metric(at, Complex.ONE),
+        );
+      for (const width of gateWidths.values()) shrink = Math.min(shrink, (2 * radiusOf(v)) / width);
+    }
+  /** The width of the strip e in the hyperbolic metric (in display units for flat charts). */
+  const trueWidth = (e: Edge) => ((basePixels(e) * shrink) / scale) * centreMetric;
+  /** The width of e in display units at the display point z, across the unit direction n (at least 0.4 pixels). */
+  const widthAt = (e: Edge, z: Complex, n: Complex) => Math.max(0.4 / scale, trueWidth(e) / metric(z, n));
+  /** The region between the offsets from·w and to·w across a display polyline of e (w: the width of e there). */
+  const band = (e: Edge, line: readonly Complex[], from: number, to: number): string => {
+    const left: Complex[] = [];
+    const right: Complex[] = [];
+    line.forEach((p, i) => {
+      const t = (line[Math.min(line.length - 1, i + 1)] as Complex).sub(line[Math.max(0, i - 1)] as Complex);
+      const length = t.abs();
+      if (length === 0) return;
+      const normal = new Complex(-t.im / length, t.re / length);
+      const w = widthAt(e, p, normal);
+      left.push(p.add(normal.scale(from * w)));
+      right.push(p.add(normal.scale(to * w)));
+    });
+    return left.length < 2 ? "" : `M${[...left, ...right.toReversed()].map(px).join("L")}Z`;
+  };
 
   /** Moves the ends of the strips at junctions onto the switch points of their gates. */
   const attachToSwitches = (
@@ -179,9 +246,14 @@ export function renderSvg(fs: FibredSurface, layout: Layout, options: RenderOpti
         let unrolled = chartAngle(inGate[0] as OrientedEdge);
         const first = unrolled;
         for (const y of inGate.slice(1)) unrolled += step(unrolled, chartAngle(y));
-        const psiInChart = (first + unrolled) / 2;
-        psiInChartOf.set(s, psiInChart);
+        psiInChartOf.set(s, (first + unrolled) / 2);
         lanesOf.set(s, inGate);
+      }
+      // Gates whose directions are almost equal would look like one gate (their infinitesimal branch vanishes): spread
+      // them to a minimal angle, keeping their cyclic order.
+      for (const [s, psi] of spreadAngles(psiInChartOf, Math.min(0.6, (1.2 * Math.PI) / psiInChartOf.size)))
+        psiInChartOf.set(s, psi);
+      for (const [s, psiInChart] of psiInChartOf) {
         // The same direction in the display.
         const psi = toScreen(junctionInChart.add(Complex.fromPolar(1e-4, psiInChart)))
           .sub(toScreen(junctionInChart))
@@ -289,17 +361,6 @@ export function renderSvg(fs: FibredSurface, layout: Layout, options: RenderOpti
   const drawSurface = (transform: ((z: Complex) => Complex) | undefined, opacity: number) => {
     const group: string[] = [];
     const labels = (options.labels ?? true) && transform === undefined; // copies get no labels
-    /** How much the copy shrinks the display near z (1 for the polygon itself). */
-    const localScale = (z: Complex) => {
-      if (transform === undefined) return 1;
-      const delta = new Complex(1e-4, 0);
-      const before = toDisplay(z.add(delta)).sub(toDisplay(z)).abs();
-      return before === 0
-        ? 1
-        : toDisplay(transform(z.add(delta)))
-            .sub(toDisplay(transform(z)))
-            .abs() / before;
-    };
     for (const d of chart.decorations)
       group.push(decoration(d, (z) => toDisplay(transform ? transform(z) : z), px, scale, labels));
 
@@ -308,20 +369,11 @@ export function renderSvg(fs: FibredSurface, layout: Layout, options: RenderOpti
       toDisplay(
         transform ? transform(layout.junctions.get(v) as Complex) : (layout.junctions.get(v) as Complex),
       );
-    /** The radius of a junction's disk in the display: fixed, but at most 0.3 of the distance to the nearest junction. */
-    const radiusOf = (v: Vertex) => {
-      const p = layout.junctions.get(v) as Complex;
-      const toScreen = (z: Complex) => toDisplay(transform ? transform(z) : z);
-      const d = nearest.get(v) as number;
-      const nearestOnScreen = Number.isFinite(d)
-        ? toScreen(p.add(new Complex(d, 0)))
-            .sub(toScreen(p))
-            .abs()
-        : Infinity;
-      return Math.min(junctionRadius * localScale(p), nearestOnScreen * 0.3);
-    };
-    const switchPoints = attachToSwitches(lines, junctionAt, radiusOf, (z) =>
-      toDisplay(transform ? transform(z) : z),
+    const switchPoints = attachToSwitches(
+      lines,
+      junctionAt,
+      (v) => radiusOf(v, transform),
+      (z) => toDisplay(transform ? transform(z) : z),
     );
 
     if (view === "striped") {
@@ -331,32 +383,32 @@ export function renderSvg(fs: FibredSurface, layout: Layout, options: RenderOpti
       } catch {
         if (!notes.includes(STRIPED_NOTE)) notes.push(STRIPED_NOTE);
       }
+      // The ribbon is 2.2 times as wide as the strip in the other view; the stripes fill 80% of their share.
       for (const e of fs.graph.edges) {
-        const width = strokeWidth(e) * 2.2;
         for (const line of lines.get(e) ?? [])
           group.push(
-            `<path data-edge="${escape(e.name)}" d="${path(line)}" stroke="${css(e.color)}" stroke-opacity="0.18" stroke-width="${fmt(width)}" fill="none" stroke-linejoin="round"/>`,
+            `<path data-edge="${escape(e.name)}" d="${band(e, line, -1.1, 1.1)}" fill="${css(e.color)}" fill-opacity="0.18" stroke="${css(e.color)}" stroke-width="0"/>`,
           );
         const list = stripes?.along.get(e) ?? [];
         list.forEach((s, i) => {
-          const shift = (width / scale) * (-0.5 + (i + 0.5) / list.length);
+          const [from, to] = [-1.1 + (2.2 * (i + 0.1)) / list.length, -1.1 + (2.2 * (i + 0.9)) / list.length];
           for (const line of lines.get(e) ?? [])
-            group.push(
-              `<path d="${path(offset(line, shift))}" stroke="${css(s.strand.edge.color)}" stroke-width="${fmt((0.8 * width) / list.length)}" fill="none"/>`,
-            );
+            group.push(`<path d="${band(e, line, from, to)}" fill="${css(s.strand.edge.color)}"/>`);
         });
       }
     } else {
       // A small arrow in the middle of each segment, in the direction of the strip.
       for (const e of fs.graph.edges)
         for (const line of lines.get(e) ?? []) {
-          const arrow = arrowAt(line, (4 + strokeWidth(e)) / scale);
+          const middle = line[Math.floor(line.length / 2)] as Complex;
+          const shrinking = centreMetric / metric(middle, Complex.ONE); // the arrows shrink like the strips
+          const arrow = arrowAt(line, (4 / scale) * shrinking + widthAt(e, middle, Complex.ONE));
           if (arrow) group.push(`<path d="M${arrow.map(px).join("L")}Z" fill="${css(e.color)}"/>`);
         }
       for (const e of fs.graph.edges)
         for (const line of lines.get(e) ?? [])
           group.push(
-            `<path data-edge="${escape(e.name)}" d="${path(line)}" stroke="${css(e.color)}" stroke-width="${fmt(strokeWidth(e))}" fill="none" stroke-linecap="round" stroke-linejoin="round"/>`,
+            `<path data-edge="${escape(e.name)}" d="${band(e, line, -0.5, 0.5)}" fill="${css(e.color)}" stroke="${css(e.color)}" stroke-width="0"/>`,
           );
     }
 
@@ -364,10 +416,10 @@ export function renderSvg(fs: FibredSurface, layout: Layout, options: RenderOpti
       const center = junctionAt(v);
       const points = switchPoints.get(v) as Map<Vertex, Complex>;
       const transparent = view === "trainTrack";
-      const radius = radiusOf(v) * scale;
+      const radius = radiusOf(v, transform) * scale;
       if (radius < 1) continue;
       group.push(
-        `<circle cx="${px(center).split(",")[0]}" cy="${px(center).split(",")[1]}" r="${fmt(radius)}" fill="${transparent ? "#ffffff" : "#fafafa"}" fill-opacity="${transparent ? 0.35 : 1}" stroke="#333" stroke-width="1"/>`,
+        `<circle cx="${px(center).split(",")[0]}" cy="${px(center).split(",")[1]}" r="${fmt(radius)}" fill="${transparent ? "#ffffff" : "#fafafa"}" fill-opacity="${transparent ? 0.35 : 1}" stroke="${JUNCTION_COLOR}" stroke-width="1"/>`,
       );
       if (transparent)
         for (const [a, b] of gatesOf(v).infinitesimal) {
@@ -381,7 +433,14 @@ export function renderSvg(fs: FibredSurface, layout: Layout, options: RenderOpti
         group.push(`<circle cx="${px(p).split(",")[0]}" cy="${px(p).split(",")[1]}" r="1.6" fill="#333"/>`);
       if (labels)
         group.push(
-          label(center.add(new Complex(junctionRadius * 1.3, junctionRadius * 1.3)), v.name, "#666", px, 10),
+          label(
+            center.add(new Complex(junctionRadius * 1.3, junctionRadius * 1.3)),
+            v.name,
+            JUNCTION_COLOR,
+            px,
+            11,
+            true,
+          ),
         );
     }
     if (labels)
@@ -407,7 +466,32 @@ export function renderSvg(fs: FibredSurface, layout: Layout, options: RenderOpti
   const svg =
     `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 ${size} ${size}" font-family="Georgia, 'Times New Roman', serif">` +
     `<rect width="100%" height="100%" fill="#ffffff"/>${parts.join("")}</svg>`;
-  return { svg, notes };
+  const polygon = chart.decorations.flatMap((d) => (d.kind === "polygon" ? [d.vertices] : []))[0];
+  /** Whether a chart point is in the (convex, counterclockwise) polygon; true if there is none. */
+  const inPolygon = (k: Complex) =>
+    polygon === undefined ||
+    polygon.every((a, i) => {
+      const edge = (polygon[(i + 1) % polygon.length] as Complex).sub(a);
+      const to = k.sub(a);
+      return edge.re * to.im - edge.im * to.re >= -1e-9;
+    });
+  const identity = { applyKlein: (z: Complex) => z, inverseKlein: (z: Complex) => z };
+  const echo = (x: number, y: number) => {
+    const z = new Complex(x / scale + bounds.minX, bounds.maxY - y / scale);
+    const k = hyperbolic ? toKlein(model, z) : z;
+    if (hyperbolic && !(k.abs() < 1)) return [];
+    const all = [identity, ...copies];
+    const home = all.find((c) => inPolygon(c.inverseKlein(k)));
+    if (home === undefined) return [];
+    const q = home.inverseKlein(k);
+    return all.flatMap((c) => {
+      const d = toDisplay(c.applyKlein(q));
+      const r = (4 * centreMetric) / metric(d, Complex.ONE); // pixels
+      const [sx, sy] = [(d.re - bounds.minX) * scale, (bounds.maxY - d.im) * scale];
+      return Number.isFinite(sx) && Number.isFinite(sy) && r > 0.3 ? [{ x: sx, y: sy, r }] : [];
+    });
+  };
+  return { svg, notes, echo };
 }
 
 const STRIPED_NOTE = "The striped view needs g to be tight: pull tight (or run the algorithm) first.";
@@ -577,7 +661,7 @@ function deckCopies(
   chart: Chart,
   depth: number,
   toDisplay: (z: Complex) => Complex,
-): { applyKlein: (z: Complex) => Complex }[] {
+): { applyKlein: (z: Complex) => Complex; inverseKlein: (z: Complex) => Complex }[] {
   const deck = chart.deck;
   if (deck === undefined || depth <= 0) return [];
   if (deck.kind === "translation") {
@@ -598,7 +682,10 @@ function deckCopies(
         }
       frontier = next;
     }
-    return result.map((u) => ({ applyKlein: (z: Complex) => z.add(u) }));
+    return result.map((u) => ({
+      applyKlein: (z: Complex) => z.add(u),
+      inverseKlein: (z: Complex) => z.sub(u),
+    }));
   }
   const seen = new Set<string>(["0.000000,0.000000"]);
   let frontier: DiskIsometry[] = [DiskIsometry.IDENTITY];
@@ -617,7 +704,13 @@ function deckCopies(
       }
     frontier = next;
   }
-  return result;
+  return result.map((u) => {
+    const inverse = u.inverse();
+    return {
+      applyKlein: (z: Complex) => u.applyKlein(z),
+      inverseKlein: (z: Complex) => inverse.applyKlein(z),
+    };
+  });
 }
 
 function css(color: Color): string {
@@ -712,4 +805,34 @@ function distanceToSegment(p: Complex, a: Complex, b: Complex): number {
   const t =
     length2 === 0 ? 0 : Math.max(0, Math.min(1, ((p.re - a.re) * ab.re + (p.im - a.im) * ab.im) / length2));
   return p.sub(a.add(ab.scale(t))).abs();
+}
+
+/**
+ * Moves the angles apart until consecutive ones (in their cyclic order) are at least `gap` apart, pushing each close
+ * pair apart symmetrically. Needs gap · (number of angles) < 2π.
+ */
+function spreadAngles<K>(angles: ReadonlyMap<K, number>, gap: number): Map<K, number> {
+  const full = 2 * Math.PI;
+  const sorted = [...angles]
+    .map(([k, a]) => [k, ((a % full) + full) % full] as [K, number])
+    .sort((p, q) => p[1] - q[1]);
+  const n = sorted.length;
+  if (n < 2) return new Map(angles);
+  const a = sorted.map((p) => p[1]);
+  for (let round = 0; round < 200; round++) {
+    let moved = false;
+    for (let i = 0; i < n; i++) {
+      const j = (i + 1) % n;
+      const d =
+        j === 0 ? (a[0] as number) + full - (a[n - 1] as number) : (a[j] as number) - (a[i] as number);
+      if (d < gap - 1e-9) {
+        const push = (gap - d) / 2;
+        a[i] = (a[i] as number) - push;
+        a[j] = (a[j] as number) + push;
+        moved = true;
+      }
+    }
+    if (!moved) break;
+  }
+  return new Map(sorted.map(([k], i) => [k, a[i] as number]));
 }

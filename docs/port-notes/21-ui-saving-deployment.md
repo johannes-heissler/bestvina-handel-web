@@ -113,3 +113,11 @@
     letters in a second line (highlighted for cusps and multicusps), and below it the permutation g: Bᵢ ↦ Bⱼ;
   - then the layers P₀ = P, P₁, P₂, … of the pre-periphery.
 - **Embedding μ:** the cyclic order of G₀ above it, and the total number of side crossings below it.
+
+### Panel changes
+
+- **Gates** have their own panel above the graph map (they describe the graph).
+- **Punctures, periphery:** the interior angle at a turn with k infinitesimal branches is kπ (k = 1 smooth, angle π;
+  k = 0 or 2 a cusp, angle 2π; k ≥ 3 a multicusp, angle kπ). The **pretrivial strips** are listed on their own and
+  are not counted in the layers of the (pre-)periphery; each section is shown only when it is not empty.
+- Headings are bold instead of italic; junction names are mathematical symbols (italic) in dark green.

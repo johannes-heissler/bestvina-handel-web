@@ -50,6 +50,19 @@
   let panY = $state(0);
   let dragging: { x: number; y: number } | undefined;
   let mouse = $state({ x: 0, y: 0 });
+  // The point under the mouse, as a dot in the polygon and in each copy (sized by the hyperbolic metric).
+  let surfaceElement: HTMLDivElement | undefined = $state();
+  let dots = $state<{ x: number; y: number; r: number }[]>([]);
+  function updateDots(event: PointerEvent) {
+    const svg = surfaceElement?.querySelector("svg:not(.echo)") as SVGSVGElement | null;
+    const matrix = svg?.getScreenCTM();
+    if (!svg || !matrix || !rendered) {
+      dots = [];
+      return;
+    }
+    const p = new DOMPoint(event.clientX, event.clientY).matrixTransform(matrix.inverse());
+    dots = rendered.echo(p.x, p.y);
+  }
 
   // The card for the strip under the mouse: its images under g and μ, its width and length.
   const weights = new WeakMap<FibredSurface, MatrixInfo>();
@@ -89,6 +102,7 @@
   function onPointerMove(event: PointerEvent) {
     const rect = (event.currentTarget as HTMLElement).getBoundingClientRect();
     mouse = { x: event.clientX - rect.left, y: event.clientY - rect.top };
+    updateDots(event);
     if (dragging) {
       panX = event.clientX - dragging.x;
       panY = event.clientY - dragging.y;
@@ -165,13 +179,21 @@
     onpointerdown={onPointerDown}
     onpointermove={onPointerMove}
     onpointerup={onPointerUp}
-    onpointerleave={() => (app.hovered = undefined)}
+    onpointerleave={() => {
+      app.hovered = undefined;
+      dots = [];
+    }}
     role="img"
     aria-label="The fibred surface"
   >
-    <div class="surface" style:transform={`translate(${panX}px, ${panY}px) scale(${zoom})`}>
+    <div class="surface" bind:this={surfaceElement} style:transform={`translate(${panX}px, ${panY}px) scale(${zoom})`}>
       <!-- The SVG comes from our own renderer (src/render/svg.ts), not from user input. -->
       {@html highlight}{@html rendered?.svg ?? ""}
+      {#if dots.length}
+        <svg class="echo" viewBox="0 0 800 800" aria-hidden="true">
+          {#each dots as d, i (i)}<circle cx={d.x} cy={d.y} r={d.r} />{/each}
+        </svg>
+      {/if}
     </div>
     {#if card}
       <div class="hover-card" style:left={`${mouse.x + 16}px`} style:top={`${mouse.y + 16}px`}>

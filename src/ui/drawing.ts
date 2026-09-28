@@ -32,6 +32,10 @@ export function draw(model: SurfaceModel, surface: FibredSurface, options: DrawO
     const chart = chartFor(model, surface);
     return renderSvg(surface, layout(surface, chart, { widthExponent: options.widthExponent ?? 0 }), options);
   } catch (e) {
-    return { svg: "", notes: [`This state can't be drawn: ${e instanceof Error ? e.message : String(e)}`] };
+    return {
+      svg: "",
+      echo: () => [],
+      notes: [`This state can't be drawn: ${e instanceof Error ? e.message : String(e)}`],
+    };
   }
 }

@@ -5,6 +5,7 @@
   --ink: #1f1f1f;
   --muted: #6b6b6b;
   --rule: #d9d7d0;
+  --junction: #1a693a;
   --accent: #1a4fa0;
   --error: #a3222b;
   --font: Georgia, "Times New Roman", serif;
@@ -18,6 +19,7 @@
     --ink: #e6e4df;
     --muted: #a09d96;
     --rule: #3a3a3e;
+    --junction: #5fbf85;
     --accent: #7fa7e8;
     --error: #ef7b82;
   }
@@ -141,15 +143,14 @@ input[type="number"] {
 }
 .panel h2 {
   font-size: 1rem;
-  font-weight: normal;
+  font-weight: 600;
   font-variant: small-caps;
   letter-spacing: 0.05em;
   margin: 0.2rem 0 0.5rem;
 }
 .panel h3 {
   font-size: 0.9rem;
-  font-weight: normal;
-  font-style: italic;
+  font-weight: 600;
   margin: 0.8rem 0 0.3rem;
 }
 .sidebar {
@@ -214,7 +215,7 @@ input[type="number"] {
 }
 .automatic summary {
   cursor: pointer;
-  font-style: italic;
+  font-weight: 600;
   margin: 0.6rem 0 0.3rem;
 }
 .rating {
@@ -231,8 +232,11 @@ input[type="number"] {
 .strip-name {
   font-style: italic;
 }
+/* Junction names are mathematical symbols, like strip names, in the dark green of the C# junctions. */
 .junction-name {
-  font-variant: small-caps;
+  font-style: italic;
+  font-variant: normal;
+  color: var(--junction);
 }
 dl {
   display: grid;
@@ -282,6 +286,7 @@ pre {
   cursor: grabbing;
 }
 .surface {
+  position: relative;
   transform-origin: 0 0;
   width: 100%;
   height: 100%;
@@ -289,6 +294,17 @@ pre {
 .surface svg {
   width: 100%;
   height: 100%;
+}
+.surface svg.echo {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: none;
+}
+.surface svg.echo circle {
+  fill: #c0392b;
+  stroke: #ffffff;
+  stroke-width: 0.8;
 }
 
 .resizer {

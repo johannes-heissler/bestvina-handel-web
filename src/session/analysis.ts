@@ -7,7 +7,7 @@
  */
 import type { Edge, OrientedEdge, Vertex } from "../graph/ribbon-graph";
 import type { FibredSurface } from "../fibred/fibred-surface";
-import { findGates } from "../fibred/gates";
+import { findGates, pretrivialEdges } from "../fibred/gates";
 import { perronFrobenius } from "../fibred/perron-frobenius";
 import { trainTrack } from "../fibred/train-track";
 
@@ -144,8 +144,20 @@ export function gatesInfo(fs: FibredSurface): { junction: Vertex; gates: Oriente
 }
 
 /**
- * The layers of the pre-periphery: P₀ = P, and Pᵢ the strips outside the earlier layers that g maps into P₀ ∪ ⋯ ∪ Pᵢ₋₁.
+ * The pretrivial strips (some power of g maps them to a trivial path), and the layers of the pre-periphery without
+ * them: P₀ = P, and Pᵢ the other strips that g maps into P₀ ∪ ⋯ ∪ Pᵢ₋₁ (and pretrivial strips).
  */
-export function peripheryInfo(fs: FibredSurface): { layers: Edge[][] } {
-  return { layers: fs.prePeripheralLayers().map((layer) => fs.graph.edges.filter((e) => layer.has(e))) };
+export function peripheryInfo(fs: FibredSurface): { pretrivial: Edge[]; layers: Edge[][] } {
+  const pretrivial = pretrivialEdges(fs.graph, fs.g);
+  const layers = [fs.graph.edges.filter((e) => fs.peripheral.has(e) && !pretrivial.has(e))];
+  const remaining = new Set(fs.graph.edges.filter((e) => !fs.peripheral.has(e) && !pretrivial.has(e)));
+  while (remaining.size > 0) {
+    const layer = [...remaining].filter((e) =>
+      fs.g.image(e.forward).letters.every((x) => !remaining.has(x.edge)),
+    );
+    if (layer.length === 0) break;
+    layers.push(layer);
+    for (const e of layer) remaining.delete(e);
+  }
+  return { pretrivial: fs.graph.edges.filter((e) => pretrivial.has(e)), layers };
 }

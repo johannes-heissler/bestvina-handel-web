@@ -203,3 +203,22 @@ to the target.
   straight segment to one of its ports crosses another strip is moved towards that port, past the crossing (a few
   rounds). The radius of the junction disk and the caps of the bending arcs are now bounded by the distance to the
   nearest other junction _or strip not ending there_, so the bends don't reach across a strip passing close by.
+
+### Widths in the hyperbolic metric, gate spreading, the point under the mouse
+
+- **Strip widths are constant in the hyperbolic metric** (for hyperbolic charts). SVG strokes have a constant width,
+  so each strip is now a filled band: at every point of its display polyline, the offsets ±w/2 across it, where w is
+  the hyperbolic width divided by the metric of the display model there (`lengthFactor` in `hyperbolic.ts`:
+  2/(1 − |z|²) for Poincaré, 1/Im z for the half-plane, and for the non-conformal Klein model the length factor in
+  the direction across the strip). The widths are measured in pixels at the centre of the model, so the strips get
+  thinner towards the boundary and in the copies under deck transformations. The arrows shrink the same way; the
+  striped view uses the same bands for its ribbon and stripes.
+- **To scale** is scaled down by one factor so that at every junction the strands of each gate _together_ are no wider
+  than the junction's disk (they leave the gate side by side, and their widths add up as in a train track).
+- **Gate directions are spread:** gates whose directions (the middles of their angular spans) are closer than
+  min(0.6 rad, 60% of an equal share) are pushed apart pairwise, keeping their cyclic order, so the infinitesimal
+  branch between them stays visible and they don't look like one gate.
+- **The point under the mouse** (the C# `Display(Point)`): `renderSvg` returns `echo(x, y)`, which maps the SVG
+  point back to the chart, finds the copy of the polygon containing it, and returns the same point in the polygon
+  and in every drawn copy, with the radius of a dot of constant hyperbolic size. The view draws them on an overlay.
+- Junction disks and names are drawn in the dark green of the C# junctions (26, 105, 58).

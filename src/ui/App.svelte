@@ -7,6 +7,7 @@
   import HistoryView from "./HistoryView.svelte";
   import BoundaryPanel from "./BoundaryPanel.svelte";
   import EmbeddingPanel from "./EmbeddingPanel.svelte";
+  import GatesPanel from "./GatesPanel.svelte";
   import InfoPanel from "./InfoPanel.svelte";
   import MatrixPanel from "./MatrixPanel.svelte";
   import MapEditor from "./MapEditor.svelte";
@@ -112,6 +113,7 @@
 {#snippet sidebar()}
   <div class="sidebar" class:left={app.sidebarLeft}>
     <SuggestionPanel />
+    <GatesPanel />
     <MapEditor />
     <InfoPanel />
     <MatrixPanel />

@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { Complex } from "../math/complex";
 import {
+  type HyperbolicModel,
+  lengthFactor,
   DiskIsometry,
   diskToHalfPlane,
   fromKlein,
@@ -63,5 +65,22 @@ describe("regular polygons and side pairings", () => {
     const image = pairing.applyKlein(Complex.ZERO);
     const normal = vertices[2]!.add(vertices[3]!).scale(0.5);
     expect(image.re * normal.re + image.im * normal.im).toBeGreaterThan(normal.abs2());
+  });
+});
+
+describe("the metric in the display models", () => {
+  it("agrees between the models at corresponding points", () => {
+    // A short hyperbolic segment has the same length measured in each model.
+    const k = new Complex(0.3, -0.5);
+    const direction = new Complex(0.6, 0.8);
+    const lengthIn = (model: HyperbolicModel) => {
+      const a = fromKlein(model, k);
+      const b = fromKlein(model, k.add(direction.scale(1e-6)));
+      const step = b.sub(a);
+      return step.abs() * lengthFactor(model, a, step.scale(1 / step.abs()));
+    };
+    expect(lengthIn("poincare")).toBeCloseTo(lengthIn("klein") as number, 9);
+    expect(lengthIn("halfplane")).toBeCloseTo(lengthIn("klein") as number, 9);
+    expect(lengthFactor("poincare", Complex.ZERO, Complex.ONE)).toBe(2);
   });
 });

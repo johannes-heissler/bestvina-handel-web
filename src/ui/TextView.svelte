@@ -1,4 +1,4 @@
-<!-- Structured text: strip names in their colours (hovering one highlights it in the views), junction names in small caps. -->
+<!-- Structured text: strip names in their colours (hovering one highlights it in the views), junction names in dark green, as mathematical symbols. -->
 <script lang="ts">
   import type { FibredSurface } from "../fibred/fibred-surface";
   import { invertName, isForwardName } from "../graph/names";

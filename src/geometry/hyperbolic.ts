@@ -58,6 +58,25 @@ export function toKlein(model: HyperbolicModel, z: Complex): Complex {
 }
 
 /**
+ * The hyperbolic length of a short Euclidean segment of length 1 at the point z of the display model, in the unit
+ * direction `direction`: the metric 2|dz| / (1 − |z|²) (Poincaré), |dz| / Im z (half-plane), and for the Klein model,
+ * which is not conformal, √(|dz|² / (1 − |z|²) + ⟨z, dz⟩² / (1 − |z|²)²).
+ */
+export function lengthFactor(model: HyperbolicModel, z: Complex, direction: Complex): number {
+  switch (model) {
+    case "poincare":
+      return 2 / Math.max(1e-12, 1 - z.abs2());
+    case "halfplane":
+      return 1 / Math.max(1e-12, z.im);
+    case "klein": {
+      const q = Math.max(1e-12, 1 - z.abs2());
+      const radial = z.re * direction.re + z.im * direction.im;
+      return Math.sqrt(1 / q + (radial * radial) / (q * q));
+    }
+  }
+}
+
+/**
  * An orientation-preserving isometry of the Poincaré disk, z ↦ (a z + b) / (b̄ z + ā) with |a|² − |b|² = 1 (up to
  * scaling). Used for the side pairings and the deck transformations.
  */
