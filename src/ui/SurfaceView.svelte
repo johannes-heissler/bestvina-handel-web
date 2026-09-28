@@ -15,7 +15,7 @@
   import { exportImage, type ExportFormat } from "./export";
   import { app } from "./state.svelte";
 
-  let { initialView = "standard" }: { initialView?: ViewKind } = $props();
+  let { initialView = "trainTrack" }: { initialView?: ViewKind } = $props();
 
   let view = $state<ViewKind>(untrack(() => initialView)); // the prop only sets the initial view
   let model = $state<HyperbolicModel>("poincare");
@@ -121,8 +121,7 @@
     <label
       >View
       <select bind:value={view}>
-        <option value="standard">Standard</option>
-        <option value="tau">Train track τ</option>
+        <option value="trainTrack">Train track τ</option>
         <option value="striped">Striped f(F) ⊆ F</option>
       </select></label
     >

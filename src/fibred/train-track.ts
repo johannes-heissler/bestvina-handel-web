@@ -14,7 +14,7 @@ import { CombinatorialMap } from "../graph/combinatorial-map";
 import { EdgePath } from "../graph/edge-path";
 import { type Edge, type OrientedEdge, RibbonGraph, type Vertex } from "../graph/ribbon-graph";
 import type { FibredSurface } from "./fibred-surface";
-import { findGates } from "./gates";
+import { findGates, reducedDerivative } from "./gates";
 import { perronFrobenius } from "./perron-frobenius";
 
 /** A branch of τ is either a real branch (a strip of G) or an infinitesimal branch inside a junction. */
@@ -110,10 +110,12 @@ export function trainTrack(fs: FibredSurface): TrainTrack {
     return e.isForward ? branch.forward : branch.backward;
   };
 
-  // Infinitesimal branches: pairs of gates crossed by a turn of g, closed under Dg.
+  // Infinitesimal branches: pairs of gates crossed by a turn of g, closed under Dg* (which skips pretrivial edges,
+  // like the gates).
+  const dg = reducedDerivative(fs.graph, g);
   const derivativeSwitch = (s: Vertex): Vertex | undefined => {
     const end = [...switchOf].find(([, t]) => t === s)?.[0];
-    const d = end === undefined ? undefined : g.derivative(end);
+    const d = end === undefined ? undefined : dg(end);
     return d === undefined ? undefined : switchOf.get(d);
   };
   const infinitesimal = new Map<string, OrientedEdge>(); // key "s|t" in both directions
@@ -141,7 +143,10 @@ export function trainTrack(fs: FibredSurface): TrainTrack {
     if (s === t || infinitesimal.has(`${s.id}|${t.id}`)) continue;
     addInfinitesimal(s, t);
     const [ds, dt] = [derivativeSwitch(s), derivativeSwitch(t)];
-    if (ds !== undefined && dt !== undefined) queue.push([ds, dt]);
+    // Skipping a pretrivial letter can lead to switches at different junctions: that is no turn of G (only one in
+    // the quotient by the pretrivial forest), so it gives no branch.
+    if (ds !== undefined && dt !== undefined && junctionOf.get(ds) === junctionOf.get(dt))
+      queue.push([ds, dt]);
   }
 
   // Cyclic order at each switch: its real branch ends in the order of the star, then the infinitesimal

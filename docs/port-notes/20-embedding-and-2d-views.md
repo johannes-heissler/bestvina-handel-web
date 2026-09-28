@@ -76,9 +76,9 @@ That way the chart uses the same objects as μ, even after renaming.
 
 SVG, as you chose, generated as a string (headless: tested in Node, and ready for export).
 
-- **standard**: the strips end at the **switches** of their gates on a small opaque disk around each junction. This is τ
-  with the junctions closed, so strips in a gate arrive together.
-- **tau**: larger transparent disks, with the infinitesimal branches of τ between the switches.
+- **train track τ**: the strips end at the **switches** of their gates on a small transparent disk around each
+  junction, so strips in a gate arrive together, with the infinitesimal branches of τ between the switches. (This
+  merges the former standard view, with opaque disks, and the former τ view, whose larger disks got in the way.)
 - **striped**: each strip as a light ribbon with one stripe per piece of f(F) inside it, coloured like the strip it comes
   from (f[F] ⊆ F).
 - Options: display model (Poincaré, Klein, upper half-plane); smoothing (none, Catmull–Rom spline, or rounded corners,
@@ -116,7 +116,7 @@ graphs, the three views, and the tessellation.
   at the switch and run straight out, **perpendicular to the circle and parallel** (side by side in their angular
   order, at most one radius wide together). Only then do they bend into their paths with a cubic Bézier curve (the C#
   `AdjustStartVector`, done more smoothly). The bend is at least about 30 pixels long, and longer for strands that turn
-  far away from the gate's direction. This holds in the standard view and in the τ view.
+  far away from the gate's direction. This holds in the train-track view.
 
 ## Update: order within a gate, arrows
 
@@ -202,4 +202,4 @@ to the target.
   can lie right next to (or on the wrong side of) a neighbouring strip. After the Tutte layout, a junction whose
   straight segment to one of its ports crosses another strip is moved towards that port, past the crossing (a few
   rounds). The radius of the junction disk and the caps of the bending arcs are now bounded by the distance to the
-  nearest other junction *or strip not ending there*, so the bends don't reach across a strip passing close by.
+  nearest other junction _or strip not ending there_, so the bends don't reach across a strip passing close by.

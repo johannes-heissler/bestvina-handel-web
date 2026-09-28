@@ -203,3 +203,17 @@ dictionary).
 torus map a ↦ ab, b ↦ bab (transition matrix, boundary word preserved, gates {a}, {b}, {A, B}), a μ-like map
 between two different graphs, associativity of composition, the continuity checks, error positions of the
 parser, and parse(print(p)) = p for 100 random paths.
+
+### Later change: gates by Dg* (skipping pretrivial edges)
+
+The C# gates (and the first port) iterate Dg and treat "Dg undefined" as one value, so every edge whose Dg-orbit runs
+into a pretrivial edge fell into one gate with the pretrivial edges. Now the gates iterate **Dg***: e ↦ the first
+letter of g(e) that is not pretrivial (`reducedDerivative` in `gates.ts`). The pretrivial edges (some power of g
+maps them to a trivial path) are found from below (`pretrivialEdges`): first the edges with trivial image, then those
+whose image consists only of edges found so far. Only the pretrivial edges themselves still form one gate per
+junction. Dg* maps the non-pretrivial edges to themselves, so comparing Dg*ᴺ still suffices.
+
+Dg* can take the two edges of a turn to different junctions (skipping a pretrivial letter crosses the pretrivial
+forest). The train track follows the closure of the infinitesimal branches under Dg* only while both switches are at
+the same junction; otherwise the pair is a turn only in the quotient by the pretrivial forest and gives no branch.
+The inefficiencies still use Dg for their order and fold, since folding works on the actual first letters.

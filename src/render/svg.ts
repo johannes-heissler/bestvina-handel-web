@@ -3,9 +3,8 @@
  * Node for tests and exports, and the UI puts it into the page.
  *
  * Views (your description of D3):
- * - **standard**: the strips, ending at the switches of their gates on a small opaque disk around each junction (the
- *   train track τ with the junctions closed);
- * - **tau**: the same with transparent disks, showing the infinitesimal branches of τ between the switches;
+ * - **trainTrack**: the train track τ: the strips, ending at the switches of their gates on a small transparent disk
+ *   around each junction, with the infinitesimal branches of τ between the switches;
  * - **striped**: each strip as a ribbon with one stripe per piece of the image f(F) inside it, in the colour of the
  *   strip it comes from (f[F] ⊆ F). This needs g to be tight (see `strandOrder`).
  *
@@ -21,7 +20,7 @@ import type { Chart, Decoration } from "../embedding/chart";
 import { type Layout, offset } from "../embedding/layout";
 import { strandOrder } from "../embedding/strand-order";
 
-export type ViewKind = "standard" | "tau" | "striped";
+export type ViewKind = "trainTrack" | "striped";
 export type Smoothing = "none" | "spline" | "rounded";
 
 export interface RenderOptions {
@@ -49,7 +48,7 @@ const COPY_OPACITY = 0.35;
 
 export function renderSvg(fs: FibredSurface, layout: Layout, options: RenderOptions = {}): Rendered {
   const size = options.size ?? 640;
-  const view = options.view ?? "standard";
+  const view = options.view ?? "trainTrack";
   const model = options.model ?? "poincare";
   const smoothing = options.smoothing ?? "spline";
   const chart = layout.chart;
@@ -79,8 +78,8 @@ export function renderSvg(fs: FibredSurface, layout: Layout, options: RenderOpti
       ? Math.max(0.8, (layout.relativeWidth.get(e) ?? 0.2) * portPixels * 0.9)
       : 2.2;
 
-  // Junction disks and the switches of the gates (larger in the τ view, to show the infinitesimal branches).
-  const junctionPixels = view === "tau" ? Math.max(10, size / 40) : Math.max(5, size / 110);
+  // Junction disks and the switches of the gates.
+  const junctionPixels = Math.max(5, size / 110);
   const junctionRadius = junctionPixels / scale; // in display units
   let gatesOf: (v: Vertex) => { switchOf: Map<OrientedEdge, Vertex>; infinitesimal: [Vertex, Vertex][] };
   try {
@@ -364,7 +363,7 @@ export function renderSvg(fs: FibredSurface, layout: Layout, options: RenderOpti
     for (const v of fs.graph.vertices) {
       const center = junctionAt(v);
       const points = switchPoints.get(v) as Map<Vertex, Complex>;
-      const transparent = view === "tau";
+      const transparent = view === "trainTrack";
       const radius = radiusOf(v) * scale;
       if (radius < 1) continue;
       group.push(

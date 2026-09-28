@@ -18,7 +18,7 @@ describe("SVG", () => {
     const surface = autopilot(buildPreset(preset)).surface;
     const { chart } = chartFor(preset.model, surface);
     const result = layout(surface, chart);
-    for (const view of ["standard", "tau", "striped"] as const)
+    for (const view of ["trainTrack", "striped"] as const)
       for (const model of ["poincare", "klein", "halfplane"] as const) {
         const { svg, notes } = renderSvg(surface, result, { view, model, deckDepth: 1 });
         expect(svg.startsWith("<svg")).toBe(true);

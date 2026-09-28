@@ -3,7 +3,7 @@ import { CombinatorialMap } from "../graph/combinatorial-map";
 import { fromBoundaryWords } from "../graph/from-boundary-words";
 import { parseMap } from "../graph/path-parser";
 import { RibbonGraph } from "../graph/ribbon-graph";
-import { findGates } from "./gates";
+import { findGates, pretrivialEdges } from "./gates";
 
 const mapOf = (graph: RibbonGraph, text: string) =>
   CombinatorialMap.fromEdgeImages(graph, graph, parseMap(text, graph).images);
@@ -46,5 +46,15 @@ describe("findGates", () => {
     const gates = findGates(rose, mapOf(rose, "a -> a b, b -> b a b"), () => "everything");
     expect(gates.every((gate) => gate.at === "everything")).toBe(true);
     expect(gates).toHaveLength(3);
+  });
+  it("skips pretrivial edges when iterating the derivative (Dg*)", () => {
+    const rose = new RibbonGraph(); // one vertex with three loops a, b, c
+    const v = rose.addVertex();
+    for (const name of ["a", "b", "c"]) rose.addEdge(v, v, { name });
+    // c is pretrivial (g(c) is trivial). Dg would send a and b to c and put them into one gate with c;
+    // Dg* skips c: a ↦ a, b ↦ b, so a and b are separate gates.
+    const g = mapOf(rose, "a -> c a, b -> c b, c -> ");
+    expect([...pretrivialEdges(rose, g)].map((e) => e.name)).toEqual(["c"]);
+    expect(gateNames(findGates(rose, g))).toEqual(["A", "B", "a", "b", "cC"]);
   });
 });
