@@ -178,3 +178,18 @@ The points are mapped to the display afterwards, which keeps the curve smooth.
   rest.
 - While unrolling the directions of a gate, a tiny backward step (nearly parallel strands, ≤ 20°) counts as a step
   backward, not as almost a full turn.
+
+## Update: arcs up to the tangent point, then straight (your construction)
+
+The spirals ended pointing radially away from the junction, but a strip doesn't continue radially: it goes to the side
+it crosses. So a curve turned one way during the spiral and back at its end. Now each strip end:
+
+1. leaves its switch straight, in its lane;
+2. turns on a **circular arc**, tangent to the lane, **until its direction points at its target**: the port on the
+   side it crosses, or, for a strip with trivial μ, the end of the arc at its other end (determined in two rounds,
+   starting from the midpoint);
+3. runs **straight** (a geodesic in the chart) from this tangent point to the target.
+
+The curve is tangent-continuous and turns only in one direction. Strands that turn further use smaller circles, so they
+stay on the inside and the arcs of a gate are nested. The radii are capped by the nearest junction and by the distance
+to the target.

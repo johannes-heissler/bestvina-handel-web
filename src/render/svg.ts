@@ -118,6 +118,7 @@ export function renderSvg(fs: FibredSurface, layout: Layout, options: RenderOpti
     toScreen: (z: Complex) => Complex,
   ): Map<Vertex, Map<Vertex, Complex>> => {
     const switchPoints = new Map<Vertex, Map<Vertex, Complex>>();
+    const ends = new Map<OrientedEdge, StripEnd>();
     for (const v of fs.graph.vertices) {
       const center = junctionAt(v);
       const junctionRadius = radiusOf(v);
@@ -178,26 +179,18 @@ export function renderSvg(fs: FibredSurface, layout: Layout, options: RenderOpti
       }
       switchPoints.set(v, points);
       // The strips of a gate leave their switch side by side, perpendicular to the circle (like the branches of a
-      // train track), and then bend into their paths. All of this is constructed in the chart, where each strip leaves
-      // its junction as a straight ray (in the Poincaré disk it doesn't), so that the bend can end exactly in the
-      // direction of the strip; then it is mapped to the display.
+      // train track). Everything is constructed in the chart (Klein coordinates for polygons: geodesics are straight)
+      // and then mapped to the display.
       const scale =
         toScreen(junctionInChart.add(new Complex(1e-5, 0)))
           .sub(toScreen(junctionInChart))
           .abs() / 1e-5;
       const radius = junctionRadius / (scale || 1); // the junction's radius in the chart
       const pixel = junctionRadius / junctionPixels / (scale || 1); // one pixel in the chart
-      const chartPath = (x: OrientedEdge): readonly Complex[] => {
-        const pieces = layout.strips.get(x.edge) as readonly (readonly Complex[])[];
-        return x.isForward
-          ? (pieces[0] as readonly Complex[])
-          : (pieces.at(-1) as readonly Complex[]).toReversed();
-      };
       const members = new Map<Vertex, OrientedEdge[]>();
       for (const x of star)
         members.set(switchOf.get(x) as Vertex, [...(members.get(switchOf.get(x) as Vertex) ?? []), x]);
       for (const [s, list] of members) {
-        const switchPoint = points.get(s) as Complex;
         const psi = psiInChartOf.get(s) as number;
         const out = Complex.fromPolar(1, psi);
         const left = new Complex(-out.im, out.re);
@@ -212,52 +205,76 @@ export function renderSvg(fs: FibredSurface, layout: Layout, options: RenderOpti
         list.sort((p, q) => rank(p) - rank(q));
         list.forEach((x, j) => {
           const shift = left.scale((j - (list.length - 1) / 2) * gap);
-          const radialStart = junctionInChart.add(out.scale(radius * 1.2)).add(shift);
-          const radialEnd = junctionInChart.add(out.scale(radius + length)).add(shift);
-          const { line, atStart } = endAt(lines, x);
-          const displayPath = atStart ? [...line] : line.toReversed();
-          const next = chartPath(x)[1] ?? junctionInChart.add(out);
-          const towards = next.sub(junctionInChart);
-          const angle = normalizeAngle(towards.arg() - psi);
-          // Strands that turn further from the gate's direction turn more tightly: they lie on the inside of the turn
-          // (the gate is ordered like their directions), so the bends are nested and don't cross.
-          // Long enough that the spiral turns gently (its radius has to grow while it turns).
-          const bend =
-            Math.max(length * 1.4, 20 * pixel) *
-            (1 + Math.abs(angle) / 2) *
-            (2.6 - (1.2 * Math.abs(angle)) / Math.PI);
-          // Capped, so that spirals don't reach a neighbouring junction or the spiral from the other end of a short strip.
-          const reach = Math.min(radius + bend, towards.abs() * 0.45, (nearest.get(v) as number) * 0.45);
-          let result: Complex[];
-          if (reach < radius + length * 1.2) {
-            // Too short to bend: drop the points inside the disk and start at the switch.
-            const rest = displayPath.filter((p) => p.sub(center).abs() >= junctionRadius);
-            result = [switchPoint, ...(rest.length > 0 ? rest : [displayPath.at(-1) as Complex])];
-          } else {
-            // The bend in polar coordinates around the junction: the angle turns from the gate's direction to the
-            // strip's, easing in and out (so it starts and ends radially), and the radius grows to `reach`.
-            const from = radialEnd.sub(junctionInChart);
-            const turn = normalizeAngle(towards.arg() - from.arg());
-            const arc = Array.from({ length: 48 }, (_, i) => {
-              const t = (i + 1) / 48;
-              const ease = t * t * t * (10 - 15 * t + 6 * t * t); // flat at both ends: radial there
-              return junctionInChart.add(
-                Complex.fromPolar(from.abs() + (reach - from.abs()) * t, from.arg() + turn * ease),
-              );
-            });
-            const end = toScreen(arc.at(-1) as Complex);
-            const beyond = displayPath.findIndex((p) => p.sub(center).abs() > end.sub(center).abs());
-            result = [
-              switchPoint,
-              toScreen(radialStart),
-              toScreen(radialEnd),
-              ...arc.map(toScreen),
-              ...(beyond === -1 ? [] : displayPath.slice(beyond)),
-            ];
-          }
-          line.splice(0, line.length, ...(atStart ? result : result.toReversed()));
+          ends.set(x, {
+            x,
+            center,
+            junctionRadius,
+            switchPoint: points.get(s) as Complex,
+            radialStart: junctionInChart.add(out.scale(radius * 1.2)).add(shift),
+            radialEnd: junctionInChart.add(out.scale(radius + length)).add(shift),
+            out,
+            nominal: Math.max(length * 1.4, 16 * pixel),
+            cap: (nearest.get(v) as number) * 0.4,
+          });
         });
       }
+    }
+
+    // Each strip end turns on a circular arc only until it points at its target, and then runs straight (a geodesic)
+    // to it: the port on the side it crosses, or, for a strip with trivial mu, the end of the arc at its other end
+    // (found in two rounds, starting from the midpoint). Strands that turn further use smaller circles, so they stay
+    // on the inside and the curves are nested.
+    const targetOf = (x: OrientedEdge, tangent: Map<OrientedEdge, Complex>): Complex => {
+      const pieces = layout.strips.get(x.edge) as readonly (readonly Complex[])[];
+      const path = x.isForward
+        ? (pieces[0] as readonly Complex[])
+        : (pieces.at(-1) as readonly Complex[]).toReversed();
+      if (!fs.mu.image(x.edge.forward).isEmpty) return path[1] ?? (path[0] as Complex);
+      const other = tangent.get(x.reversed);
+      if (other) return other;
+      return (layout.junctions.get(x.source) as Complex)
+        .add(layout.junctions.get(x.target) as Complex)
+        .scale(0.5);
+    };
+    const arcs = new Map<OrientedEdge, { arc: Complex[]; tangent: Complex } | undefined>();
+    let tangentPoints = new Map<OrientedEdge, Complex>();
+    for (let round = 0; round < 2; round++) {
+      const next = new Map<OrientedEdge, Complex>();
+      for (const [x, end] of ends) {
+        const arc = arcTowards(end, targetOf(x, tangentPoints));
+        arcs.set(x, arc);
+        if (arc) next.set(x, arc.tangent);
+      }
+      tangentPoints = next;
+    }
+    for (const [x, end] of ends) {
+      const { line, atStart } = endAt(lines, x);
+      const displayPath = atStart ? [...line] : line.toReversed();
+      const target = targetOf(x, tangentPoints);
+      const arc = arcs.get(x);
+      let result: Complex[];
+      if (arc === undefined) {
+        // Too short to bend: drop the points inside the disk and start at the switch.
+        const rest = displayPath.filter((p) => p.sub(end.center).abs() >= end.junctionRadius);
+        result = [end.switchPoint, ...(rest.length > 0 ? rest : [displayPath.at(-1) as Complex])];
+      } else {
+        // Continue with the rest of the strip from its point closest to the target.
+        const onScreen = toScreen(target);
+        let k = 0;
+        displayPath.forEach((p, i) => {
+          if (p.sub(onScreen).abs() < (displayPath[k] as Complex).sub(onScreen).abs()) k = i;
+        });
+        const straight = densify([arc.tangent, target], 0.01).slice(1, -1);
+        result = [
+          end.switchPoint,
+          toScreen(end.radialStart),
+          toScreen(end.radialEnd),
+          ...arc.arc.map(toScreen),
+          ...straight.map(toScreen),
+          ...displayPath.slice(k),
+        ];
+      }
+      line.splice(0, line.length, ...(atStart ? result : result.toReversed()));
     }
     return switchPoints;
   };
@@ -609,14 +626,6 @@ function escape(text: string): string {
   return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
-/** The angle in (−π, π]. */
-function normalizeAngle(angle: number): number {
-  let a = angle % (2 * Math.PI);
-  if (a <= -Math.PI) a += 2 * Math.PI;
-  if (a > Math.PI) a -= 2 * Math.PI;
-  return a;
-}
-
 /** A small triangle pointing along the polyline at the middle of its length (undefined if it is too short). */
 function arrowAt(line: readonly Complex[], size: number): Complex[] | undefined {
   const lengths = line.map((p, i) => (i === 0 ? 0 : p.sub(line[i - 1] as Complex).abs()));
@@ -636,4 +645,55 @@ function arrowAt(line: readonly Complex[], size: number): Complex[] | undefined 
     walked += segment;
   }
   return undefined;
+}
+
+/** A strip end at a junction, as it leaves its switch (display) and its lane (chart). */
+interface StripEnd {
+  readonly x: OrientedEdge;
+  readonly center: Complex;
+  readonly junctionRadius: number;
+  readonly switchPoint: Complex;
+  readonly radialStart: Complex;
+  readonly radialEnd: Complex;
+  /** The direction of the lane (unit, chart). */
+  readonly out: Complex;
+  /** The radius of the turning circle for a small turn, and its cap (from the nearest junction). */
+  readonly nominal: number;
+  readonly cap: number;
+}
+
+/**
+ * The circular arc from the end of the lane, tangent to it, that turns towards `target` until its direction points
+ * at the target (the tangent point), in chart coordinates. Strands that turn further use smaller circles, so that the
+ * arcs of a gate are nested. Undefined if the target is too close to turn towards it.
+ */
+function arcTowards(end: StripEnd, target: Complex): { arc: Complex[]; tangent: Complex } | undefined {
+  const start = end.radialEnd;
+  const toTarget = target.sub(start);
+  const distance = toTarget.abs();
+  if (distance < 1e-9) return undefined;
+  const cross = end.out.re * toTarget.im - end.out.im * toTarget.re;
+  const dot = end.out.re * toTarget.re + end.out.im * toTarget.im;
+  const turn = Math.atan2(cross, dot); // how far the strand has to turn, signed (left positive)
+  if (Math.abs(turn) < 1e-3) return { arc: [], tangent: start };
+  const left = turn > 0;
+  const rho = Math.min(end.nominal * (1.6 - (0.9 * Math.abs(turn)) / Math.PI), end.cap, distance * 0.4);
+  if (rho <= 0) return undefined;
+  const normal = left ? new Complex(-end.out.im, end.out.re) : new Complex(end.out.im, -end.out.re);
+  const c = start.add(normal.scale(rho));
+  const d = target.sub(c).abs();
+  if (d <= rho * 1.001) return undefined;
+  const beta = target.sub(c).arg();
+  const alpha = Math.acos(rho / d);
+  const thetaEnd = left ? beta - alpha : beta + alpha;
+  const theta0 = start.sub(c).arg();
+  const full = 2 * Math.PI;
+  const sweep = left
+    ? (((thetaEnd - theta0) % full) + full) % full
+    : -((((theta0 - thetaEnd) % full) + full) % full);
+  const n = Math.max(4, Math.ceil(Math.abs(sweep) / 0.08));
+  const arc = Array.from({ length: n }, (_, i) =>
+    c.add(Complex.fromPolar(rho, theta0 + (sweep * (i + 1)) / n)),
+  );
+  return { arc, tangent: arc.at(-1) as Complex };
 }
