@@ -127,6 +127,11 @@ export function renderSvg(fs: FibredSurface, layout: Layout, options: RenderOpti
    * if there is none): its disk and the bends of its strips stay well within it, so they don't reach across a strip
    * passing close by (e.g. when the junction was subdivided out of a bundle of parallel strips).
    */
+  const polygonSides = chart.decorations.flatMap((d) =>
+    d.kind === "polygon"
+      ? d.vertices.map((a, i) => [a, d.vertices[(i + 1) % d.vertices.length] as Complex] as const)
+      : [],
+  );
   const nearest = new Map<Vertex, number>(
     fs.graph.vertices.map((v) => {
       const p = layout.junctions.get(v) as Complex;
@@ -138,7 +143,9 @@ export function renderSvg(fs: FibredSurface, layout: Layout, options: RenderOpti
         .filter((e) => !own.has(e))
         .flatMap((e) => layout.strips.get(e) ?? [])
         .flatMap((piece) => piece.slice(1).map((q, i) => distanceToSegment(p, piece[i] as Complex, q)));
-      return [v, Math.min(Infinity, ...toJunctions, ...toStrips)];
+      // For a polygon, also the distance to its sides: a bend near a side must not reach across it.
+      const toSides = polygonSides.map(([a, b]) => distanceToSegment(p, a, b));
+      return [v, Math.min(Infinity, ...toJunctions, ...toStrips, ...toSides)];
     }),
   );
 
@@ -531,22 +538,28 @@ export function renderSvg(fs: FibredSurface, layout: Layout, options: RenderOpti
         const out = Complex.fromPolar(1, psi);
         const left = new Complex(-out.im, out.re);
         const gap = Math.min(radius * 0.35, radius / Math.max(1, list.length)); // the gate is at most ~R wide
-        const length = radius * 0.9;
+        // The lane stops well before a side of the polygon (at most half the way there), so that its bend and the
+        // straight piece after it don't run along the side.
+        const toSide = (z: Complex) =>
+          Math.min(Infinity, ...polygonSides.map(([a, b]) => distanceToSegment(z, a, b)));
+        const length = Math.max(0, Math.min(radius * 0.9, toSide(junctionInChart) * 0.5 - radius * 1.2));
         // The same order as for the gate's direction (a single gate is cut at its widest gap, not where the star starts).
         const lanes = lanesOf.get(s) as OrientedEdge[];
         list.sort((p, q) => lanes.indexOf(p) - lanes.indexOf(q));
         list.forEach((x, j) => {
           const shift = left.scale((j - (list.length - 1) / 2) * gap);
+          const radialEnd = junctionInChart.add(out.scale(radius * 1.2 + length)).add(shift);
           ends.set(x, {
             x,
             center,
             junctionRadius,
             switchPoint: points.get(s) as Complex,
             radialStart: junctionInChart.add(out.scale(radius * 1.2)).add(shift),
-            radialEnd: junctionInChart.add(out.scale(radius + length)).add(shift),
+            radialEnd,
             out,
             nominal: Math.max(length * 1.4, 16 * pixel),
-            cap: (nearest.get(v) as number) * 0.4,
+            // The bend stays within the room to the nearest junction or strip, and half the way to the nearest side.
+            cap: Math.min((nearest.get(v) as number) * 0.4, toSide(radialEnd) * 0.5),
           });
         });
       }

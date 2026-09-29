@@ -18,6 +18,11 @@ export interface Motion {
   readonly junction: string;
   /** The name of the oriented edge of G₀ through whose port the junction leaves (it enters through the reverse). */
   readonly side: string;
+  /**
+   * The strip end (by name) at the same junction as the moving junction's strip that it is folded with: the junction
+   * moves alongside it (a subdivision point moving along c follows the strip whose μ starts with c).
+   */
+  readonly along?: string;
 }
 
 /** One step of an explanation, the surface before it (if kept), and a motion it consists of (if any). */

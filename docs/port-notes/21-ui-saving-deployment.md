@@ -195,3 +195,13 @@ exchanges the two sides; the header button shows or hides the history tree.
   junction) is one journey through the ports, and each moment is drawn with its own state if it can be laid out, else
   with the state before the isotopy, the junction moved; a state after a crossing that can't be laid out keeps the
   junction where the crossing left it (also during the next step, until halfway).
+- **The journey of a subdivision point:** when the new junction of a partial fold moves along c, it follows the strip
+  it is folded with (the kept one, or another whose μ starts with c; recorded as `along` in the motion): on a track
+  parallel to that strip, on the side of the junction's own strip (from the cyclic order at their common junction),
+  through its pieces, one side crossing per step, ending next to that strip's end junction. Before, it went straight
+  from port to port and cut through that strip, and after the last crossing it slid along the side. At a whole
+  position right after a crossing, the junction stays on its journey.
+- **Bends near a side:** the junction disks and bends were capped by the nearest junction and strip, but not by the
+  sides of the polygon; a junction close to a side could get a lane and bend reaching the side, and the straight piece
+  after it (a geodesic between two points near the side) then ran along the side. Now the disk, the lane (at most half
+  the way to the nearest side) and the bend (at most half the remaining way) keep away from the sides.

@@ -198,13 +198,29 @@ export function foldInitialSegments(
       if (value.edge === first) segments.set(key, value.isForward ? first.forward : second.backward);
     remainders.set(e, (segments.get(e) as OrientedEdge).edge === first ? second : first);
     for (const [key, p] of splitPoints) splitPoints.set(key, transform(p));
-    moveJunction(fs, junction, c, [
-      "Isotopy: move the new junction along c = ",
-      pathText(c),
-      " in G₀, so that the initial segment crosses the sides like the folded segment will (μ = c) and the rest has μ = c̄ μ(",
-      { strip: e.edge.name },
-      ").",
-    ]);
+    // It moves alongside the strip it is folded with: the kept one, or another one whose μ starts with c.
+    const partner = [options.kept, ...edges].find(
+      (x) =>
+        x !== undefined &&
+        x !== e &&
+        fs.mu
+          .image(segments.get(x) as OrientedEdge)
+          .slice(0, c.length)
+          .equals(c),
+    );
+    moveJunction(
+      fs,
+      junction,
+      c,
+      [
+        "Isotopy: move the new junction along c = ",
+        pathText(c),
+        " in G₀, so that the initial segment crosses the sides like the folded segment will (μ = c) and the rest has μ = c̄ μ(",
+        { strip: e.edge.name },
+        ").",
+      ],
+      partner === undefined ? undefined : (segments.get(partner) as OrientedEdge),
+    );
   }
   for (const e of full) {
     const gamma = fs.mu.image(e).inverse.concat(c).reduced(); // move t(e) so that μ(e) becomes c
@@ -266,14 +282,14 @@ export function foldInitialSegments(
  * Moves the junction v along γ one side at a time (an isotopy), narrating each crossing of a side: the first with
  * `what`, the others shortly. Each step records the side it crosses, for animating the isotopy.
  */
-function moveJunction(fs: FibredSurface, v: Vertex, gamma: EdgePath, what: Text): void {
+function moveJunction(fs: FibredSurface, v: Vertex, gamma: EdgePath, what: Text, along?: OrientedEdge): void {
   gamma.letters.forEach((side, k) => {
     narrate(
       k === 0
         ? [...what, ` It crosses the side ${side.name} first.`]
         : [`… then it crosses the side ${side.name}.`],
       {
-        motion: { junction: v.name, side: side.name },
+        motion: { junction: v.name, side: side.name, ...(along && { along: along.name }) },
       },
     );
     isotopeJunction(fs, v, EdgePath.of(side));

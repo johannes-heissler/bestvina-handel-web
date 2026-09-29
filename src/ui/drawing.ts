@@ -11,7 +11,7 @@ import { spineOfGraph, type SurfaceModel } from "../examples/models";
 import { type Chart, chartOf } from "../embedding/chart";
 import { type Layout, layout, type LayoutOptions } from "../embedding/layout";
 import type { Motion } from "../fibred/narration";
-import type { Complex } from "../math/complex";
+import { Complex } from "../math/complex";
 import type { Edge, Vertex } from "../graph/ribbon-graph";
 import type { FibredSurface } from "../fibred/fibred-surface";
 import { type Rendered, renderSvg, type RenderOptions } from "../render/svg";
@@ -96,9 +96,8 @@ export function drawTimeline(
       const surface = states[j] as FibredSurface;
       return renderSvg(surface, layoutOf(surface) as Layout, options);
     };
-    // At the end of a crossing whose state can't be laid out, the junction stays where that crossing left it.
-    if (t < 1e-6 && k > 0 && motions[k - 1] !== undefined && !layoutOf(states[k] as FibredSurface))
-      [k, t] = [k - 1, 1];
+    // Right after a crossing, the junction is where the crossing left it (on its journey), not at its place in the layout.
+    if (t < 1e-6 && k > 0 && motions[k - 1] !== undefined) [k, t] = [k - 1, 1];
     else if (t < 1e-6 || k >= states.length - 1) return plain(k);
 
     const motion = motions[k];
@@ -121,6 +120,35 @@ export function drawTimeline(
       };
       const leave = port(motion.side, true);
       const enter = port(motion.side, false);
+      // Alongside the strip it is folded with, if known and drawable.
+      const early = t < 0.5;
+      const index = early ? k : k + 1;
+      const own = layoutOf(states[index] as FibredSurface);
+      const surface = (own ? states[index] : states[drawableAt(i)]) as FibredSurface;
+      const base = own ?? (layoutOf(surface) as Layout);
+      const v = surface.graph.vertices.find((u) => u.name === motion.junction);
+      const alongside =
+        motion.along === undefined || v === undefined
+          ? undefined
+          : journey(
+              surface,
+              base,
+              motion.along,
+              v,
+              states[i] as FibredSurface,
+              layoutOf(states[i] as FibredSurface),
+            );
+      if (alongside !== undefined && v !== undefined) {
+        // Step m of the isotopy: the first half runs to the exit of piece m, the second from the entry of piece m + 1.
+        const m = k - i;
+        const last = j - i;
+        const f = m + t; // along the journey, measured in steps
+        return renderSvg(
+          surface,
+          withJunctionAt(surface, base, v, alongside(f / (last + 1), m, last)),
+          options,
+        );
+      }
       if (leave && enter) {
         // Start and end of this step: the junction's place (before the isotopy, or after it), else between the ports.
         const nextLeave = k < j ? port((motions[k + 1] as Motion).side, true) : undefined;
@@ -128,16 +156,10 @@ export function drawTimeline(
         const between = (p: Complex, q: Complex) => p.add(q).scale(0.5).scale(0.7); // pulled towards the centre
         const start = k === i ? place(i) : previousEnter && between(previousEnter, leave);
         const end = k === j ? place(j + 1) : nextLeave && between(enter, nextLeave);
-        const early = t < 0.5;
         const position2 = early
           ? (start ?? leave).add(leave.sub(start ?? leave).scale(2 * t))
           : enter.add((end ?? enter).sub(enter).scale(2 * t - 1));
         // Draw with the state of this moment if possible, else with the state before the isotopy.
-        const index = early ? k : k + 1;
-        const own = layoutOf(states[index] as FibredSurface);
-        const surface = (own ? states[index] : states[drawableAt(i)]) as FibredSurface;
-        const base = own ?? (layoutOf(surface) as Layout);
-        const v = surface.graph.vertices.find((u) => u.name === motion.junction);
         if (v !== undefined) return renderSvg(surface, withJunctionAt(surface, base, v, position2), options);
       }
     }
@@ -179,6 +201,82 @@ function layoutFor(
   return result.layout;
 }
 const attempts = new PerSurface<{ layout?: Layout }>(6);
+
+/**
+ * The journey of a junction moving alongside the strip end `along` (by name) of `surface`: returns, for a fraction
+ * 0 ≤ f ≤ 1 of the whole isotopy (steps 0 … last), the point on a track parallel to that strip, on the side of the
+ * moving junction's own strip, through the strip's pieces: first from the junction's place before the isotopy onto
+ * the track, then along piece m in step m (its second half after the side crossing), ending next to the strip's end.
+ * Undefined if the strip isn't found.
+ */
+function journey(
+  surface: FibredSurface,
+  base: Layout,
+  along: string,
+  v: Vertex,
+  start: FibredSurface,
+  startLayout: Layout | undefined,
+): ((f: number, m: number, last: number) => Complex) | undefined {
+  const partner = surface.graph.orientedEdges.find((x) => x.name === along);
+  if (partner === undefined) return undefined;
+  const raw = base.strips.get(partner.edge);
+  if (raw === undefined) return undefined;
+  const pieces = partner.isForward ? raw.map((p) => [...p]) : raw.toReversed().map((p) => p.toReversed());
+  // The side: the moving junction's strip at the partner's junction is next to the partner in the cyclic order.
+  const w = partner.source;
+  const star = surface.graph.star(w);
+  const i = star.indexOf(partner);
+  const next = star[(i + 1) % star.length];
+  const onLeft =
+    next !== undefined &&
+    (next.target === v || next.source === v || next.edge.source === v || next.edge.target === v);
+  const width = 0.025 * (onLeft ? 1 : -1);
+  const offsetLine = (line: readonly Complex[]) =>
+    line.map((p, k) => {
+      const a = line[Math.max(0, k - 1)] as Complex;
+      const b = line[Math.min(line.length - 1, k + 1)] as Complex;
+      const d = b.sub(a);
+      const length = d.abs() || 1;
+      return p.add(new Complex(-d.im / length, d.re / length).scale(width));
+    });
+  const tracks = pieces.map(offsetLine);
+  // Where the junction starts: its place before the isotopy.
+  const u = start.graph.vertices.find((x) => x.name === v.name);
+  const from = (u && startLayout?.junctions.get(u)) ?? (tracks[0]?.[0] as Complex);
+  return (f, m, last) => {
+    const steps = last + 1;
+    const position = Math.min(steps, Math.max(0, f * steps)); // in steps
+    const step = Math.min(last, Math.floor(position));
+    const t = position - step;
+    const track = (n: number) => tracks[Math.min(n, tracks.length - 1)] as Complex[];
+    if (t < 0.5) {
+      // The first half of step `step`: along piece `step` from its middle (from the start: from the junction's place,
+      // onto the track) to its end.
+      const line = step === 0 ? [from, ...track(0)] : track(step).slice(Math.floor(track(step).length / 2));
+      return pointAlong(line, 2 * t);
+    }
+    // The second half: along piece `step + 1` from its start to its middle (at the last step: to its end).
+    const line = track(step + 1);
+    const part = step === last ? line : line.slice(0, Math.ceil(line.length / 2));
+    void m;
+    return pointAlong(part, 2 * t - 1);
+  };
+}
+
+/** The point at the fraction f (by length) of a polyline. */
+function pointAlong(line: readonly Complex[], f: number): Complex {
+  if (line.length === 0) return new Complex(0, 0);
+  const lengths = line.slice(1).map((p, i) => p.sub(line[i] as Complex).abs());
+  const total = lengths.reduce((a, b) => a + b, 0);
+  let rest = Math.min(1, Math.max(0, f)) * total;
+  for (let i = 0; i < lengths.length; i++) {
+    const l = lengths[i] as number;
+    if (rest <= l && l > 0)
+      return (line[i] as Complex).add((line[i + 1] as Complex).sub(line[i] as Complex).scale(rest / l));
+    rest -= l;
+  }
+  return line.at(-1) as Complex;
+}
 
 /** The layout with the junction v moved to `position`, and the ends of its strips with it. */
 function withJunctionAt(surface: FibredSurface, base: Layout, v: Vertex, position: Complex): Layout {
