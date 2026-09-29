@@ -13,9 +13,15 @@ import { Complex } from "../math/complex";
 /** The models of the hyperbolic plane the views can show. */
 export type HyperbolicModel = "poincare" | "klein" | "halfplane";
 
-/** Klein → Poincaré: k ↦ k / (1 + √(1 − |k|²)). */
+/**
+ * Klein → Poincaré: k ↦ k / (1 + √(1 − |k|²)). Points within rounding of the boundary (1 − |k|² < 10⁻¹²) are ideal: the
+ * square root would magnify a rounding error of 10⁻¹⁶ in |k|² to 10⁻⁸ in |p|, a finite point (at distance ~ 18) that
+ * isn't recognised as ideal (e.g. a vertex (−½, −√3/2) of an ideal polygon).
+ */
 export function kleinToPoincare(k: Complex): Complex {
-  return k.scale(1 / (1 + Math.sqrt(Math.max(0, 1 - k.abs2()))));
+  const rest = 1 - k.abs2();
+  if (rest < 1e-12) return k.scale(1 / Math.sqrt(k.abs2()));
+  return k.scale(1 / (1 + Math.sqrt(rest)));
 }
 
 /** Poincaré → Klein: p ↦ 2p / (1 + |p|²). */

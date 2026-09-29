@@ -340,3 +340,10 @@ strips at the moving junction kept their old μ.
 - **The pointer outside the disk:** the point under the mouse was mapped to Klein coordinates before checking that it
   lies in the model, and that map sends a point outside the Poincaré disk (or below the half-plane) to its mirror image
   inside, so dots appeared in the polygon and its copies. The check now happens in the model shown.
+- **Ideal vertices up to rounding:** a vertex of an ideal polygon such as (−½, −√3/2) has |k|² = 1 − 2·10⁻¹⁶ in Klein
+  coordinates, and the square root in the map to the Poincaré disk magnified that to a point 10⁻⁸ inside the
+  boundary: not ideal, so a side from it had its "middle" next to that vertex, and its name was scaled away (in the
+  hexagon a b c C B A only b and c had names). `kleinToPoincare` now maps points within 10⁻¹² of the boundary to ideal
+  points.
+- **Names in the Klein model** are scaled by the geometric mean of the radial and tangential factors of the metric
+  (it is not conformal), not by the horizontal one, so names at the same distance from the centre have the same size.

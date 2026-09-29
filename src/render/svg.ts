@@ -422,6 +422,12 @@ export function renderSvg(fs: FibredSurface, layout: Layout, options: RenderOpti
       const d = radial * u.im * u.im + tangential * w.im * w.im;
       return { scale: Math.sqrt(radial * tangential), matrix: [a, b, b, d] };
     }
+    if (model === "klein" && hyperbolic && z.abs() > 1e-9) {
+      // The Klein metric is not conformal: the geometric mean of its radial and tangential factors, so that names at
+      // the same distance from the centre get the same size whatever their direction.
+      const u = z.scale(1 / z.abs());
+      return { scale: centreMetric / Math.sqrt(metric(z, u) * metric(z, new Complex(-u.im, u.re))) };
+    }
     return { scale: centreMetric / metric(z, Complex.ONE) };
   };
 

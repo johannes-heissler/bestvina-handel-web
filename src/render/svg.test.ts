@@ -5,6 +5,8 @@ import { chartOf } from "../embedding/chart";
 import { layout } from "../embedding/layout";
 import type { FibredSurface } from "../fibred/fibred-surface";
 import { autopilot } from "../fibred/suggestions";
+import { Session } from "../session/session";
+import { decodeSession } from "../session/share";
 import { renderSvg } from "./svg";
 
 const chartFor = (model: SurfaceModel, fs: FibredSurface) => ({
@@ -36,6 +38,26 @@ describe("SVG", () => {
       expect(echo(400, 400).length).toBeGreaterThan(0); // the centre
       // A corner of the picture is outside the disk (the Poincaré point there used to be mirrored into the disk).
       expect(echo(5, 5)).toEqual([]);
+    }
+  });
+
+  it("names every side of an ideal polygon, the names at one distance from the centre of one size", async () => {
+    // The hexagon a b c C B A, whose vertex (−½, −√3/2) is ideal only up to rounding.
+    const link =
+      "s=jU9BasMwEPyKmLNSSgI97LGn_sH4IFvrWlSWxEoxKUbQP_SHfUmxmkBPTZnLsLszO7NhirKYAsLAuawumMNsgmV_yJyziwEaK0tjdNTIxUgBbXhzwYKQhDMX6BshPF99vj4-X5qT4otZkmf19HBE1SjCvDuMs_NWOIC6DUtc-ZetGXKUQblQokosLs0s77v4L9EUvcUeUVzKoA4jNAx6DdMitwWojV2wfAGdqv6R0bY3mFiE7fVkBAH1zs909l4V9zqXe-n-U6mvN2iMZxEOBdQ96oa-fgM";
+    const { session } = Session.fromFile((await decodeSession(link))!);
+    const { surface, model } = session.current;
+    const { chart } = chartFor(model, surface);
+    const result = layout(surface, chart);
+    for (const view of ["poincare", "klein"] as const) {
+      const { svg } = renderSvg(surface, result, { model: view, scaleNames: true, size: 800 });
+      // The first name of each text: the sides are drawn before the strips (some strips have the names of sides).
+      const sizes = new Map<string, number>();
+      for (const m of svg.matchAll(/font-size="([^"]+)"[^>]*>([^<]*)<\/text>/g))
+        if (!sizes.has(m[2] as string)) sizes.set(m[2] as string, Number(m[1]));
+      const sides = ["a", "b", "c", "C", "B", "A"].map((name) => sizes.get(name));
+      expect(sides.every((s) => s !== undefined && s > 3)).toBe(true);
+      expect(Math.max(...(sides as number[])) - Math.min(...(sides as number[]))).toBeLessThan(0.2);
     }
   });
 
