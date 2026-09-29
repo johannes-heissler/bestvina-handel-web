@@ -488,9 +488,12 @@ function placesText(fs: FibredSurface, places: readonly string[]): Text {
   const described = places.flatMap((place) => {
     const at = place.lastIndexOf("@");
     const edge = fs.graph.edges.find((e) => e.name === place.slice(0, at));
-    return edge ? [new EdgePoint(edge.forward, Number(place.slice(at + 1))).describe(fs)] : [];
+    return edge ? [new EdgePoint(edge.forward, Number(place.slice(at + 1))).describeText(fs)] : [];
   });
-  return [`Inefficiency ${described.length === 1 ? "point" : "points"}: `, described.join("; ")];
+  return [
+    `Inefficiency ${described.length === 1 ? "point" : "points"}: `,
+    ...described.flatMap((text, i) => [...(i === 0 ? [] : ["; "]), ...text]),
+  ];
 }
 
 function sameNames(a: readonly string[], b: readonly string[]): boolean {
@@ -614,7 +617,9 @@ export function variants(fs: FibredSurface, move: Move): MoveOption[] {
             {
               move: remove,
               label: [
-                `Remove the inefficiency at ${point.describe(fs)} completely: `,
+                "Remove the inefficiency at ",
+                ...point.describeText(fs),
+                " completely: ",
                 p.order === 1 ? "one fold" : `its ${p.order} folds one after the other`,
                 ", then pull tight",
                 ...(case2 ? [" (with a Case 2: a first letter is split before folding)"] : []),

@@ -31,7 +31,7 @@ describe("folding step by step with the automatic steps in between", () => {
     const { session } = Session.fromFile((await decodeSession(LINK))!);
     const node = session.apply(session.suggestion().options[0]!.move);
     const text = (node.steps ?? []).map(plainText);
-    expect(text[0]).toMatch(/has order 2/);
+    expect(text[0]).toMatch(/of order 2/);
     expect(text.some((t) => t.startsWith("Case 2 of the thesis"))).toBe(true);
     expect(text.some((t) => t.startsWith("Subdivide"))).toBe(true);
     expect(text.some((t) => t.startsWith("Fold the initial segments"))).toBe(true);

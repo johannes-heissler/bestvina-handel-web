@@ -57,6 +57,12 @@ export class FibredSurface {
   /** Set once the fibred surface has been converted into a train track. */
   isTrainTrack = false;
   /**
+   * The names subdivisions give during a fold, as before session format 2: both parts get new names (renamed at the
+   * end of the fold). Set when replaying older saved sessions, whose moves refer to strips by these names; new
+   * sessions keep the name of the rest of a subdivided strip at once and call the initial segment "name₁".
+   */
+  legacyNames = false;
+  /**
    * The reduction curves of the reductions so far, as cyclically reduced closed paths in G₀. After a reduction, G is a
    * spine of a subsurface of the original surface (μ still describes its embedding), and μ maps each boundary word of
    * G either to a boundary word of G₀ (a puncture) or to one of these curves, in either orientation.
@@ -120,6 +126,7 @@ export class FibredSurface {
     result.ignoreReducible = this.ignoreReducible;
     result.isTrainTrack = this.isTrainTrack; // the C# Copy() forgot this flag
     result.isClosed = this.isClosed;
+    result.legacyNames = this.legacyNames;
     result.reductionCurves.push(...this.reductionCurves);
     result.onError = this.onError;
     return { copy: result, correspondence: graphCopy };

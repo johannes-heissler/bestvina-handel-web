@@ -287,6 +287,8 @@ export class Session {
     if (file.version > FILE_VERSION)
       throw new Error("This session was saved by a newer version of the program");
     const session = Session.create(file.start);
+    // Older sessions replay with the names they were saved with.
+    if (file.version < 2) session.root.surface.legacyNames = true;
     let skipped = 0;
     const replay = (node: HistoryNode, saved: SavedNode): HistoryNode[] =>
       saved.children.map((child) => {
@@ -331,7 +333,8 @@ export class Session {
 }
 
 export const FILE_FORMAT = "bestvina-handel-session";
-export const FILE_VERSION = 1;
+/** 2: subdivisions during folds keep the name of the rest (see `FibredSurface.legacyNames`). */
+export const FILE_VERSION = 2;
 
 export interface SavedNode {
   readonly move?: Move;

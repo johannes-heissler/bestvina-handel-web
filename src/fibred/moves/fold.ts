@@ -134,7 +134,6 @@ export function foldInitialSegments(
     if (fs.g.image(e).length < i || !fs.g.image(e).slice(0, i).equals(prefix))
       throw new Error(`g(${e}) doesn't start with ${prefix}`);
   inCyclicOrder(fs, edges); // checks adjacency before anything changes
-  const startNames = edges.map((e) => e.name);
   if (options.move !== undefined) {
     moveJunction(fs, v, options.move, [
       "Isotopy: move the junction ",
@@ -185,9 +184,16 @@ export function foldInitialSegments(
       ...letterText(letters.slice(0, k)),
       " | ",
       ...letterText(letters.slice(k)),
-      ". The new junction (of valence 2) sits at the subdivision point; the second part keeps the name ",
-      { strip: e.edge.name },
-      ".",
+      ". The new junction (of valence 2) sits at the subdivision point",
+      ...(fs.legacyNames
+        ? ["."]
+        : [
+            "; the rest keeps the name ",
+            { strip: e.edge.name },
+            ", the initial segment is called ",
+            { strip: `${e.edge.name}₁` },
+            " until it is folded.",
+          ]),
     ]);
     if (atV.edge !== point.edge.edge)
       throw new Error(`The initial segments of both ends of ${e.edge} overlap; they can't be folded`);
@@ -201,7 +207,18 @@ export function foldInitialSegments(
     transforms.push(transform);
     for (const [key, value] of segments)
       if (value.edge === first) segments.set(key, value.isForward ? first.forward : second.backward);
-    remainders.set(e, (segments.get(e) as OrientedEdge).edge === first ? second : first);
+    const remainder = (segments.get(e) as OrientedEdge).edge === first ? second : first;
+    remainders.set(e, remainder);
+    // Names right away: the rest keeps the name and colour of the strip, the initial segment (folded next) gets
+    // the name with "₁".
+    if (!fs.legacyNames) {
+      const { name: originalName, color: originalColor } = original.get(e) as { name: string; color: Color };
+      const initial = remainder === first ? second : first;
+      remainder.name = originalName;
+      remainder.color = originalColor;
+      initial.name = freeName(fs, `${originalName}₁`);
+      initial.color = originalColor;
+    }
     for (const [key, p] of splitPoints) splitPoints.set(key, transform(p));
     // It moves alongside the strip it is folded with: the kept one, or another one whose μ starts with c.
     const partner = [options.kept, ...edges].find(
@@ -249,6 +266,7 @@ export function foldInitialSegments(
   // A strip that is folded completely is the folded segment itself, and keeps its name and colour.
   const kept = segments.get(full[0] ?? options.kept ?? (edges[0] as OrientedEdge)) as OrientedEdge;
   const beforeFold = stateNow(); // (the fold is narrated afterwards, with the names it gives)
+  const foldedNames = [...segments.values()].map((x) => x.name); // the initial segments, as they are called now
   transforms.push(foldEdges(fs, [...segments.values()], kept));
   // Names (as in C#): the remaining second segments are called like the strips they come from, with their colours;
   // a folded segment made only of first segments gets a new letter and the least used colour.
@@ -267,7 +285,7 @@ export function foldInitialSegments(
   narrate(
     [
       "Fold the initial segments of ",
-      ...nameList(startNames),
+      ...nameList(foldedNames),
       " at ",
       { junction: v.name },
       " (image under g: ",
@@ -299,6 +317,14 @@ function moveJunction(fs: FibredSurface, v: Vertex, gamma: EdgePath, what: Text,
     );
     isotopeJunction(fs, v, EdgePath.of(side));
   });
+}
+
+/** `name`, or with more "₁" appended if it is taken. */
+function freeName(fs: FibredSurface, name: string): string {
+  const used = new Set(fs.graph.edges.map((e) => e.name.toLowerCase()));
+  let candidate = name;
+  while (used.has(candidate.toLowerCase())) candidate += "₁";
+  return candidate;
 }
 
 /** Names of strips as structured text: "a, b and c". */

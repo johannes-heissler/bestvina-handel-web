@@ -5,6 +5,7 @@
  */
 import type { OrientedEdge, Vertex } from "../graph/ribbon-graph";
 import type { FibredSurface } from "./fibred-surface";
+import type { Text, TextPart } from "./suggestions";
 
 /**
  * The point of the strip `edge` that g maps to the junction between the letters `index − 1` and `index` of
@@ -67,6 +68,21 @@ export class EdgePoint {
   /** The direction in which g leaves the image junction forwards; see {@link dgBefore}. */
   dgAfter(fs: FibredSurface): OrientedEdge | undefined {
     return this.reversed(fs).dgBefore(fs);
+  }
+
+  /** The same as {@link describe}, as structured text (the strips in their colours). */
+  describeText(fs: FibredSurface): Text {
+    const letters = fs.g.image(this.edge).letters;
+    const path = (xs: readonly OrientedEdge[]): TextPart[] =>
+      xs.flatMap((x, i) => [...(i === 0 ? [] : [" "]), { strip: x.name }]);
+    return [
+      "g(",
+      { strip: this.edge.name },
+      ") = ",
+      ...path(letters.slice(0, this.index)),
+      " | ",
+      ...path(letters.slice(this.index)),
+    ];
   }
 
   /** E.g. "g(a) = b C|a B". */

@@ -232,7 +232,7 @@ function introduction(fs: FibredSurface, move: Move): Text {
       const edge = fs.graph.edges.find((e) => e.name === move.at.strip);
       const point = edge && new EdgePoint(edge.forward, move.at.index);
       return point
-        ? [`Remove the inefficiency at ${point.describe(fs)} completely, fold by fold:`]
+        ? ["Remove the inefficiency at ", ...point.describeText(fs), " completely, fold by fold:"]
         : ["Remove an inefficiency completely, fold by fold:"];
     }
     default:
@@ -429,6 +429,7 @@ export function removeAllValenceTwoJunctions(fs: FibredSurface): void {
 /** The flags that describe the surface rather than the state carry over to a new fibred surface. */
 function keepFlags(from: FibredSurface, to: FibredSurface): FibredSurface {
   to.isClosed = from.isClosed;
+  to.legacyNames = from.legacyNames;
   to.onError = from.onError;
   return to;
 }

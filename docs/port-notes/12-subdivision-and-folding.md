@@ -125,3 +125,13 @@ possible every strip has its own colour.
   order of the inefficiency afterwards. The steps are stored with the history node and shown under "What happened"
   in the panel of the algorithm, for the last moves back to the one that explains itself. Fold options list their
   inefficiency points (the images with the point marked by "|").
+- **Explanations with the real names:** the inefficiency is shown as in the C# `Inefficiency.ToString`: the point
+  (coloured, "g(b) = b | a X B") and how its turn is mapped, "↦ …a X B | Y D… ↦ …x A B | b x…" up to the
+  backtracking; then the strips folded and their common start ("Dg(b) = Dg(Y) = b"). The Case 2 names the strip that
+  is made shorter and, if its image is a single strip, the strips Dg(c), … that have to be subdivided first. Points
+  in images are coloured everywhere (`EdgePoint.describeText`).
+- **Names during a fold (session format 2):** a subdivided strip keeps its name for the rest right away, and the
+  initial segment is called "name₁" (with more "₁" if taken) until it is folded; before, both parts got new names
+  that were changed at the end of the fold, so the explanation "the second part keeps the name" was only true
+  afterwards. Saved sessions store moves by strip names, so sessions of format 1 replay with the old names
+  (`FibredSurface.legacyNames`, carried through copies); new sessions and links are saved as format 2.
