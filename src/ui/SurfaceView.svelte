@@ -218,8 +218,9 @@
       {/if}
       <label title="Copies of the polygon by deck transformations">Copies <input type="number" min="0" max="4" bind:value={deckDepth} /></label>
       <label
-        title="The weights w(e)^c of the strips, with the Perron–Frobenius widths w (c = 0: all equal): the widths drawn with 'Strip widths to scale', and the spacing of the strands on the sides before straightening (with 0 rounds)."
-        >Width exponent c <input type="range" min="0" max="1" step="0.1" bind:value={widthExponent} /></label
+        title="The weights w(e)^c of the strips, with the Perron–Frobenius widths w(e) (as in 'Transition matrix, widths, lengths'). With 'Strip widths to scale', every strip is drawn with a width proportional to w(e)^c: c = 0 all equally wide, c = 1 exactly in the ratios of the widths w, in between in the same order but closer together. (All widths are then shrunk by one common factor until the strands fit.) The weights also space the strands on the sides before straightening."
+        >Width exponent c <input type="range" min="0" max="1" step="0.1" bind:value={widthExponent} />
+        {widthExponent.toFixed(1)}</label
       >
       <label
         title="Rounds of moving the crossings with the glued sides so that the strips run straight (geodesically) through them, keeping their order and staying on the side (0: evenly spaced crossings)"

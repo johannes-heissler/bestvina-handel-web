@@ -79,6 +79,7 @@ export function layout(fs: FibredSurface, chart: Chart, options: LayoutOptions =
   const relativeWidth = new Map<Edge, number>();
   /** For each edge of G₀: the minimal gaps between consecutive strands and the bounds, for step 2′. */
   const spacing = new Map<Edge, { gaps: number[]; lo: number; hi: number }>();
+  let crowded = 0; // the largest total weight (with gaps) on a side
   for (const [edge, list] of order.along) {
     const weights = list.map((s) => weight.get(s.strand.edge) as number);
     const gap = (weights.reduce((a, b) => a + b, 0) / weights.length) * 0.6;
@@ -91,13 +92,17 @@ export function layout(fs: FibredSurface, chart: Chart, options: LayoutOptions =
       us.push(u);
       front.set(strandKey(s.strand), u);
       back.set(strandKey(s.strand), u);
-      relativeWidth.set(s.strand.edge, Math.max(relativeWidth.get(s.strand.edge) ?? 0, w / total));
       position += w + gap;
     });
+    crowded = Math.max(crowded, total);
     // Straightening keeps 30% of the first spacing between neighbours, within 90% of the port. (The widths drawn to
     // scale are then shrunk to fit the positions, see `relativeWidth` below; the positions don't depend on them.)
     spacing.set(edge, { gaps: us.slice(1).map((u, i) => 0.3 * (u - (us[i] as number))), lo: -0.9, hi: 0.9 });
   }
+  // The widths drawn to scale (half the width, in lateral units u), on one scale for all strips, so that they are
+  // proportional to w(e)^c: equal for c = 0, the Perron–Frobenius widths for c = 1. (Normalized per side, a strip alone
+  // on its sides got the same width whatever its weight.) The most crowded side fills its port.
+  for (const e of fs.graph.edges) relativeWidth.set(e, (weight.get(e) as number) / (crowded || 1));
   /** The port coordinate (−1 right … +1 left, looking outwards) of the strand (e, k) at the port of y. */
   const portCoordinate = (e: Edge, k: number, y: OrientedEdge): number => {
     const key = strandKey({ edge: e, index: k });

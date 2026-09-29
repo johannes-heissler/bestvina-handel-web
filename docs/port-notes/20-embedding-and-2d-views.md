@@ -360,3 +360,15 @@ letters are the strands next to it. The hole crosses the side between strands, s
 next, and the chains are joined from the outermost strand on the right to the one on the left (with several holes
 crossing the same side, the chains between them in the order found). Any other face is read as before, so maps that
 don't come from an embedding are still rejected.
+
+## Update: the width exponent c
+
+The widths drawn to scale were normalized per side: a strip's relative width was its weight divided by the total
+weight on a side (the largest over its sides). So a strip crossing sides alone always got w/(w + 2 gaps) = 1/2.2,
+whatever c and its width (in the example of the bug report, z and d₁ didn't change with c, and d₁, much narrower than
+the others, was drawn wider), and the widths were only comparable between strands on the same side. Strips crossing no
+side had no relative width at all (the renderer used 0.2). Now all strips are on one scale: the relative width is
+w(e)^c divided by the largest total weight of a side, then shrunk by one common factor to fit. So the widths are equal
+for c = 0, exactly in the ratios of the Perron–Frobenius widths for c = 1, and in their order in between (apart from
+the minimum of 0.8 pixels, which can make very thin strips equal). The tooltip of the slider explains this, and the
+slider shows its value.
