@@ -31,6 +31,11 @@ prefix.
 - `inefficiencies(fs)` finds each illegal turn once by scanning the images, with a gate lookup, instead of trying every
   pair of each gate against every image (C# `InefficientConcatenations`). The order of the suggestions is the same (by order,
   full folds first).
+- **Gatewise extremal junctions of valence 2** (both strip ends in the same gate) are inefficiencies too, at the point at
+  the start of one of their strips (in C# a commented-out TODO, "interpreted a valence-two gate-wise extremal vertex as an
+  inefficiency"). A fold often leaves its inefficiency there (the new junction), so without this the follow-up of the
+  last fold was not found, and a different fold with the same strips was marked as its continuation. Such a point is
+  described by the path through the junction, e.g. g(b₁ b) = b | a X B B₁ Z; at order 0 the junction is pulled tight.
 - Following the point uses the `transform`s of the moves (port note 12) instead of shared mutable `updateEdgePoints`
   lists.
 - In the special case above, the strips to fold and the chain of strips to subdivide are followed through the

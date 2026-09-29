@@ -191,7 +191,7 @@ export function foldInitialSegments(
             "; the rest keeps the name ",
             { strip: e.edge.name },
             ", the initial segment is called ",
-            { strip: `${e.edge.name}₁` },
+            { strip: freeName(fs, `${e.edge.name}₁`) }, // (as it is named below)
             " until it is folded.",
           ]),
     ]);

@@ -70,24 +70,41 @@ export class EdgePoint {
     return this.reversed(fs).dgBefore(fs);
   }
 
-  /** The same as {@link describe}, as structured text (the strips in their colours). */
-  describeText(fs: FibredSurface): Text {
+  /**
+   * The path of strips through this point, split at it: the strip itself, or at a junction of valence 2 the two
+   * strips through it (the path x y through the junction between them).
+   */
+  private split(fs: FibredSurface): { path: OrientedEdge[]; before: OrientedEdge[]; after: OrientedEdge[] } {
     const letters = fs.g.image(this.edge).letters;
-    const path = (xs: readonly OrientedEdge[]): TextPart[] =>
-      xs.flatMap((x, i) => [...(i === 0 ? [] : [" "]), { strip: x.name }]);
-    return [
-      "g(",
-      { strip: this.edge.name },
-      ") = ",
-      ...path(letters.slice(0, this.index)),
-      " | ",
-      ...path(letters.slice(this.index)),
-    ];
+    const v = this.vertex(fs);
+    if (v !== undefined && fs.graph.valence(v) === 2) {
+      const [x, y] =
+        this.index === 0
+          ? [this.otherEnd(fs, this.edge).reversed, this.edge]
+          : [this.edge, this.otherEnd(fs, this.edge.reversed)];
+      return { path: [x, y], before: [...fs.g.image(x).letters], after: [...fs.g.image(y).letters] };
+    }
+    return { path: [this.edge], before: letters.slice(0, this.index), after: letters.slice(this.index) };
   }
 
-  /** E.g. "g(a) = b C|a B". */
+  /** The other strip end at the (valence-2) source of `e`. */
+  private otherEnd(fs: FibredSurface, e: OrientedEdge): OrientedEdge {
+    const star = fs.graph.star(e.source);
+    return (star[0] === e ? star[1] : star[0]) as OrientedEdge;
+  }
+
+  /** The same as {@link describe}, as structured text (the strips in their colours). */
+  describeText(fs: FibredSurface): Text {
+    const names = (xs: readonly OrientedEdge[]): TextPart[] =>
+      xs.flatMap((x, i) => [...(i === 0 ? [] : [" "]), { strip: x.name }]);
+    const { path, before, after } = this.split(fs);
+    return ["g(", ...names(path), ") = ", ...names(before), " | ", ...names(after)];
+  }
+
+  /** E.g. "g(a) = b C|a B", or at a junction of valence 2 between the strips a and b, "g(a b) = b C|a B". */
   describe(fs: FibredSurface): string {
-    const names = fs.g.image(this.edge).letters.map((e) => e.name);
-    return `g(${this.edge.name}) = ${names.slice(0, this.index).join(" ")}|${names.slice(this.index).join(" ")}`;
+    const names = (xs: readonly OrientedEdge[]) => xs.map((e) => e.name).join(" ");
+    const { path, before, after } = this.split(fs);
+    return `g(${names(path)}) = ${names(before)}|${names(after)}`;
   }
 }

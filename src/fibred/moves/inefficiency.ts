@@ -58,29 +58,55 @@ export function inefficiencyAt(fs: FibredSurface, point: EdgePoint): Inefficienc
 }
 
 /**
- * The inefficiencies inside the images: one for each illegal turn (a pair of strips in the same gate), found at
- * its first occurrence. Sorted by order, and full folds before partial ones, as in the C# suggestion.
+ * The points where g may turn illegally: the points inside the images, and the gatewise extremal junctions of
+ * valence 2 (both strip ends in the same gate; the C# TODO "interpreted a valence-two gate-wise extremal vertex as an
+ * inefficiency"), as the point at the start of one of their strips. Each with the turn it makes.
  */
-export function inefficiencies(fs: FibredSurface): Inefficiency[] {
+function illegalTurnPoints(
+  fs: FibredSurface,
+): { point: EdgePoint; turn: readonly [OrientedEdge, OrientedEdge] }[] {
   const gateOf = new Map<OrientedEdge, number>();
   findGates(fs.graph, fs.g).forEach((gate, index) => gate.edges.forEach((e) => gateOf.set(e, index)));
-  const seenTurns = new Set<string>();
-  const result: Inefficiency[] = [];
+  const result: { point: EdgePoint; turn: readonly [OrientedEdge, OrientedEdge] }[] = [];
   for (const strip of fs.graph.edges) {
     const letters = fs.g.image(strip.forward).letters;
     for (let i = 1; i < letters.length; i++) {
       const [x, y] = [letters[i - 1] as OrientedEdge, letters[i] as OrientedEdge];
       if (gateOf.get(x.reversed) !== gateOf.get(y)) continue;
-      // The turn x y is the same as ȳ x̄ read backwards.
-      const key = [x.reversed, y]
-        .map((e) => `${e.edge.id}${e.isForward ? "+" : "-"}`)
-        .sort()
-        .join("|");
-      if (seenTurns.has(key)) continue;
-      seenTurns.add(key);
-      const inefficiency = inefficiencyAt(fs, new EdgePoint(strip.forward, i));
-      if (inefficiency !== undefined) result.push(inefficiency);
+      result.push({ point: new EdgePoint(strip.forward, i), turn: [x.reversed, y] });
     }
+  }
+  for (const v of fs.graph.vertices) {
+    const star = fs.graph.star(v);
+    if (star.length !== 2) continue;
+    const [s, t] = star as [OrientedEdge, OrientedEdge];
+    if (gateOf.get(s) !== gateOf.get(t)) continue;
+    const at = t.isForward || !s.isForward ? t : s; // a strip starting here forwards, if there is one
+    const point = new EdgePoint(at, 0).normalized(fs);
+    const [a, b] = [point.dgBefore(fs), point.dgAfter(fs)];
+    if (a !== undefined && b !== undefined) result.push({ point, turn: [a, b] });
+  }
+  return result;
+}
+
+/**
+ * The inefficiencies: one for each illegal turn (a pair of strips in the same gate), found at its first occurrence
+ * inside an image or at a gatewise extremal junction of valence 2. Sorted by order, and full folds before partial
+ * ones, as in the C# suggestion.
+ */
+export function inefficiencies(fs: FibredSurface): Inefficiency[] {
+  const seenTurns = new Set<string>();
+  const result: Inefficiency[] = [];
+  for (const { point, turn } of illegalTurnPoints(fs)) {
+    // The turn x y is the same as ȳ x̄ read backwards.
+    const key = turn
+      .map((e) => `${e.edge.id}${e.isForward ? "+" : "-"}`)
+      .sort()
+      .join("|");
+    if (seenTurns.has(key)) continue;
+    seenTurns.add(key);
+    const inefficiency = inefficiencyAt(fs, point);
+    if (inefficiency !== undefined) result.push(inefficiency);
   }
   const isFullFold = (p: Inefficiency) =>
     p.edgesToFold.some((e) => fs.g.image(e).length === p.initialSegment);
@@ -103,6 +129,16 @@ export function removeInefficiencyStep(
   choose: FoldChoice = bestOption,
 ): Inefficiency | undefined {
   const source = p.edgesToFold[0]?.source;
+  const junction = p.point.vertex(fs);
+  if (p.order === 0 && junction !== undefined) {
+    narrate([
+      "The strips at the junction ",
+      { junction: junction.name },
+      " of valence 2 have the same image direction: pull tight there.",
+    ]);
+    pullTightExtremalJunction(fs, junction);
+    return undefined;
+  }
   if (p.order === 0 || source === undefined) {
     narrate([
       "The inefficiency at ",
@@ -330,8 +366,6 @@ export interface FoldCandidate {
  * an image counts. Peripheral folds come first (as in the C# priority order), then by order and number.
  */
 export function foldCandidates(fs: FibredSurface): FoldCandidate[] {
-  const gateOf = new Map<OrientedEdge, number>();
-  findGates(fs.graph, fs.g).forEach((gate, index) => gate.edges.forEach((e) => gateOf.set(e, index)));
   const keyOf = (edges: readonly OrientedEdge[], initialSegment: number) =>
     `${edges
       .map((e) => `${e.edge.id}${e.isForward ? "+" : "-"}`)
@@ -341,18 +375,13 @@ export function foldCandidates(fs: FibredSurface): FoldCandidate[] {
     string,
     { edges: readonly OrientedEdge[]; initialSegment: number; found: Inefficiency[] }
   >();
-  for (const strip of fs.graph.edges) {
-    const letters = fs.g.image(strip.forward).letters;
-    for (let i = 1; i < letters.length; i++) {
-      const [x, y] = [letters[i - 1] as OrientedEdge, letters[i] as OrientedEdge];
-      if (gateOf.get(x.reversed) !== gateOf.get(y)) continue;
-      const p = inefficiencyAt(fs, new EdgePoint(strip.forward, i));
-      if (p === undefined || p.order === 0) continue; // backtracks are pulled tight
-      const key = keyOf(p.edgesToFold, p.initialSegment);
-      const group = groups.get(key) ?? { edges: p.edgesToFold, initialSegment: p.initialSegment, found: [] };
-      group.found.push(p);
-      groups.set(key, group);
-    }
+  for (const { point } of illegalTurnPoints(fs)) {
+    const p = inefficiencyAt(fs, point);
+    if (p === undefined || p.order === 0) continue; // backtracks are pulled tight
+    const key = keyOf(p.edgesToFold, p.initialSegment);
+    const group = groups.get(key) ?? { edges: p.edgesToFold, initialSegment: p.initialSegment, found: [] };
+    group.found.push(p);
+    groups.set(key, group);
   }
   const prePeriphery = fs.prePeriphery();
   const isPeripheral = (edges: readonly OrientedEdge[]) => {
