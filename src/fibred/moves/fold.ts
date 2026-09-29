@@ -169,17 +169,22 @@ export function foldInitialSegments(
   const remainders = new Map<OrientedEdge, Edge>();
   for (const [e, point] of splitPoints) {
     const atV = segments.get(e) as OrientedEdge;
-    const letters = fs.g.image(e).letters;
+    // The point as it is now: earlier subdivisions of this fold made the images longer, so it is no longer after the
+    // first i letters of the original image (the point is followed through them).
+    // (Shown from the end at the junction where the fold happens.)
+    const end = atV.edge === point.edge.edge ? atV : point.edge;
+    const letters = fs.g.image(end).letters;
+    const k = end === point.edge ? point.index : letters.length - point.index;
     narrate([
       "Subdivide ",
-      { strip: e.edge.name },
-      i === 1 ? " after the first letter" : ` after the first ${i} letters`,
+      { strip: point.edge.edge.name },
+      k === 1 ? " after the first letter" : ` after the first ${k} letters`,
       " of its image: g(",
-      { strip: e.name },
+      { strip: end.name },
       ") = ",
-      ...letterText(letters.slice(0, i)),
+      ...letterText(letters.slice(0, k)),
       " | ",
-      ...letterText(letters.slice(i)),
+      ...letterText(letters.slice(k)),
       ". The new junction (of valence 2) sits at the subdivision point; the second part keeps the name ",
       { strip: e.edge.name },
       ".",
