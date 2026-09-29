@@ -4,11 +4,11 @@ An interactive visualization of the **Bestvina–Handel algorithm** for homeomor
 graph maps and the algorithm's moves, drawn on model surfaces (ideal and compact hyperbolic polygons, flat
 translation surfaces, the punctured plane, ribbon graphs).
 
-It is a TypeScript port of the Unity project
-[Surface-Mappings-Visualizer](https://github.com/p4jo/Surface-Mappings-Visualizer). See
-[docs/port-notes](docs/port-notes/README.md) for the status of each module.
-
+It started as a TypeScript port of the Unity project
+[Surface-Mappings-Visualizer](https://github.com/p4jo/Surface-Mappings-Visualizer), but has since recieved many new features and fixes.
 **Online:** <https://johannes-heissler.github.io/bestvina-handel-web/> (see [docs/hosting.md](docs/hosting.md)).
+
+Entirely written by Claude Opus.
 
 ## What it does
 
