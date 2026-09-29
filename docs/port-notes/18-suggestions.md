@@ -56,7 +56,10 @@ and "reducible" a `classification`.
 **Second-level choices are computed on demand**, since some require trying the move on a copy. `variants(fs, move)`
 returns:
 
-- the fold options of an inefficiency step or a peripheral fold, with their ratings (side crossings afterwards);
+- the fold options of an inefficiency step or a peripheral fold, with their ratings (the side crossings of all strips
+  afterwards, shown as "7 side crossings"). Only options with at most two more crossings than the best are offered, so
+  the list stays short. A fold also gets one "remove completely" choice per inefficiency point behind it, except for
+  points of order 1, where that is the fold itself;
 - the centres of a one-component collapse;
 - the strip to remove at a valence-2 junction;
 - the pieces of a reduction (kind, strips, period);

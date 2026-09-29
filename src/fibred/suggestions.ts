@@ -66,6 +66,8 @@ export interface MoveOption {
   readonly label: Text;
   /** Lower is better, e.g. the number of side crossings after a fold, or the period of a singularity. */
   readonly rating?: number;
+  /** The rating as shown, e.g. "3 side crossings" (otherwise the number alone). */
+  readonly ratingText?: string;
   /** Possible, but not the step of the algorithm now (shown greyed out). */
   readonly discouraged?: boolean;
   /** More about the option, shown under it (e.g. the inefficiency points behind a fold). */
@@ -483,15 +485,36 @@ function splitPieces(fs: FibredSurface): { pieces: readonly SplitPiece[]; curves
   return { pieces, curves: copy.reductionCurves.map(String).filter((c) => !before.has(c)) };
 }
 
-/** The inefficiency points behind a fold ("strip@index"), as the images with the point marked by "|". */
+/**
+ * The inefficiency points behind a fold ("strip@index"), as the images with the points marked by "|": all points
+ * inside one image g(x) together, those at junctions of valence 2 by the path through the junction.
+ */
 function placesText(fs: FibredSurface, places: readonly string[]): Text {
-  const described = places.flatMap((place) => {
+  const inside = new Map<Edge, number[]>();
+  const described: Text[] = [];
+  for (const place of places) {
     const at = place.lastIndexOf("@");
     const edge = fs.graph.edges.find((e) => e.name === place.slice(0, at));
-    return edge ? [new EdgePoint(edge.forward, Number(place.slice(at + 1))).describeText(fs)] : [];
-  });
+    if (edge === undefined) continue;
+    const point = new EdgePoint(edge.forward, Number(place.slice(at + 1)));
+    if (point.vertex(fs) !== undefined) described.push(point.describeText(fs));
+    else inside.set(edge, [...(inside.get(edge) ?? []), point.index]);
+  }
+  for (const [edge, indices] of inside) {
+    const letters = fs.g.image(edge.forward).letters;
+    const cuts = new Set(indices);
+    described.unshift([
+      "g(",
+      { strip: edge.name },
+      ") = ",
+      ...letters.flatMap((x, i): TextPart[] => [
+        ...(i === 0 ? [] : [cuts.has(i) ? " | " : " "]),
+        { strip: x.name },
+      ]),
+    ]);
+  }
   return [
-    `Inefficiency ${described.length === 1 ? "point" : "points"}: `,
+    `Inefficiency ${places.length === 1 ? "point" : "points"}: `,
     ...described.flatMap((text, i) => [...(i === 0 ? [] : ["; "]), ...text]),
   ];
 }
@@ -595,7 +618,8 @@ export function variants(fs: FibredSurface, move: Move): MoveOption[] {
           const edge = fs.graph.edges.find((e) => e.name === place.slice(0, split));
           const point = edge && new EdgePoint(edge.forward, Number(place.slice(split + 1)));
           const p = point && inefficiencyAt(fs, point);
-          if (point === undefined || p === undefined) return [];
+          // Of order 1, removing it completely is the fold itself (and pulling tight, the next suggestion).
+          if (point === undefined || p === undefined || p.order <= 1) return [];
           const remove = {
             kind: "remove inefficiency" as const,
             at: { strip: point.edge.name, index: point.index },
@@ -694,6 +718,9 @@ export function variants(fs: FibredSurface, move: Move): MoveOption[] {
   }
 }
 
+/** How many more side crossings (in total, after the fold) than the best fold option the offered ones may have. */
+const MORE_SIDE_CROSSINGS = 2;
+
 /** Tries a folding move on a copy to collect its fold options, and turns them into variants of `move`. */
 function foldVariants<
   M extends Extract<Move, { kind: "fold" | "fold peripheral inefficiency" | "remove inefficiency" }>,
@@ -724,11 +751,16 @@ function foldVariants<
       return offered[0] as FoldOption;
     }),
   );
-  return options.map(({ ref, sideCrossings, label }) => ({
-    move: { ...move, fold: ref },
-    label,
-    rating: sideCrossings,
-  }));
+  // Only the embeddings of the new strip that cross at most two sides more than the best one.
+  const best = Math.min(...options.map((o) => o.sideCrossings));
+  return options
+    .filter((o) => o.sideCrossings <= best + MORE_SIDE_CROSSINGS)
+    .map(({ ref, sideCrossings, label }) => ({
+      move: { ...move, fold: ref },
+      label,
+      rating: sideCrossings,
+      ratingText: `${sideCrossings} side ${sideCrossings === 1 ? "crossing" : "crossings"}`,
+    }));
 }
 
 /**

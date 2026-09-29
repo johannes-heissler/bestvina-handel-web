@@ -224,8 +224,9 @@
                         <input type="radio" name="choice" checked={chosen === j} onchange={() => (chosen = j)} />
                         <TextView text={choice.label} />
                       </label>
-                      {#if choice.rating !== undefined}<span class="rating" title="side crossings afterwards"
-                          >{choice.rating}</span
+                      {#if choice.ratingText !== undefined}<span
+                          class="rating"
+                          title="side crossings of all strips after the fold">{choice.ratingText}</span
                         >{/if}
                     </li>
                   {/each}
