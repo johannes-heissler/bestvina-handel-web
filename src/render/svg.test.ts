@@ -27,6 +27,18 @@ describe("SVG", () => {
       }
   });
 
+  it("shows the pointer only for points inside the model", () => {
+    const surface = buildPreset(preset);
+    const { chart } = chartFor(preset.model, surface);
+    const result = layout(surface, chart);
+    for (const model of ["poincare", "klein"] as const) {
+      const { echo } = renderSvg(surface, result, { model, size: 800 });
+      expect(echo(400, 400).length).toBeGreaterThan(0); // the centre
+      // A corner of the picture is outside the disk (the Poincaré point there used to be mirrored into the disk).
+      expect(echo(5, 5)).toEqual([]);
+    }
+  });
+
   it("explains why the striped view needs a tight map", () => {
     const fs = buildPreset(PRESETS.find((p) => p.name === "Point push")!);
     const { chart } = chartFor(pointPushModel(), fs);

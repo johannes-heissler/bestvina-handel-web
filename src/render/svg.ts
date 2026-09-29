@@ -71,6 +71,8 @@ export interface Rendered {
 }
 
 const COPY_OPACITY = 0.35;
+/** The font size of the names of the sides (in pixels at the centre). */
+const SIDE_LABEL_SIZE = 20;
 /** The dark green of the junctions (the C# `vertexColors[1]`). */
 const JUNCTION_COLOR = "#1a693a";
 
@@ -729,6 +731,49 @@ export function renderSvg(fs: FibredSurface, layout: Layout, options: RenderOpti
     return `<g transform="translate(${x} ${y}) matrix(${m.map(fmt4).join(" ")} 0 0) translate(-${x} -${y})">${content}</g>`;
   };
 
+  /**
+   * Where the name of the side from `from` to `to` (chart points, the polygon counterclockwise) goes: at the middle of
+   * the side as drawn (the geodesic, not the chord), just outside it, the gap measured on the screen and growing with
+   * the name's size there. Undefined if the middle can't be drawn.
+   */
+  const sideLabelAt = (
+    from: Complex,
+    to: Complex,
+    transform: ((z: Complex) => Complex) | undefined,
+  ): Complex | undefined => {
+    let mid: Complex;
+    let tangent: Complex;
+    if (hyperbolic) {
+      const [p, q] = [from, to].map((k) => kleinToPoincare(transform ? transform(k) : k)) as [
+        Complex,
+        Complex,
+      ];
+      const geodesic = Geodesic.throughPoints(p, q);
+      const [t0, t1] = [geodesic.parameterOf(p), geodesic.parameterOf(q)];
+      // Both ends ideal: the base point, the point closest to the centre (the middle for a regular polygon).
+      const t =
+        Number.isFinite(t0) && Number.isFinite(t1)
+          ? (t0 + t1) / 2
+          : Number.isFinite(t0)
+            ? t0 + 1
+            : Number.isFinite(t1)
+              ? t1 - 1
+              : 0;
+      const at = (s: number) => toDisplay(poincareToKlein(geodesic.pointAt(s)));
+      mid = at(t);
+      tangent = at(t + 1e-4).sub(at(t - 1e-4));
+    } else {
+      const [a, b] = [from, to].map((z) => toDisplay(transform ? transform(z) : z)) as [Complex, Complex];
+      mid = a.add(b).scale(0.5);
+      tangent = b.sub(a);
+    }
+    const length = tangent.abs();
+    if (!(length > 0) || !Number.isFinite(mid.re) || !Number.isFinite(mid.im)) return undefined;
+    const outward = new Complex(tangent.im, -tangent.re).scale(1 / length); // the polygon is counterclockwise
+    const gap = (SIDE_LABEL_SIZE * 0.6 * nameShape(mid).scale + 2) / scale; // half the name's height and 2 pixels
+    return mid.add(outward.scale(gap));
+  };
+
   const drawSurface = (transform: ((z: Complex) => Complex) | undefined, opacity: number) => {
     const group: string[] = [];
     // The copies get names only when they are scaled with the metric.
@@ -743,10 +788,8 @@ export function renderSvg(fs: FibredSurface, layout: Layout, options: RenderOpti
             : side(densify([d.from, d.to], 0.01).map(toScreen), css(d.color)),
         );
         if (labels) {
-          const along = d.to.sub(d.from);
-          const outward = new Complex(along.im, -along.re).scale(0.06 / (along.abs() || 1)); // counterclockwise polygon
-          const at = toScreen(d.from.add(d.to).scale(0.5).add(outward));
-          group.push(label(at, d.label, css(d.color), px, 13, true, nameShape(at)));
+          const at = sideLabelAt(d.from, d.to, transform);
+          if (at) group.push(label(at, d.label, css(d.color), px, SIDE_LABEL_SIZE, true, nameShape(at)));
         }
       } else group.push(decoration(d, toScreen, px, scale, labels));
     }
@@ -897,6 +940,9 @@ export function renderSvg(fs: FibredSurface, layout: Layout, options: RenderOpti
   const identity = { applyKlein: (z: Complex) => z, inverseKlein: (z: Complex) => z };
   const echo = (x: number, y: number) => {
     const z = new Complex(x / scale + bounds.minX, bounds.maxY - y / scale);
+    // Outside the model (checked there: the map to Klein coordinates takes a point outside the Poincaré disk or below
+    // the half-plane to its mirror image inside, so checking |k| < 1 afterwards let those count).
+    if (hyperbolic && !(model === "halfplane" ? z.im > 0 : z.abs() < 1)) return [];
     const k = hyperbolic ? toKlein(model, z) : z;
     if (hyperbolic && !(k.abs() < 1)) return [];
     const all = [identity, ...copies];

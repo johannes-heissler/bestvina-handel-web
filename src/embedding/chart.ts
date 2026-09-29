@@ -96,10 +96,11 @@ export function chartOf(
   model: SurfaceModel,
   naming: SpineNames = {},
   spine: Spine = spineOf(model, naming),
+  options: ChartOptions = {},
 ): Chart {
   switch (model.kind) {
     case "polygon":
-      return polygonChart(model, spine);
+      return polygonChart(model, spine, options.sideFraction);
     case "plane":
       return planeChart(model, spine);
     case "ribbon":
@@ -109,10 +110,20 @@ export function chartOf(
 
 // ─── Polygons ───────────────────────────────────────────────────────────────────────────────
 
-/** How much of each side carries strands (the rest is near the vertices, which are cusps for ideal polygons). */
-const SIDE_FRACTION = { ideal: 0.5, compact: 0.75, flat: 0.8 };
+/** Options of a chart. */
+export interface ChartOptions {
+  /**
+   * For polygons: the part of each side (0 < f < 1, around its middle) that the strands may cross; the rest is near the
+   * vertices, which are cusps for ideal polygons (there the part is measured along the side in the Klein model). By
+   * default {@link SIDE_FRACTION} of the kind of polygon.
+   */
+  readonly sideFraction?: number;
+}
 
-function polygonChart(model: PolygonModel, spine: Spine): Chart {
+/** How much of each side carries strands by default (the rest is near the vertices, cusps for ideal polygons). */
+export const SIDE_FRACTION = { ideal: 0.5, compact: 0.75, flat: 0.8 };
+
+function polygonChart(model: PolygonModel, spine: Spine, sideFraction?: number): Chart {
   const n = model.word.length;
   const hyperbolic = model.geometry.kind !== "flat";
   const vertices =
@@ -122,7 +133,7 @@ function polygonChart(model: PolygonModel, spine: Spine): Chart {
   const center = hyperbolic ? Complex.ZERO : centroid(vertices);
   const [w0] = spine.graph.vertices as [Vertex];
   const sides = spine.sides as readonly OrientedEdge[];
-  const fraction = SIDE_FRACTION[model.geometry.kind];
+  const fraction = Math.min(0.99, Math.max(0.01, sideFraction ?? SIDE_FRACTION[model.geometry.kind]));
   const ports = new Map<OrientedEdge, Port>();
   const decorations: Decoration[] = [{ kind: "polygon", vertices, ideal: model.geometry.kind === "ideal" }];
   sides.forEach((x, k) => {

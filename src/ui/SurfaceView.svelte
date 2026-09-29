@@ -11,6 +11,7 @@
   import { matrixInfo, type MatrixInfo } from "../session/analysis";
   import { graphColors } from "./colors";
   import { draw, drawTimeline, type DrawOptions } from "./drawing";
+  import { SIDE_FRACTION } from "../embedding/chart";
   import TextView from "./TextView.svelte";
   import { exportImage, type ExportFormat } from "./export";
   import { app } from "./state.svelte";
@@ -27,6 +28,8 @@
   let deckDepth = $state(0);
   let widthExponent = $state(0);
   let straightening = $state(10);
+  /** The part of each side the crossings may use (undefined: the default of the kind of polygon). */
+  let sideFraction = $state<number | undefined>(undefined);
   let pointerSize = $state(4); // the radius of the dot under the mouse, in pixels at the centre (0: no dot)
   let toScale = $state(false);
   let labels = $state(true);
@@ -37,6 +40,9 @@
     return app.session?.current;
   });
   const hyperbolic = $derived(node?.model.kind === "polygon" && node.model.geometry.kind !== "flat");
+  const defaultSideFraction = $derived(
+    node?.model.kind === "polygon" ? SIDE_FRACTION[node.model.geometry.kind] : undefined,
+  );
   const rendered = $derived.by(() => {
     if (node === undefined) return undefined;
     const shown = app.shown;
@@ -51,6 +57,7 @@
       deckDepth,
       widthExponent,
       straightening,
+      ...(sideFraction !== undefined && { sideFraction }),
       labels,
       stripWidth: toScale ? "toScale" : "uniform",
       size: 800,
@@ -218,6 +225,20 @@
         title="Rounds of moving the crossings with the glued sides so that the strips run straight (geodesically) through them, keeping their order and staying on the side (0: evenly spaced crossings)"
         >Straightening <input type="range" min="0" max="30" step="1" bind:value={straightening} /> {straightening}</label
       >
+      {#if defaultSideFraction !== undefined}
+        <label
+          title="How close to the ends of the sides the strips may cross them: the part of each side (around its middle) that the crossings may use. For ideal polygons, whose sides are infinitely long, it is measured along the side in the Klein model."
+          >Crossings reach <input
+            type="range"
+            min="0.1"
+            max="0.98"
+            step="0.02"
+            value={sideFraction ?? defaultSideFraction}
+            oninput={(event) => (sideFraction = Number((event.currentTarget as HTMLInputElement).value))}
+          />
+          {Math.round((sideFraction ?? defaultSideFraction) * 100)}% of a side</label
+        >
+      {/if}
       <label
         title="Draw the strips with widths proportional to w(e)^c, as wide as fits between their neighbours (the positions don't change)"
         ><input type="checkbox" bind:checked={toScale} /> Strip widths to scale</label

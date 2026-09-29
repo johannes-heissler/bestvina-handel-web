@@ -326,3 +326,17 @@ apart, so `strandOrder` now first reduces as before, and if the strands don't fo
 one corner of each such junction (the reduction then pairs those letters with others), trying the choices until they
 do. Before, these states could not be laid out, and the timeline drew them with the state before the isotopy, so the
 strips at the moving junction kept their old μ.
+
+## Update: side names, the part of the sides used, the pointer outside the disk
+
+- **Side names** sit at the middle of the side as drawn (the geodesic, which bows towards the centre, not the chord
+  between its ends), just outside it: the gap is measured on the screen, half the name's height and two pixels. They
+  are larger (20 px at the centre, scaled by the metric like the other names).
+- **Crossings reach** (graphics options, polygons only): the part of each side, around its middle, that the strands
+  may cross (`ChartOptions.sideFraction`); by default half a side for ideal polygons, 75% for compact and 80% for flat
+  ones (the constant `SIDE_FRACTION` before). For ideal polygons, whose sides are infinitely long, it is measured along
+  the side in the Klein model. The straightening only uses the part; without straightening the crossings are spread
+  evenly over it. Charts and layouts are cached per value.
+- **The pointer outside the disk:** the point under the mouse was mapped to Klein coordinates before checking that it
+  lies in the model, and that map sends a point outside the Poincaré disk (or below the half-plane) to its mirror image
+  inside, so dots appeared in the polygon and its copies. The check now happens in the model shown.

@@ -16,19 +16,27 @@ import type { Edge, Vertex } from "../graph/ribbon-graph";
 import type { FibredSurface } from "../fibred/fibred-surface";
 import { type Rendered, renderSvg, type RenderOptions } from "../render/svg";
 
-const charts = new WeakMap<RibbonGraph, Map<SurfaceModel, Chart>>();
+const charts = new WeakMap<RibbonGraph, Map<string, Chart>>();
 
-/** The chart of a model on the spine of a surface, computed once per spine. */
-export function chartFor(model: SurfaceModel, surface: FibredSurface): Chart {
+/** The chart of a model on the spine of a surface, computed once per spine (and part of the sides used). */
+export function chartFor(model: SurfaceModel, surface: FibredSurface, sideFraction?: number): Chart {
   let byModel = charts.get(surface.spine0);
   if (byModel === undefined) charts.set(surface.spine0, (byModel = new Map()));
-  let chart = byModel.get(model);
+  const key = `${modelId(model)}|${sideFraction ?? ""}`;
+  let chart = byModel.get(key);
   if (chart === undefined)
-    byModel.set(model, (chart = chartOf(model, {}, spineOfGraph(model, surface.spine0))));
+    byModel.set(
+      key,
+      (chart = chartOf(model, {}, spineOfGraph(model, surface.spine0), {
+        ...(sideFraction !== undefined && { sideFraction }),
+      })),
+    );
   return chart;
 }
 
 export interface DrawOptions extends RenderOptions {
+  /** The part of each polygon side that the strands may cross (see `ChartOptions.sideFraction`). */
+  readonly sideFraction?: number;
   readonly widthExponent?: number;
   /** Rounds of straightening the strips through the glued sides (layout step 2′). */
   readonly straightening?: number;
@@ -81,7 +89,7 @@ export function drawTimeline(
   options: DrawOptions = {},
 ): Rendered {
   try {
-    const chart = chartFor(model, states[0] as FibredSurface);
+    const chart = chartFor(model, states[0] as FibredSurface, options.sideFraction);
     const layoutOf = (surface: FibredSurface) => layoutFor(model, surface, chart, options);
     /** The latest state at or before index i that can be laid out. */
     const drawableAt = (i: number): number => {
@@ -191,13 +199,17 @@ function layoutFor(
     widthExponent: options.widthExponent ?? 0,
     smoothing: options.straightening ?? 0,
   };
-  const result = attempts.get(surface, JSON.stringify([modelId(model), layoutOptions]), () => {
-    try {
-      return { layout: layout(surface, chart, layoutOptions) };
-    } catch {
-      return {};
-    }
-  });
+  const result = attempts.get(
+    surface,
+    JSON.stringify([modelId(model), options.sideFraction, layoutOptions]),
+    () => {
+      try {
+        return { layout: layout(surface, chart, layoutOptions) };
+      } catch {
+        return {};
+      }
+    },
+  );
   return result.layout;
 }
 const attempts = new PerSurface<{ layout?: Layout }>(6);
@@ -337,7 +349,7 @@ function interpolated(
 /** The SVG of a surface in a model; errors become a note instead of an exception. */
 export function draw(model: SurfaceModel, surface: FibredSurface, options: DrawOptions = {}): Rendered {
   try {
-    const chart = chartFor(model, surface);
+    const chart = chartFor(model, surface, options.sideFraction);
     const layoutOptions: LayoutOptions = {
       widthExponent: options.widthExponent ?? 0,
       smoothing: options.straightening ?? 0,
@@ -346,7 +358,7 @@ export function draw(model: SurfaceModel, surface: FibredSurface, options: DrawO
     return renders.get(surface, JSON.stringify([id, options]), () =>
       renderSvg(
         surface,
-        layouts.get(surface, JSON.stringify([id, layoutOptions]), () =>
+        layouts.get(surface, JSON.stringify([id, options.sideFraction, layoutOptions]), () =>
           layout(surface, chart, layoutOptions),
         ),
         options,
