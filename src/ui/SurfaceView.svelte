@@ -39,7 +39,7 @@
   const hyperbolic = $derived(node?.model.kind === "polygon" && node.model.geometry.kind !== "flat");
   const rendered = $derived.by(() => {
     if (node === undefined) return undefined;
-    return draw(node.model, node.surface, {
+    return draw(node.model, app.shown ?? node.surface, {
       view,
       model,
       smoothing,
@@ -79,7 +79,7 @@
   // The card for the strip under the mouse: its images under g and μ, its width and length.
   const weights = new WeakMap<FibredSurface, MatrixInfo>();
   const card = $derived.by(() => {
-    const surface = node?.surface;
+    const surface = app.shown ?? node?.surface;
     const name = app.hovered;
     if (!surface || name === undefined || dragging) return undefined;
     const e = surface.graph.edges.find((x) => x.name === name);

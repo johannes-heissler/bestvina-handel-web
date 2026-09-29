@@ -157,3 +157,25 @@ The window is split into three resizable panes: the **analysis** (gates, graph m
 punctures and periphery, embedding μ) on the left, the **views** in the middle, and the **algorithm** (next step or
 result, with the history tree below it in its own resizable pane, shown by default) on the right. "Swap panels"
 exchanges the two sides; the header button shows or hides the history tree.
+
+### What will happen: previews, the timeline, explanations for every move
+
+- **Explanations for every move** (`move.ts`): each move starts with a sentence on what it does and why; the folds
+  then narrate their own steps, and the other moves list what they changed (strips and junctions removed and added,
+  and the images under g and μ that changed, with their old values).
+- **Choices under their option:** the choices of the focused option are listed under it and are only selected by a
+  click; Apply applies the selected choice (or the option with its default). Fold choices are labelled in the names
+  of the state shown (they were labelled with names from after a Case 2 subdivision, e.g. "keep z1"), and say which
+  strip is kept, which sides the new strip crosses (its μ) and which junctions move along which paths. "Remove the
+  inefficiency completely" is offered for each inefficiency point behind the fold, with its number of folds and a
+  note when one of them needs the Case 2 subdivision (tried on a copy, a few ms).
+- **What will happen** (`Session.preview`): the selected move is applied to a copy while narrating, keeping a copy
+  of the surface at each step (only for previews; these states are never saved), then the automatic steps (at most
+  50), and the growth at the end is computed. Previews are cached per state, move and automatic kinds, and Apply
+  (`Session.commit`) turns the preview into history nodes instead of computing it again. Measured along the algorithm
+  for several examples: median 2–3 ms, at most 7.5 ms per move with its automatic steps, so no background worker is
+  needed yet (it would be for, e.g., the growth after every option).
+- **Timeline:** a vertical slider next to the steps and a play button: at position k the views show the surface after
+  the k-th step (0: before the move); the steps after the position are greyed out, the current one is highlighted.
+  Not for moves that replace the spine (cutting), whose intermediate surfaces live on another spine.
+- "What happened" (the explanations of the moves made) is still there, collapsed.

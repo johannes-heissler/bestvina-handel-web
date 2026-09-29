@@ -4,9 +4,10 @@
  *
  * @module
  */
+import type { FibredSurface } from "../fibred/fibred-surface";
 import type { Move } from "../fibred/move";
 import type { SuggestionKind } from "../fibred/suggestions";
-import { type HistoryNode, Session, type SessionFile, type Start } from "../session/session";
+import { type HistoryNode, type Preview, Session, type SessionFile, type Start } from "../session/session";
 import { encodeSession } from "../session/share";
 import { store } from "./storage";
 
@@ -53,13 +54,24 @@ export class AppState {
     });
   }
 
+  /**
+   * A surface to show in the views instead of the current one (a step of a move on the timeline of "What will
+   * happen"); undefined shows the current state.
+   */
+  shown = $state.raw<FibredSurface | undefined>(undefined);
+
   /** Applies a move; with `thenAutomatic`, the automatic kinds follow (see {@link automatic}). */
   apply(move: Move, options: { thenAutomatic?: boolean } = {}): void {
     this.run(() => {
-      this.session?.apply(move);
-      if (options.thenAutomatic && this.automatic.length > 0)
-        this.session?.runAutopilot({ automatic: new Set(this.automatic) });
+      const session = this.session;
+      if (session === undefined) return;
+      session.commit(session.preview(move, options.thenAutomatic ? new Set(this.automatic) : new Set()));
     });
+  }
+
+  /** Applies a move that was previewed (with the automatic steps it included). */
+  commit(preview: Preview): void {
+    this.run(() => this.session?.commit(preview));
   }
 
   select(node: HistoryNode): void {

@@ -593,17 +593,31 @@ export function variants(fs: FibredSurface, move: Move): MoveOption[] {
           const point = edge && new EdgePoint(edge.forward, Number(place.slice(split + 1)));
           const p = point && inefficiencyAt(fs, point);
           if (point === undefined || p === undefined) return [];
+          const remove = {
+            kind: "remove inefficiency" as const,
+            at: { strip: point.edge.name, index: point.index },
+            steps: "all" as const,
+          };
+          // Tried on a copy (a few ms): does one of its folds need the Case 2 subdivision first?
+          const case2 = (() => {
+            try {
+              const copy = fs.copy();
+              copy.onError = () => {};
+              return narrated(() => applyMove(copy, remove)).steps.some((t) =>
+                plainText(t).startsWith("Case 2"),
+              );
+            } catch {
+              return false;
+            }
+          })();
           return [
             {
-              move: {
-                kind: "remove inefficiency" as const,
-                at: { strip: point.edge.name, index: point.index },
-                steps: "all" as const,
-              },
+              move: remove,
               label: [
                 `Remove the inefficiency at ${point.describe(fs)} completely: `,
                 p.order === 1 ? "one fold" : `its ${p.order} folds one after the other`,
                 ", then pull tight",
+                ...(case2 ? [" (with a Case 2: a first letter is split before folding)"] : []),
               ] as Text,
             },
           ];

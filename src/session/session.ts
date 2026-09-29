@@ -15,8 +15,10 @@ import {
   type AutopilotOptions,
   nextSuggestion,
   type Suggestion,
+  type SuggestionKind,
   type Text,
 } from "../fibred/suggestions";
+import { perronFrobenius } from "../fibred/perron-frobenius";
 import { narrated } from "../fibred/narration";
 import { type FibredSurfaceOptions, initialFibredSurface, type SurfaceModel } from "../examples/models";
 import { buildPreset, PRESETS, randomGenus2 } from "../examples/presets";
@@ -48,6 +50,34 @@ export interface HistoryNode {
   readonly followUp?: FollowUp;
   /** What the move did, step by step (subdivisions, isotopies, folds, …); empty if it doesn't say. */
   readonly steps?: readonly Text[];
+}
+
+/** One step of a move shown step by step: its explanation and the surface after it. */
+export interface PreviewStep {
+  readonly text: Text;
+  readonly after: FibredSurface;
+}
+
+/**
+ * What a move will do, computed on a copy before it is applied (and then used when it is): its explanation with the
+ * surface after each step, the automatic steps after it, and the growth at the end.
+ */
+export interface Preview {
+  readonly move: Move;
+  /** The surface before the move. */
+  readonly before: FibredSurface;
+  readonly steps: readonly PreviewStep[];
+  /** The surface after the move (undefined if it failed). */
+  readonly surface?: FibredSurface;
+  readonly followUp?: FollowUp;
+  /** The automatic steps after the move: each move, its explanation and the surface after it. */
+  readonly automatic: readonly { move: Move; steps: readonly Text[]; surface: FibredSurface }[];
+  /** The growth of g after the move and the automatic steps (undefined if it can't be computed). */
+  readonly growth?: number;
+  /** Why the move can't be applied. */
+  readonly error?: string;
+  /** How long computing the preview took (ms). */
+  readonly time: number;
 }
 
 export class Session {
@@ -120,6 +150,106 @@ export class Session {
     });
     this.select(node);
     return stoppedAt;
+  }
+
+  private readonly previews = new WeakMap<HistoryNode, Map<string, Preview>>();
+
+  /**
+   * What `move` will do from the current state (computed once per state, move and automatic kinds): applied to a
+   * copy, with its explanation and the states in between, then the automatic steps (at most 50).
+   */
+  preview(move: Move, automatic: ReadonlySet<SuggestionKind> = new Set()): Preview {
+    const node = this.current;
+    const key = JSON.stringify([move, [...automatic].sort()]);
+    let byKey = this.previews.get(node);
+    if (byKey === undefined) this.previews.set(node, (byKey = new Map()));
+    const cached = byKey.get(key);
+    if (cached !== undefined) return cached;
+    const started = performance.now();
+    let preview: Preview;
+    try {
+      const copy = node.surface.copy();
+      copy.onError = () => {};
+      const hint: { followUp?: FollowUp } = {};
+      const { result, narrated: told } = narrated(
+        () => applyMove(copy, move, { followUp: (point) => (hint.followUp = point) }),
+        { states: true },
+      );
+      const problems = result.checkIntegrity();
+      if (problems.length > 0) throw new Error(problems.join("\n"));
+      // The surface after step k is the one before step k + 1, and the result after the last step.
+      const steps = told.map((step, k) => ({
+        text: step.text,
+        after: (told[k + 1]?.before ?? result) as FibredSurface,
+      }));
+      const auto: { move: Move; steps: readonly Text[]; surface: FibredSurface }[] = [];
+      if (automatic.size > 0) {
+        const start = result.copy();
+        start.onError = () => {};
+        autopilot(start, {
+          automatic,
+          maxSteps: 50,
+          ...(hint.followUp && { followUp: hint.followUp }),
+          onStep: (m, surface, texts) => auto.push({ move: m, steps: texts, surface: surface.copy() }),
+        });
+      }
+      let growth: number | undefined;
+      try {
+        growth = perronFrobenius(auto.at(-1)?.surface ?? result, { essentialOnly: true }).growth;
+      } catch {
+        growth = undefined;
+      }
+      preview = {
+        move,
+        before: node.surface,
+        steps,
+        surface: result,
+        ...(hint.followUp && { followUp: hint.followUp }),
+        automatic: auto,
+        ...(growth !== undefined && { growth }),
+        time: performance.now() - started,
+      };
+    } catch (e) {
+      preview = {
+        move,
+        before: node.surface,
+        steps: [],
+        automatic: [],
+        error: e instanceof Error ? e.message : String(e),
+        time: performance.now() - started,
+      };
+    }
+    byKey.set(key, preview);
+    return preview;
+  }
+
+  /**
+   * Applies a previewed move: its result becomes a node of the history (or the existing one with the same move), then
+   * the automatic steps after it; the last one becomes current.
+   *
+   * @throws Error if the move can't be applied (`preview.error`).
+   */
+  commit(preview: Preview): HistoryNode {
+    if (preview.surface === undefined) throw new Error(preview.error ?? "The move can't be applied");
+    const parent = this.current;
+    const key = JSON.stringify(preview.move);
+    let node =
+      parent.children.find((c) => JSON.stringify(c.move) === key) ??
+      this.addChild(
+        parent,
+        preview.move,
+        preview.surface,
+        preview.followUp,
+        preview.steps.map((s) => s.text),
+      );
+    for (const step of preview.automatic) {
+      const existing = node.children.find((c) => JSON.stringify(c.move) === JSON.stringify(step.move));
+      // Bookkeeping steps keep the hint of the fold before them (the strips of the next fold keep their names).
+      const keep =
+        step.move.kind === "fold" || step.move.kind === "remove inefficiency" ? undefined : node.followUp;
+      node = existing ?? this.addChild(node, step.move, step.surface, keep, step.steps);
+    }
+    return this.select(node);
   }
 
   select(node: HistoryNode): HistoryNode {

@@ -9,6 +9,8 @@ import { EdgePath } from "../graph/edge-path";
 import { nameTable, parseEdgePath } from "../graph/path-parser";
 import type { Edge, OrientedEdge, Vertex } from "../graph/ribbon-graph";
 import { EdgePoint } from "./edge-point";
+import { about, narrate } from "./narration";
+import type { Text, TextPart } from "./suggestions";
 import { type MapUpdateMode, renameJunction, renameStrip, updateMap } from "./map-editing";
 import type { FibredSurface } from "./fibred-surface";
 import { collapseSubforest } from "./moves/collapse-forest";
@@ -139,7 +141,160 @@ export interface MoveHooks {
   readonly followUp?: (followUp: FollowUp) => void;
 }
 
+/**
+ * Applies a move (in place where possible; some moves return a new surface). It explains itself while it runs (see
+ * `narration.ts`): a sentence on what the move does, then either its own steps (folds) or the changes it made.
+ */
 export function applyMove(fs: FibredSurface, move: Move, hooks: MoveHooks = {}): FibredSurface {
+  return about(fs, () => {
+    const intro = introduction(fs, move);
+    if (intro.length > 0) narrate(intro);
+    const before = snapshot(fs);
+    const result = applyMoveQuietly(fs, move, hooks);
+    if (!NARRATES_ITSELF.has(move.kind))
+      about(result, () => {
+        for (const line of changes(before, snapshot(result))) narrate(line);
+      });
+    return result;
+  });
+}
+
+/** The moves whose steps explain them in detail (the folds); the others are explained by their changes. */
+const NARRATES_ITSELF = new Set<MoveKind>(["fold", "fold peripheral inefficiency", "remove inefficiency"]);
+
+/** What a move does, in one sentence (before it is applied). */
+function introduction(fs: FibredSurface, move: Move): Text {
+  const list = (names: readonly string[]): TextPart[] =>
+    names.flatMap((name, i) => [...(i === 0 ? [] : [", "]), { strip: name }]);
+  const junctions = (names: readonly string[]): TextPart[] =>
+    names.flatMap((name, i) => [...(i === 0 ? [] : [", "]), { junction: name }]);
+  switch (move.kind) {
+    case "collapse invariant subforest":
+      return [
+        "Collapse the invariant forest ",
+        ...list(move.strips),
+        ": g maps it into itself, so contracting each of its trees to one junction is a homotopy equivalence. Its strips disappear from all images.",
+      ];
+    case "pull tight":
+      return [
+        "Pull g tight",
+        ...(move.at ? [" at ", ...list(move.at)] : [" everywhere"]),
+        ": cancel each backtracking x x̄ in the images (an isotopy of f, moving junctions along the cancelled pieces), and where all images at a junction start with the same strip, move the junction along it.",
+      ];
+    case "remove valence-1 junction":
+      return [
+        "Remove the junction",
+        move.junctions.length === 1 ? " " : "s ",
+        ...junctions(move.junctions),
+        " of valence 1 together with its strip: the strip retracts into its other end (a homotopy equivalence), and it disappears from all images.",
+      ];
+    case "remove valence-2 junctions":
+      return [
+        "Remove junctions of valence 2",
+        ...(move.junctions ? [" (", ...junctions(move.junctions), ")"] : []),
+        ": at each, its two strips become one, and the junction is forgotten (the images are rewritten accordingly).",
+      ];
+    case "absorb into periphery":
+      return [
+        "Absorb into the periphery: make the peripheral subgraph maximal and efficient, so that g acts on it as an automorphism (strips that g maps into the periphery are absorbed into it).",
+      ];
+    case "reduce":
+      return [
+        "Reduce along the invariant subgraph ",
+        ...list(move.preserved),
+        `: the boundary of a neighbourhood of it is a reduction system; split along it and continue on piece ${(move.piece ?? 0) + 1} with the first-return map of g.`,
+      ];
+    case "ignore reducibility":
+      return ["Ignore the reducibility found, and continue the algorithm as if the map were irreducible."];
+    case "split junctions":
+      return [
+        `Split the junctions where the gate graph (the gates, joined by the infinitesimal branches of τ) is disconnected, into one junction per component: the boundary of a neighbourhood of τ is a reduction system. Continue on piece ${(move.piece ?? 0) + 1} with the first-return map of g.`,
+      ];
+    case "cut along a singular leaf":
+      return [
+        "Cut along a singular leaf from ",
+        { junction: move.junction },
+        ": the puncture is replaced by the orbit of this singularity, which gives a new train track for the same map on the surface with these punctures instead.",
+      ];
+    case "replace puncture by singularity":
+      return [
+        "Shortcut: fill in the puncture and puncture the surface at the orbit of the singularity ",
+        { junction: move.junction },
+        " instead.",
+      ];
+    case "edit map":
+      return ["Replace g by the map entered."];
+    case "rename strip":
+      return ["Rename the strip ", { strip: move.strip }, ` to ${move.name}.`];
+    case "rename junction":
+      return ["Rename the junction ", { junction: move.junction }, ` to ${move.name}.`];
+    case "remove inefficiency": {
+      const edge = fs.graph.edges.find((e) => e.name === move.at.strip);
+      const point = edge && new EdgePoint(edge.forward, move.at.index);
+      return point
+        ? [`Remove the inefficiency at ${point.describe(fs)} completely, fold by fold:`]
+        : ["Remove an inefficiency completely, fold by fold:"];
+    }
+    default:
+      return [];
+  }
+}
+
+/** The names, images and junctions of a state, to tell what a move changed. */
+interface Snapshot {
+  readonly g: Map<string, string[]>;
+  readonly mu: Map<string, string>;
+  readonly junctions: Set<string>;
+}
+
+function snapshot(fs: FibredSurface): Snapshot {
+  return {
+    g: new Map(fs.graph.edges.map((e) => [e.name, fs.g.image(e.forward).letters.map((x) => x.name)])),
+    mu: new Map(fs.graph.edges.map((e) => [e.name, String(fs.mu.image(e.forward)) || "·"])),
+    junctions: new Set(fs.graph.vertices.map((v) => v.name)),
+  };
+}
+
+/** What changed between two states: strips and junctions removed and added, and the images that changed. */
+function changes(before: Snapshot, after: Snapshot): Text[] {
+  const lines: Text[] = [];
+  const strips = (names: readonly string[]): TextPart[] =>
+    names.flatMap((name, i) => [...(i === 0 ? [] : [", "]), { strip: name }]);
+  const junctions = (names: readonly string[]): TextPart[] =>
+    names.flatMap((name, i) => [...(i === 0 ? [] : [", "]), { junction: name }]);
+  const removed = [...before.g.keys()].filter((n) => !after.g.has(n));
+  const added = [...after.g.keys()].filter((n) => !before.g.has(n));
+  if (removed.length > 0) lines.push(["Strips removed: ", ...strips(removed), "."]);
+  if (added.length > 0) lines.push(["New strips: ", ...strips(added), "."]);
+  const gone = [...before.junctions].filter((n) => !after.junctions.has(n));
+  const come = [...after.junctions].filter((n) => !before.junctions.has(n));
+  if (gone.length > 0) lines.push(["Junctions removed: ", ...junctions(gone), "."]);
+  if (come.length > 0) lines.push(["New junctions: ", ...junctions(come), "."]);
+  const path = (letters: readonly string[]): TextPart[] =>
+    letters.length === 0 ? ["·"] : letters.flatMap((n, i) => [...(i === 0 ? [] : [" "]), { strip: n }]);
+  const changed = [...after.g].filter(
+    ([n, image]) => before.g.has(n) && (before.g.get(n) as string[]).join(" ") !== image.join(" "),
+  );
+  for (const [n, image] of changed.slice(0, 8))
+    lines.push([
+      "g: ",
+      { strip: n },
+      " ↦ ",
+      ...path(image),
+      " (was ",
+      ...path(before.g.get(n) as string[]),
+      ")",
+    ]);
+  if (changed.length > 8) lines.push([`… and ${changed.length - 8} more images under g changed.`]);
+  const muChanged = [...after.mu].filter(([n, image]) => before.mu.has(n) && before.mu.get(n) !== image);
+  for (const [n, image] of muChanged.slice(0, 8))
+    lines.push(["μ: ", { strip: n }, ` ↦ ${image} (was ${before.mu.get(n)})`]);
+  if (muChanged.length > 8) lines.push([`… and ${muChanged.length - 8} more images under μ changed.`]);
+  if (lines.length === 0) lines.push(["The graph and the maps stay the same."]);
+  return lines;
+}
+
+function applyMoveQuietly(fs: FibredSurface, move: Move, hooks: MoveHooks = {}): FibredSurface {
   const reportFollowUp = (next: ReturnType<typeof removeInefficiencyStep>) => {
     if (next === undefined || next.order === 0) return;
     const point = next.point.normalized(fs);
