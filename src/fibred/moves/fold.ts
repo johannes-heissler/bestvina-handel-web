@@ -11,9 +11,9 @@ import { EDGE_COLORS, leastUsedColor } from "../names-and-colors";
 import { EdgePoint } from "../edge-point";
 import type { FibredSurface } from "../fibred-surface";
 import { isCyclicInterval } from "../fibred-surface";
-import { isotopeJunction } from "./isotopy";
+import { isotopeJunction, moveJunction } from "./isotopy";
 import { narrate, quietly, stateNow } from "../narration";
-import type { Text, TextPart } from "../suggestions";
+import type { TextPart } from "../suggestions";
 import { subdivide } from "./subdivide";
 
 /** Maps forward-normalized edge points from before a move to after it (see {@link subdivide}). */
@@ -299,24 +299,6 @@ export function foldInitialSegments(
     { before: beforeFold },
   );
   return { folded: kept, transform: (point) => transforms.reduce((p, t) => t(p), point) };
-}
-
-/**
- * Moves the junction v along γ one side at a time (an isotopy), narrating each crossing of a side: the first with
- * `what`, the others shortly. Each step records the side it crosses, for animating the isotopy.
- */
-function moveJunction(fs: FibredSurface, v: Vertex, gamma: EdgePath, what: Text, along?: OrientedEdge): void {
-  gamma.letters.forEach((side, k) => {
-    narrate(
-      k === 0
-        ? [...what, ` It crosses the side ${side.name} first.`]
-        : [`… then it crosses the side ${side.name}.`],
-      {
-        motion: { junction: v.name, side: side.name, ...(along && { along: along.name }) },
-      },
-    );
-    isotopeJunction(fs, v, EdgePath.of(side));
-  });
 }
 
 /** `name`, or with more "₁" appended if it is taken. */

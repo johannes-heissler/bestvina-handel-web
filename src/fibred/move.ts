@@ -159,8 +159,16 @@ export function applyMove(fs: FibredSurface, move: Move, hooks: MoveHooks = {}):
   });
 }
 
-/** The moves whose steps explain them in detail (the folds); the others are explained by their changes. */
-const NARRATES_ITSELF = new Set<MoveKind>(["fold", "fold peripheral inefficiency", "remove inefficiency"]);
+/**
+ * The moves whose steps explain them completely (the folds, pulling tight); the others are also summed up by their
+ * changes afterwards.
+ */
+const NARRATES_ITSELF = new Set<MoveKind>([
+  "fold",
+  "fold peripheral inefficiency",
+  "remove inefficiency",
+  "pull tight",
+]);
 
 /** What a move does, in one sentence (before it is applied). */
 function introduction(fs: FibredSurface, move: Move): Text {

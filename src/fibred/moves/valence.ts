@@ -7,7 +7,10 @@
 import { EdgePath } from "../../graph/edge-path";
 import type { Edge, OrientedEdge, Vertex } from "../../graph/ribbon-graph";
 import type { FibredSurface } from "../fibred-surface";
+import { narrate } from "../narration";
 import { perronFrobenius } from "../perron-frobenius";
+import { lettersText } from "../text-parts";
+import { slideAlong } from "./isotopy";
 
 /** The junctions with exactly one strip end. */
 export function valenceOneJunctions(fs: FibredSurface): Vertex[] {
@@ -26,6 +29,34 @@ export function removeValenceOneJunction(fs: FibredSurface, v: Vertex): void {
   if (star.length !== 1) throw new Error(`The junction ${v} has valence ${star.length}, not 1`);
   const e = star[0] as OrientedEdge;
   const w = e.target;
+  slideAlong(fs, v, e, [
+    "Isotopy: slide the junction ",
+    { junction: v.name },
+    " (of valence 1) along its strip ",
+    { strip: e.name },
+    ` (μ = ${String(fs.mu.image(e))}) towards `,
+    { junction: w.name },
+    ".",
+  ]);
+  narrate([
+    "Retract ",
+    { strip: e.name },
+    " into ",
+    { junction: w.name },
+    ": the junction ",
+    { junction: v.name },
+    " and the strip disappear, and so do the letters ",
+    { strip: e.name },
+    " and ",
+    { strip: e.reversed.name },
+    " from all images (an image entering ",
+    { junction: v.name },
+    " leaves it at once, so it contains ",
+    { strip: e.reversed.name },
+    " ",
+    { strip: e.name },
+    ").",
+  ]);
 
   fs.g.substituteInImages((edge) => (edge === e.edge ? EdgePath.EMPTY : undefined));
   redirectVertexImages(fs, v, w);
@@ -65,6 +96,39 @@ export function removeValenceTwoJunction(fs: FibredSurface, v: Vertex, removed?:
   const r = removed ?? defaultStripToRemove(fs, s0, s1);
   const k = r === s0 ? s1 : s0;
   const u = r.target;
+  slideAlong(fs, v, r, [
+    "Isotopy: slide the junction ",
+    { junction: v.name },
+    " along ",
+    { strip: r.name },
+    ` (μ = ${String(fs.mu.image(r))}) towards `,
+    { junction: u.name },
+    ", so that ",
+    { strip: r.name },
+    " crosses no side.",
+  ]);
+  const merged = fs.g.image(r).inverse.concat(fs.g.image(k)).letters;
+  narrate([
+    "Merge ",
+    { strip: r.reversed.name },
+    " and ",
+    { strip: k.name },
+    " at the junction ",
+    { junction: v.name },
+    " of valence 2 into one strip ",
+    { strip: k.edge.name.toLowerCase().startsWith(r.edge.name.toLowerCase()) ? r.edge.name : k.edge.name },
+    " from ",
+    { junction: u.name },
+    ": its image is g(",
+    { strip: r.reversed.name },
+    ") g(",
+    { strip: k.name },
+    ") = ",
+    ...lettersText(merged),
+    " (not yet cancelled), and ",
+    { strip: r.name },
+    " disappears from all images.",
+  ]);
 
   // New images of k′ = r̄ k, computed from the old maps.
   fs.g.setImage(k, fs.g.image(r).inverse.concat(fs.g.image(k)));

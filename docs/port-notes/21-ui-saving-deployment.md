@@ -205,3 +205,16 @@ exchanges the two sides; the header button shows or hides the history tree.
   sides of the polygon; a junction close to a side could get a lane and bend reaching the side, and the straight piece
   after it (a geodesic between two points near the side) then ran along the side. Now the disk, the lane (at most half
   the way to the nearest side) and the bend (at most half the remaining way) keep away from the sides.
+
+### Options that open, a timeline that stays in sight
+
+- **Options as headings:** when one option is chosen at a time, the options have no radio buttons of their own (it was
+  unclear what selecting one meant for its choices). Each is a heading with ▸/▾ that opens its choices, and the first
+  choice is selected; Apply applies the selected choice. Options that can be combined keep their checkboxes.
+- **Timeline:** the vertical slider was as tall as the list of steps. When the first steps were scrolled out of sight,
+  dragging it (or its arrow keys) scrolled the side panel, as the browser keeps a focused slider in view. Now it is a
+  short horizontal slider in a row with ▶, the step number and "Now" (back to the current state), and that row sticks
+  to the top of the panel while the steps scroll. Clicking a step shows the state after it.
+- **Explanations:** collapsing a tree and removing junctions of valence 1 and 2 narrate their steps (the junction
+  sliding along the strip across the sides, animated, then the contraction or merge with the new image); pulling tight
+  narrates each cancellation; absorbing into the periphery says how the circles are rebuilt. See port note 10.

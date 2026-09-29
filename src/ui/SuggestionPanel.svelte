@@ -39,7 +39,10 @@
   });
 
   let selected = $state<number[]>([0]);
-  /** The option clicked last: its further choices are shown under it (also when several options are ticked). */
+  /**
+   * The option clicked last: its further choices are shown under it (also when several options are ticked). With one
+   * option at a time, the options are headings that open their choices, and the first choice is selected.
+   */
   let focused = $state(0);
   /** The choice selected under the focused option (undefined: the option itself, with its default choice). */
   let chosen = $state<number | undefined>(undefined);
@@ -57,9 +60,12 @@
     const surface = node?.surface;
     choices = undefined;
     if (!option || !surface) return;
+    const multiple = suggestion?.multiple;
     const timer = setTimeout(() => {
       try {
-        choices = { list: variants(surface, option.move) };
+        const list = variants(surface, option.move);
+        choices = { list };
+        if (!multiple && list.length > 0) chosen = 0;
       } catch (e) {
         choices = { error: e instanceof Error ? e.message : String(e) };
       }
@@ -68,6 +74,7 @@
   });
 
   function toggle(i: number) {
+    if (!suggestion?.multiple && i === focused) return; // (keeps its choice)
     focused = i;
     chosen = undefined;
     if (!suggestion?.multiple) selected = [i];
@@ -77,6 +84,8 @@
   /** The move that Apply would apply: the selected choice, or the selected options. */
   const selectedMove = $derived.by(() => {
     if (!suggestion || suggestion.options.length === 0) return undefined;
+    // With one option at a time, wait for its choices: the first one is selected when they are there.
+    if (!suggestion.multiple && choices === undefined) return undefined;
     const choice = chosen === undefined ? undefined : choices?.list?.[chosen];
     if (choice) return choice.move;
     const moves = selected.map((i) => suggestion.options[i]?.move).filter((m) => m !== undefined);
@@ -201,15 +210,26 @@
             class:discouraged={option.discouraged}
             title={option.discouraged ? "Possible now, but the algorithm does this only at the end" : undefined}
           >
-            <label>
-              <input
-                type={suggestion.multiple ? "checkbox" : "radio"}
-                name="option"
-                checked={selected.includes(i) && (i !== focused || chosen === undefined)}
-                onchange={() => toggle(i)}
-              />
-              <TextView text={option.label} />
-            </label>
+            {#if suggestion.multiple}
+              <label>
+                <input
+                  type="checkbox"
+                  name="option"
+                  checked={selected.includes(i) && (i !== focused || chosen === undefined)}
+                  onchange={() => toggle(i)}
+                />
+                <TextView text={option.label} />
+              </label>
+            {:else}
+              <button
+                class="option-head"
+                class:open={i === focused}
+                aria-expanded={i === focused}
+                onclick={() => toggle(i)}
+                ><span class="disclosure" aria-hidden="true">{i === focused ? "▾" : "▸"}</span>
+                <TextView text={option.label} /></button
+              >
+            {/if}
             {#if option.details}<div class="hint option-details"><TextView text={option.details} /></div>{/if}
             {#if i === focused}
               {#if choices === undefined}
@@ -248,30 +268,16 @@
   {/if}
 
   {#if suggestion?.options.length}
+    <div class="will-happen-block">
     <h3>What will happen</h3>
     {#if preview === undefined}
       <p class="note">Computing…</p>
     {:else if preview.error !== undefined}
       <p class="note">This can't be applied here: {preview.error}</p>
     {:else}
+      <!-- (A short horizontal slider in a row that stays in sight: a slider as tall as the list scrolled the panel.) -->
       <div class="timeline-controls">
         <button onclick={play} title="Show the steps one after the other in the views">{playing ? "⏸" : "▶"}</button>
-        <span class="hint"
-          >{position === undefined
-            ? "Move the slider or press ▶ to see the steps."
-            : `Step ${Math.min(moments.length, Math.floor(position) + (position % 1 > 0 ? 1 : 0))} of ${moments.length}`}</span
-        >
-        {#if position !== undefined}
-          <button
-            class="link"
-            onclick={() => {
-              position = undefined;
-              playing = false;
-            }}>Show the current state</button
-          >
-        {/if}
-      </div>
-      <div class="will-happen">
         <input
           class="timeline"
           type="range"
@@ -285,24 +291,45 @@
             position = Number((event.currentTarget as HTMLInputElement).value);
           }}
         />
-        <ol>
-          {#each moments as moment, k (k)}
-            <li
-              class:automatic-step={k >= preview.steps.length}
-              class:pending={position !== undefined && position <= k}
-              class:now={position !== undefined && position > k && position <= k + 1}
-            >
-              <TextView text={moment.text} surface={preview.before} />
-            </li>
-          {/each}
-        </ol>
+        <span class="hint step-count"
+          >{position === undefined
+            ? "Click a step to see it"
+            : `Step ${Math.min(moments.length, Math.floor(position) + (position % 1 > 0 ? 1 : 0))} of ${moments.length}`}</span
+        >
+        <button
+          class="link"
+          disabled={position === undefined}
+          onclick={() => {
+            position = undefined;
+            playing = false;
+          }}>Now</button
+        >
       </div>
+      <ol class="will-happen">
+        {#each moments as moment, k (k)}
+          <li
+            class:automatic-step={k >= preview.steps.length}
+            class:pending={position !== undefined && position <= k}
+            class:now={position !== undefined && position > k && position <= k + 1}
+          >
+            <button
+              class="step"
+              title="Show the state after this step"
+              onclick={() => {
+                playing = false;
+                position = k + 1;
+              }}><TextView text={moment.text} surface={preview.before} /></button
+            >
+          </li>
+        {/each}
+      </ol>
       <p class="hint">
         {#if preview.automatic.length > 0}Steps {preview.steps.length + 1}–{moments.length} are the automatic steps after it.
         {/if}Afterwards: {preview.growth === undefined ? "the growth can't be computed" : `growth λ = ${preview.growth.toFixed(6)}`}
         <span class="timing">({preview.time.toFixed(0)} ms)</span>
       </p>
     {/if}
+    </div>
   {/if}
 
   <details class="automatic">

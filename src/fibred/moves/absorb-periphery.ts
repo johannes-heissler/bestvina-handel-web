@@ -16,6 +16,7 @@ import { argMax, argMin, rotate } from "../../util/iter";
 import { mod } from "../../util/number";
 import type { FibredSurface } from "../fibred-surface";
 import { collapseSubforest } from "./collapse-forest";
+import { narrate } from "../narration";
 import { maximalInvariantSubgraphRetractingTo } from "./reducibility";
 
 const TOLERANCE = 1e-9;
@@ -130,6 +131,16 @@ export function absorbIntoPeriphery(fs: FibredSurface): void {
   const gateOf = new Map<OrientedEdge, { placed: Placed; index: number }>();
   for (const pl of placed)
     pl.gates.forEach((gate, index) => gate.forEach((s) => gateOf.set(s, { placed: pl, index })));
+  narrate([
+    "Rebuild the periphery: each peripheral circle is replaced by a new circle with one junction per gate of the strips leaving it (",
+    placed.length === 1
+      ? `${placed[0]?.gates.length} ${placed[0]?.gates.length === 1 ? "junction" : "junctions"}`
+      : `${placed
+          .map((pl) => pl.gates.length)
+          .join(", ")
+          .replace(/, (\d+)$/, " and $1")} junctions`,
+    "), and the leaving strips move along the old circle to the junction of their gate. g maps the new circles by an automorphism, and every piece of an image inside a circle becomes the path along the new circle between the gates at its ends.",
+  ]);
   const junctions = new Map<Placed, Vertex[]>(placed.map((pl) => [pl, pl.gates.map(() => fs.addJunction())]));
   const newEdges = new Map<Placed, OrientedEdge[]>(
     placed.map((pl) => {

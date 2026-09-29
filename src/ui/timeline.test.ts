@@ -26,6 +26,39 @@ describe("the timeline of a move", () => {
   });
 });
 
+describe("contracting strips as isotopies", () => {
+  it("slides the junctions of a collapsed tree and of a removed valence-2 junction across the sides, drawably", () => {
+    const session = Session.create({ kind: "preset", preset: "Bestvina–Handel example 6.1" });
+    const found = new Set<string>();
+    for (let i = 0; i < 40 && found.size < 2; i++) {
+      const s = session.suggestion();
+      if (s.kind === "finished") break;
+      const move = s.autopilotMove ?? s.options[0]!.move;
+      if (move.kind === "collapse invariant subforest" || move.kind === "remove valence-2 junctions") {
+        const preview = session.preview(move, new Set());
+        const motions = preview.steps.map((x) => x.motion);
+        if (motions.some(Boolean)) {
+          found.add(move.kind);
+          const texts = preview.steps.map((x) => plainText(x.text));
+          expect(texts.some((t) => t.startsWith("Isotopy: slide the junction"))).toBe(true);
+          expect(
+            texts.some((t) =>
+              t.startsWith(move.kind === "remove valence-2 junctions" ? "Merge" : "Contract"),
+            ),
+          ).toBe(true);
+          const states = [preview.before, ...preview.steps.map((x) => x.after)];
+          for (let position = 0; position <= preview.steps.length; position += 0.25)
+            expect(
+              drawTimeline(session.current.model, states, motions, position, { size: 100 }).notes,
+            ).toEqual([]);
+        }
+      }
+      session.apply(move);
+    }
+    expect([...found].sort()).toEqual(["collapse invariant subforest", "remove valence-2 junctions"]);
+  });
+});
+
 describe("the strand order with a hairpin", () => {
   it("lays out the states of an isotopy that moves a junction of valence 2 across sides", async () => {
     const { strandOrder } = await import("../embedding/strand-order");

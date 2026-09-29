@@ -45,6 +45,16 @@ before a fold so that the side-crossing words (now μ) of the folded strips agre
 number of side crossings afterwards ("badness"). It reads `Curve.SideCrossingWord` and moves curves. In the port
 it becomes a computation on μ with `isotopeJunction`, as part of the folding module.
 
+**Contracting a strip as an isotopy** (`slideAlong(fs, v, t)`): the moves that contract strips (collapsing a tree,
+removing a junction of valence 1 or 2) first slide the junction v along the strip t that leaves it, one side of μ(t)
+at a time (`moveJunction`, each crossing a narrated step with its motion for the timeline), until t crosses no side;
+then t is contracted. A tree is contracted by sliding its junctions towards the centre, the nearest first. The result
+for μ is the same as before (prolonging the other strips at v by μ(t̄), reduced), but the timeline now shows the
+junctions moving across the sides instead of jumping.
+
+Pulling tight narrates each step: which backtracking of which image is cancelled (a few letters around it), or which
+common start is removed at an extremal junction. It changes g only, so it has no motion.
+
 ## Tests
 
 `src/fibred/moves/pull-tight.test.ts` (9 tests): finding backtracks and extremal junctions and grouping them; pulling tight a
