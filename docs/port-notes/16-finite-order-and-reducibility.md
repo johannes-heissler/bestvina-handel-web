@@ -117,3 +117,18 @@ some junction: the **gate graph** there (the gates as vertices, the infinitesima
   it.
 - Example: "Swapped handles" now ends here: τ splits at v₀ into {a B A b} and {c D C d}, the reduction system is
   a b A B, c d C D, and on each of the two pieces (swapped by g, period 2) g² is pseudo-Anosov with λ = 2.618034.
+
+## Update: invariant forests as candidates
+
+An orbit of an essential strip can have components that are trees (an invariant forest that isn't periphery-friendly,
+i.e. it touches P in at least two junctions, else it would have been collapsed). Before, such an orbit was offered as
+it was ("Reduce along d"), and the move split along it, although splitting along a tree cuts nothing off; the
+extension by the touched periphery was computed (`maximal`) but not used. Now `reductionCandidates` splits each orbit:
+
+- its components that are not trees form one candidate (a component with loops is mapped into itself: a homotopy
+  equivalence can't map it into a tree);
+- its tree components, with their orbits and what retracts to them, form an invariant forest, offered together with
+  the components of P that it touches (the proof of the Corollary), e.g. "Reduce along d, b, a, x (an invariant forest
+  with the components of the periphery it touches)"; dropped if that is the whole graph.
+
+The candidate records the subgraph the reduction actually uses (`preserved`), so the label and the move agree.

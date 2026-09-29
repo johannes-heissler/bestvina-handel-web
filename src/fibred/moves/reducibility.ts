@@ -62,48 +62,80 @@ export function maximalInvariantSubgraphRetractingTo(fs: FibredSurface, base: Re
 
 /** A way to reduce: an invariant subgraph containing essential strips. */
 export interface ReductionCandidate {
-  /** The smallest invariant subgraph found that leads to this reduction (the orbit of an essential strip). */
+  /**
+   * The invariant subgraph to reduce along: without components that are trees, or, for an invariant forest, together
+   * with the components of the periphery P that it touches.
+   */
   readonly preserved: Set<Edge>;
-  /** The maximal invariant subgraph that deformation retracts to it (plus, for a forest, the touched periphery). */
+  /** The maximal invariant subgraph that deformation retracts to it. */
   readonly maximal: Set<Edge>;
+  /** Whether it comes from an invariant forest (extended by the touched components of P). */
+  readonly forest: boolean;
 }
 
 /**
  * The invariant proper subgraphs containing essential strips (strips outside the pre-periphery), which show that f is
- * reducible (the thesis, Corollary "Reducibility and essential edges"). Each orbit of an essential strip that isn't
- * the whole graph is a candidate; candidates with the same maximal invariant subgraph are merged, keeping the smallest
- * orbit (as in C#). If the maximal subgraph is a forest, the peripheral components it touches are added (the proof of
- * the Corollary), and it is dropped if that gives the whole graph.
+ * reducible (the thesis, Corollary "Reducibility and essential edges"). From the orbit of each essential strip that
+ * isn't the whole graph:
+ *
+ * - its components that are not trees (g maps them into themselves: a component with loops can't be mapped into a
+ *   tree by a homotopy equivalence), if they contain an essential strip;
+ * - its components that are trees, with their orbits: an invariant forest, which is never periphery-friendly here
+ *   (else it would have been collapsed), taken together with the components of P that it touches (the proof of the
+ *   Corollary); dropped if that gives the whole graph.
+ *
+ * So no candidate has components that are trees: splitting along a tree cuts nothing off. Candidates with the same
+ * maximal invariant subgraph are merged, keeping the smallest (as in C#).
  */
 export function reductionCandidates(fs: FibredSurface): ReductionCandidate[] {
   const prePeriphery = fs.prePeriphery();
   const all = fs.graph.edgeCount;
   const byKey = new Map<string, ReductionCandidate>();
-  for (const e of fs.graph.edges) {
-    if (prePeriphery.has(e)) continue;
-    const preserved = orbitOfEdge(fs, e);
-    if (preserved.size === all) continue;
+  const add = (preserved: Set<Edge>, forest: boolean) => {
+    if (preserved.size === 0 || preserved.size === all) return;
+    if ([...preserved].every((f) => prePeriphery.has(f))) return;
     const maximal = maximalInvariantSubgraphRetractingTo(fs, preserved);
-    if (fs.graph.isForest(maximal)) {
-      for (let grown = true; grown;) {
-        const vertices = new Set([...maximal].flatMap((f) => [f.source, f.target]));
-        const touched = [...fs.peripheral].filter(
-          (p) => !maximal.has(p) && (vertices.has(p.source) || vertices.has(p.target)),
-        );
-        touched.forEach((p) => maximal.add(p));
-        grown = touched.length > 0;
-      }
-      if (maximal.size === all) continue;
-    }
+    if (maximal.size === all) return;
     const key = [...maximal]
       .map((f) => f.id)
       .sort((a, b) => a - b)
       .join(",");
     const existing = byKey.get(key);
     if (existing === undefined || preserved.size < existing.preserved.size)
-      byKey.set(key, { preserved, maximal });
+      byKey.set(key, { preserved, maximal, forest });
+  };
+  for (const e of fs.graph.edges) {
+    if (prePeriphery.has(e)) continue;
+    const orbit = orbitOfEdge(fs, e);
+    if (orbit.size === all) continue;
+    const components = fs.graph.components(orbit);
+    const isTree = (c: { vertices: Set<Vertex>; edges: Set<Edge> }) => c.vertices.size === c.edges.size + 1;
+    add(new Set(components.filter((c) => !isTree(c)).flatMap((c) => [...c.edges])), false);
+    const trees = components.filter(isTree).flatMap((c) => [...c.edges]);
+    if (trees.length === 0) continue;
+    // The invariant forest: the trees with their orbits and what retracts to them, if that is still a forest.
+    const forest = maximalInvariantSubgraphRetractingTo(
+      fs,
+      new Set(trees.flatMap((f) => [...orbitOfEdge(fs, f)])),
+    );
+    if (!fs.graph.isForest(forest)) continue;
+    add(withTouchedPeriphery(fs, forest), true);
   }
   return [...byKey.values()];
+}
+
+/** The subgraph together with the components of the periphery P that it touches. */
+function withTouchedPeriphery(fs: FibredSurface, edges: ReadonlySet<Edge>): Set<Edge> {
+  const result = new Set(edges);
+  for (let grown = true; grown;) {
+    const vertices = new Set([...result].flatMap((f) => [f.source, f.target]));
+    const touched = [...fs.peripheral].filter(
+      (p) => !result.has(p) && (vertices.has(p.source) || vertices.has(p.target)),
+    );
+    touched.forEach((p) => result.add(p));
+    grown = touched.length > 0;
+  }
+  return result;
 }
 
 /** The connected components of the subgraph `edges`, grouped into orbits under g (each orbit in the order of g). */

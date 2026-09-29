@@ -212,7 +212,11 @@ function nextStep(fs: FibredSurface, context: SuggestionContext): Suggestion {
         options: [
           ...candidates.map((c) => ({
             move: { kind: "reduce" as const, preserved: names(c.preserved) },
-            label: ["Reduce along ", ...strips(names(c.preserved))] as Text,
+            label: [
+              "Reduce along ",
+              ...strips(names(c.preserved)),
+              ...(c.forest ? [" (an invariant forest with the components of the periphery it touches)"] : []),
+            ] as Text,
           })),
           { move: { kind: "ignore reducibility" }, label: ["Ignore and continue"] },
         ],
