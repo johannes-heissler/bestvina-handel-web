@@ -294,6 +294,30 @@ export interface FoldOption {
   readonly c: EdgePath;
   /** The total length of μ after the fold (the C# "badness"). */
   readonly sideCrossings: number;
+  /**
+   * The isotopies it takes (before folding): the target junction of a strip folded completely moves along γ, the new
+   * junction on a strip folded partially along c; for a loop folded completely, first its junction along `move`.
+   */
+  readonly isotopies: readonly Isotopy[];
+}
+
+/** A junction moved along a path in G₀ before a fold. */
+export interface Isotopy {
+  /** The strip end whose target junction moves (folded completely), or on which the new junction lies (partially). */
+  readonly end: OrientedEdge;
+  readonly kind: "target" | "new junction" | "source";
+  readonly along: EdgePath;
+}
+
+/** The isotopies of folding the initial segments (length i) of `edges` with the μ-image c. */
+function isotopiesOf(fs: FibredSurface, edges: readonly OrientedEdge[], i: number, c: EdgePath): Isotopy[] {
+  return edges.flatMap((e): Isotopy[] => {
+    if (fs.g.image(e).length === i) {
+      const along = fs.mu.image(e).inverse.concat(c).reduced();
+      return along.isEmpty ? [] : [{ end: e, kind: "target", along }];
+    }
+    return c.isEmpty ? [] : [{ end: e, kind: "new junction", along: c }];
+  });
 }
 
 /**
@@ -329,7 +353,13 @@ export function foldOptions(fs: FibredSurface, edges: readonly OrientedEdge[], i
         continue; // e.g. an unsupported loop fold
       }
       options.push({
-        option: { preferred, l, c, sideCrossings: copy.mu.totalLength() },
+        option: {
+          preferred,
+          l,
+          c,
+          sideCrossings: copy.mu.totalLength(),
+          isotopies: isotopiesOf(fs, edges, i, c),
+        },
         centrality: Math.abs(position - (ordered.length - 1) / 2),
       });
     }
@@ -368,7 +398,14 @@ function loopFoldOptions(
       } catch {
         continue; // e.g. two loops with different μ-images after the move
       }
-      options.push({ preferred: loop, move, l: c.length, c, sideCrossings: copy.mu.totalLength() });
+      options.push({
+        preferred: loop,
+        move,
+        l: c.length,
+        c,
+        sideCrossings: copy.mu.totalLength(),
+        isotopies: move.isEmpty ? [] : [{ end: loop, kind: "source", along: move }],
+      });
     }
   }
   return options.sort(

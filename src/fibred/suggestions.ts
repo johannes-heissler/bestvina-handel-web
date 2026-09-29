@@ -26,7 +26,7 @@ import { disconnectedJunctions, type SplitPiece, splitJunctions } from "./moves/
 import { finiteOrder, type ReductionCandidate, reductionCandidates } from "./moves/reducibility";
 import { valenceOneJunctions, valenceTwoJunctions } from "./moves/valence";
 import { EdgePoint } from "./edge-point";
-import { narrated } from "./narration";
+import { narrated, quietly } from "./narration";
 import { perronFrobenius } from "./perron-frobenius";
 import { prongs } from "./singular-leaves";
 import { trainTrack } from "./train-track";
@@ -576,15 +576,39 @@ export function variants(fs: FibredSurface, move: Move): MoveOption[] {
           if (p !== undefined) removeInefficiencyStep(copy, p, choose);
         }
       });
-      return at === undefined
-        ? choices
-        : [
-            ...choices,
+      if (at === undefined) return choices;
+      // One way to remove a whole inefficiency at once for each inefficiency point behind this fold.
+      const candidate = foldCandidates(fs).find((c) =>
+        sameNames(
+          c.edgesToFold.map((e) => e.name),
+          move.strips,
+        ),
+      );
+      const places = candidate?.places.length ? candidate.places : [`${at.strip}@${at.index}`];
+      return [
+        ...choices,
+        ...places.flatMap((place) => {
+          const split = place.lastIndexOf("@");
+          const edge = fs.graph.edges.find((e) => e.name === place.slice(0, split));
+          const point = edge && new EdgePoint(edge.forward, Number(place.slice(split + 1)));
+          const p = point && inefficiencyAt(fs, point);
+          if (point === undefined || p === undefined) return [];
+          return [
             {
-              move: { kind: "remove inefficiency", at, steps: "all" },
-              label: ["Remove the whole inefficiency at once (all its folds)"],
+              move: {
+                kind: "remove inefficiency" as const,
+                at: { strip: point.edge.name, index: point.index },
+                steps: "all" as const,
+              },
+              label: [
+                `Remove the inefficiency at ${point.describe(fs)} completely: `,
+                p.order === 1 ? "one fold" : `its ${p.order} folds one after the other`,
+                ", then pull tight",
+              ] as Text,
             },
           ];
+        }),
+      ];
     }
     case "fold peripheral inefficiency":
       return foldVariants(fs, move, (copy, choose) =>
@@ -659,24 +683,53 @@ function foldVariants<
   move: M,
   run: (copy: FibredSurface, choose: (options: FoldOption[]) => FoldOption) => void,
 ): MoveOption[] {
-  // The names are read while choosing: the fold itself may rename the kept strip afterwards.
-  let options: { ref: FoldRef; sideCrossings: number }[] = [];
+  // The names are read while choosing: the fold itself may rename the kept strip afterwards. The move refers to the
+  // strips of that moment (after a Case 2 subdivision there are new ones); the labels use the names of now: the strip
+  // ends at the junction keep their places in its cyclic order.
+  let options: { ref: FoldRef; sideCrossings: number; label: Text }[] = [];
   const copy = fs.copy();
   copy.onError = () => {};
-  run(copy, (offered) => {
-    options = offered.map((o) => ({ ref: foldRef(o), sideCrossings: o.sideCrossings }));
-    return offered[0] as FoldOption;
-  });
-  return options.map(({ ref, sideCrossings }) => ({
+  quietly(() =>
+    run(copy, (offered) => {
+      const now = (x: OrientedEdge): string => {
+        if (fs.graph.edges.some((e) => e.name === x.edge.name)) return x.name;
+        const v = fs.graph.vertices.find((u) => u.name === x.source.name);
+        const y = v === undefined ? undefined : fs.graph.star(v)[copy.graph.star(x.source).indexOf(x)];
+        return y?.name ?? x.name;
+      };
+      options = offered.map((o) => ({
+        ref: foldRef(o),
+        sideCrossings: o.sideCrossings,
+        label: foldChoiceLabel(o, now),
+      }));
+      return offered[0] as FoldOption;
+    }),
+  );
+  return options.map(({ ref, sideCrossings, label }) => ({
     move: { ...move, fold: ref },
-    label: [
-      ...(ref.move ? [`Move the junction along ${ref.move}, `] : []),
-      "keep ",
-      { strip: ref.preferred },
-      `, fold along c = ${ref.c || "(empty)"}`,
-    ],
+    label,
     rating: sideCrossings,
   }));
+}
+
+/**
+ * "Keep x; the new strip crosses B A; w moves along B A b, the new junction on d along B A" (`now` gives the names in
+ * the state shown).
+ */
+function foldChoiceLabel(o: FoldOption, now: (x: OrientedEdge) => string): Text {
+  const moves = o.isotopies.flatMap((iso, k): TextPart[] => [
+    k === 0 ? "; " : ", ",
+    ...(iso.kind === "new junction"
+      ? ["the new junction on ", { strip: now(iso.end) }]
+      : [{ junction: (iso.kind === "target" ? iso.end.target : iso.end.source).name }]),
+    ` moves along ${iso.along}`,
+  ]);
+  return [
+    "Keep ",
+    { strip: now(o.preferred) },
+    o.c.isEmpty ? "; the new strip crosses no side" : `; the new strip crosses ${o.c} (its μ)`,
+    ...moves,
+  ];
 }
 
 // ─── Autopilot ───────────────────────────────────────────────────────────────────────────────
