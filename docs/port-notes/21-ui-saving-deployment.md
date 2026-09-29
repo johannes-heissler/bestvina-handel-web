@@ -179,3 +179,13 @@ exchanges the two sides; the header button shows or hides the history tree.
   the k-th step (0: before the move); the steps after the position are greyed out, the current one is highlighted.
   Not for moves that replace the spine (cutting), whose intermediate surfaces live on another spine.
 - "What happened" (the explanations of the moves made) is still there, collapsed.
+- **Steps narrated afterwards** (the fold, with the names it gives; the subdivision of the Case 2) pass their state
+  from before explicitly (`stateNow()`); otherwise the last subdivision's step already showed the fold, and the
+  fold's step showed nothing new.
+- **Animated isotopies:** a junction moved along a path in G₀ now moves one side at a time, each crossing its own
+  step with a _motion_ (the junction and the side it leaves through). The timeline is continuous (and ▶ plays it at
+  1.2 s per step); between two states `drawBetween` draws: for a motion, the junction sliding in the old layout to the
+  port of the side it crosses, and from t = ½ coming from the partner port on the other side to its place in the new
+  layout (μ changes at t = ½); for two states with the same strips and μ (e.g. a new Tutte layout), every point
+  interpolated; otherwise the old state until t = ½, then the new one. The other junctions still jump at t = ½ when
+  the Tutte layout of the new state differs.

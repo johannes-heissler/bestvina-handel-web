@@ -8,6 +8,7 @@
   import { combine, type MoveOption, type SuggestionKind, type Text, variants } from "../fibred/suggestions";
   import type { FibredSurface } from "../fibred/fibred-surface";
   import type { Preview } from "../session/session";
+  import type { Motion } from "../fibred/narration";
   import { describeMove } from "../session/describe";
   import { app } from "./state.svelte";
   import TextView from "./TextView.svelte";
@@ -102,12 +103,13 @@
   interface Moment {
     readonly text: Text;
     readonly surface: FibredSurface;
+    readonly motion?: Motion;
   }
   const moments = $derived<Moment[]>(
     preview?.surface === undefined
       ? []
       : [
-          ...preview.steps.map((s) => ({ text: s.text, surface: s.after })),
+          ...preview.steps.map((s) => ({ text: s.text, surface: s.after, ...(s.motion && { motion: s.motion }) })),
           ...preview.automatic.map((a) => ({ text: describeMove(a.move), surface: a.surface })),
         ],
   );
@@ -119,20 +121,50 @@
     playing = false;
   });
   $effect(() => {
-    // Show the state at the position in the views (not for moves that replace the surface's spine).
+    // Show the state at the position in the views: after step k at k, and between two states in between (not for
+    // moves that replace the surface's spine).
     const before = preview?.before;
-    const shown = position === undefined || !before ? undefined : position === 0 ? before : moments[position - 1]?.surface;
-    app.shown = shown && shown.spine0 === before?.spine0 ? shown : undefined;
+    if (position === undefined || !before) {
+      app.shown = undefined;
+      return;
+    }
+    const states = [before, ...moments.map((m) => m.surface)];
+    if (states.some((state) => state.spine0 !== before.spine0)) {
+      app.shown = undefined;
+      return;
+    }
+    const k = Math.min(Math.floor(position), states.length - 1);
+    const t = position - k;
+    const motion = moments[k]?.motion;
+    app.shown =
+      t < 1e-6 || k >= states.length - 1
+        ? { surface: states[k] as FibredSurface }
+        : {
+            from: states[k] as FibredSurface,
+            to: states[k + 1] as FibredSurface,
+            t,
+            ...(motion && { motion }),
+          };
     return () => (app.shown = undefined);
   });
+  // Playing: 1.2 seconds per step, smoothly.
   $effect(() => {
     if (!playing) return;
-    const timer = setInterval(() => {
-      const next = (position ?? 0) + 1;
-      position = Math.min(next, moments.length);
-      if (next >= moments.length) playing = false;
-    }, 900);
-    return () => clearInterval(timer);
+    let last = performance.now();
+    let frame = 0;
+    const tick = (now: number) => {
+      const next = (position ?? 0) + (now - last) / 1200;
+      last = now;
+      if (next >= moments.length) {
+        position = moments.length;
+        playing = false;
+        return;
+      }
+      position = next;
+      frame = requestAnimationFrame(tick);
+    };
+    frame = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(frame);
   });
   function play() {
     if (playing) playing = false;
@@ -235,7 +267,9 @@
       <div class="timeline-controls">
         <button onclick={play} title="Show the steps one after the other in the views">{playing ? "⏸" : "▶"}</button>
         <span class="hint"
-          >{position === undefined ? "Move the slider or press ▶ to see the steps." : `Step ${position} of ${moments.length}`}</span
+          >{position === undefined
+            ? "Move the slider or press ▶ to see the steps."
+            : `Step ${Math.min(moments.length, Math.floor(position) + (position % 1 > 0 ? 1 : 0))} of ${moments.length}`}</span
         >
         {#if position !== undefined}
           <button
@@ -253,7 +287,7 @@
           type="range"
           min="0"
           max={moments.length}
-          step="1"
+          step="any"
           value={position ?? 0}
           aria-label="Timeline of the steps"
           oninput={(event) => {
@@ -265,8 +299,8 @@
           {#each moments as moment, k (k)}
             <li
               class:automatic-step={k >= preview.steps.length}
-              class:pending={position !== undefined && k >= position}
-              class:now={position === k + 1}
+              class:pending={position !== undefined && position <= k}
+              class:now={position !== undefined && position > k && position <= k + 1}
             >
               <TextView text={moment.text} surface={preview.before} />
             </li>

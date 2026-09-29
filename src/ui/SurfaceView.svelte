@@ -10,7 +10,7 @@
   import type { Text } from "../fibred/suggestions";
   import { matrixInfo, type MatrixInfo } from "../session/analysis";
   import { graphColors } from "./colors";
-  import { draw } from "./drawing";
+  import { draw, drawBetween, type DrawOptions } from "./drawing";
   import TextView from "./TextView.svelte";
   import { exportImage, type ExportFormat } from "./export";
   import { app } from "./state.svelte";
@@ -39,7 +39,8 @@
   const hyperbolic = $derived(node?.model.kind === "polygon" && node.model.geometry.kind !== "flat");
   const rendered = $derived.by(() => {
     if (node === undefined) return undefined;
-    return draw(node.model, app.shown ?? node.surface, {
+    const shown = app.shown;
+    const options: DrawOptions = {
       view,
       model,
       smoothing,
@@ -53,7 +54,10 @@
       labels,
       stripWidth: toScale ? "toScale" : "uniform",
       size: 800,
-    });
+    };
+    if (shown !== undefined && "from" in shown)
+      return drawBetween(node.model, shown.from, shown.to, shown.t, shown.motion, options);
+    return draw(node.model, shown?.surface ?? node.surface, options);
   });
 
   // Pan and zoom.
@@ -79,7 +83,8 @@
   // The card for the strip under the mouse: its images under g and μ, its width and length.
   const weights = new WeakMap<FibredSurface, MatrixInfo>();
   const card = $derived.by(() => {
-    const surface = app.shown ?? node?.surface;
+    const shown = app.shown;
+    const surface = shown === undefined ? node?.surface : "from" in shown ? (shown.t < 0.5 ? shown.from : shown.to) : shown.surface;
     const name = app.hovered;
     if (!surface || name === undefined || dragging) return undefined;
     const e = surface.graph.edges.find((x) => x.name === name);

@@ -4,17 +4,27 @@
  * (to rate options) runs {@link quietly}, so that it doesn't add to the explanation.
  *
  * With `states`, {@link narrated} also keeps a copy of the surface at each step, as it was before the step (the
- * surface passed to `narrate`), for showing the move step by step.
+ * surface the move works on, see {@link about}), for showing the move step by step. A step that is narrated after
+ * it happened passes its state from before ({@link stateNow}).
  *
  * @module
  */
 import type { FibredSurface } from "./fibred-surface";
 import type { Text } from "./suggestions";
 
-/** One step of an explanation, and the surface before it (if kept). */
+/** A junction moving across a side of the model in one step (for animating the isotopy). */
+export interface Motion {
+  /** The name of the junction. */
+  readonly junction: string;
+  /** The name of the oriented edge of G₀ through whose port the junction leaves (it enters through the reverse). */
+  readonly side: string;
+}
+
+/** One step of an explanation, the surface before it (if kept), and a motion it consists of (if any). */
 export interface NarratedStep {
   readonly text: Text;
   readonly before?: FibredSurface;
+  readonly motion?: Motion;
 }
 
 let steps: NarratedStep[] | undefined;
@@ -22,11 +32,22 @@ let keepStates = false;
 /** The surface that the move being narrated changes (in place). */
 let subject: FibredSurface | undefined;
 
-/** Adds a step to the explanation being collected (if any), with the surface as it is before the step. */
-export function narrate(step: Text): void {
+/**
+ * Adds a step to the explanation being collected (if any), with the surface as it is before the step, or `before`
+ * for a step narrated after it happened.
+ */
+export function narrate(
+  step: Text,
+  options: { before?: FibredSurface | undefined; motion?: Motion } = {},
+): void {
   if (steps === undefined) return;
-  const before = keepStates && subject !== undefined ? subject.copy() : undefined;
-  steps.push(before ? { text: step, before } : { text: step });
+  const before = options.before ?? stateNow();
+  steps.push({ text: step, ...(before && { before }), ...(options.motion && { motion: options.motion }) });
+}
+
+/** A copy of the surface now, if the steps keep their states (to pass to a later {@link narrate}). */
+export function stateNow(): FibredSurface | undefined {
+  return steps !== undefined && keepStates && subject !== undefined ? subject.copy() : undefined;
 }
 
 /** Runs `action`, which changes `fs` in place, with `fs` as the surface whose states the steps keep. */

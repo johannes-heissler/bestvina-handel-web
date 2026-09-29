@@ -12,8 +12,8 @@ import { EdgePoint } from "../edge-point";
 import type { FibredSurface } from "../fibred-surface";
 import { isCyclicInterval } from "../fibred-surface";
 import { isotopeJunction } from "./isotopy";
-import { narrate, quietly } from "../narration";
-import type { TextPart } from "../suggestions";
+import { narrate, quietly, stateNow } from "../narration";
+import type { Text, TextPart } from "../suggestions";
 import { subdivide } from "./subdivide";
 
 /** Maps forward-normalized edge points from before a move to after it (see {@link subdivide}). */
@@ -136,14 +136,13 @@ export function foldInitialSegments(
   inCyclicOrder(fs, edges); // checks adjacency before anything changes
   const startNames = edges.map((e) => e.name);
   if (options.move !== undefined) {
-    narrate([
+    moveJunction(fs, v, options.move, [
       "Isotopy: move the junction ",
       { junction: v.name },
       " along γ = ",
       pathText(options.move),
       " in G₀ first (a loop is folded completely, so its μ-image has to become the μ-image of the folded segment).",
     ]);
-    isotopeJunction(fs, v, options.move);
   }
   const c = options.c ?? commonPrefix(edges.map((e) => fs.mu.image(e)));
   if (c.source !== undefined && c.source !== fs.mu.vertexImage(v))
@@ -199,39 +198,36 @@ export function foldInitialSegments(
       if (value.edge === first) segments.set(key, value.isForward ? first.forward : second.backward);
     remainders.set(e, (segments.get(e) as OrientedEdge).edge === first ? second : first);
     for (const [key, p] of splitPoints) splitPoints.set(key, transform(p));
-    if (!c.isEmpty)
-      narrate([
-        "Isotopy: move the new junction along c = ",
-        pathText(c),
-        " in G₀, so that the initial segment crosses the sides like the folded segment will (μ = c) and the rest has μ = c̄ μ(",
-        { strip: e.edge.name },
-        ").",
-      ]);
-    isotopeJunction(fs, junction, c);
+    moveJunction(fs, junction, c, [
+      "Isotopy: move the new junction along c = ",
+      pathText(c),
+      " in G₀, so that the initial segment crosses the sides like the folded segment will (μ = c) and the rest has μ = c̄ μ(",
+      { strip: e.edge.name },
+      ").",
+    ]);
   }
   for (const e of full) {
     const gamma = fs.mu.image(e).inverse.concat(c).reduced(); // move t(e) so that μ(e) becomes c
-    if (!gamma.isEmpty)
-      narrate([
-        "Isotopy: move the junction ",
-        { junction: e.target.name },
-        " at the end of ",
-        { strip: e.name },
-        " along γ = μ(",
-        { strip: e.name },
-        ")⁻¹ c = ",
-        pathText(gamma),
-        " in G₀, so that μ(",
-        { strip: e.name },
-        ") = c = ",
-        pathText(c),
-        " (this changes μ of the other strips there as well).",
-      ]);
-    isotopeJunction(fs, e.target, gamma);
+    moveJunction(fs, e.target, gamma, [
+      "Isotopy: move the junction ",
+      { junction: e.target.name },
+      " at the end of ",
+      { strip: e.name },
+      " along γ = μ(",
+      { strip: e.name },
+      ")⁻¹ c = ",
+      pathText(gamma),
+      " in G₀, so that μ(",
+      { strip: e.name },
+      ") = c = ",
+      pathText(c),
+      " (this changes μ of the other strips there as well).",
+    ]);
   }
 
   // A strip that is folded completely is the folded segment itself, and keeps its name and colour.
   const kept = segments.get(full[0] ?? options.kept ?? (edges[0] as OrientedEdge)) as OrientedEdge;
+  const beforeFold = stateNow(); // (the fold is narrated afterwards, with the names it gives)
   transforms.push(foldEdges(fs, [...segments.values()], kept));
   // Names (as in C#): the remaining second segments are called like the strips they come from, with their colours;
   // a folded segment made only of first segments gets a new letter and the least used colour.
@@ -247,20 +243,41 @@ export function foldInitialSegments(
       fs.graph.edges.filter((x) => x !== kept.edge).map((x) => x.color),
     );
   }
-  narrate([
-    "Fold the initial segments of ",
-    ...nameList(startNames),
-    " at ",
-    { junction: v.name },
-    " (image under g: ",
-    ...letterText(fs.g.image(kept).letters),
-    "; μ = ",
-    pathText(c),
-    ") into one strip ",
-    { strip: kept.edge.name },
-    full.length === 0 ? " (a new name and colour)." : ` (the strip folded completely keeps its name).`,
-  ]);
+  narrate(
+    [
+      "Fold the initial segments of ",
+      ...nameList(startNames),
+      " at ",
+      { junction: v.name },
+      " (image under g: ",
+      ...letterText(fs.g.image(kept).letters),
+      "; μ = ",
+      pathText(c),
+      ") into one strip ",
+      { strip: kept.edge.name },
+      full.length === 0 ? " (a new name and colour)." : ` (the strip folded completely keeps its name).`,
+    ],
+    { before: beforeFold },
+  );
   return { folded: kept, transform: (point) => transforms.reduce((p, t) => t(p), point) };
+}
+
+/**
+ * Moves the junction v along γ one side at a time (an isotopy), narrating each crossing of a side: the first with
+ * `what`, the others shortly. Each step records the side it crosses, for animating the isotopy.
+ */
+function moveJunction(fs: FibredSurface, v: Vertex, gamma: EdgePath, what: Text): void {
+  gamma.letters.forEach((side, k) => {
+    narrate(
+      k === 0
+        ? [...what, ` It crosses the side ${side.name} first.`]
+        : [`… then it crosses the side ${side.name}.`],
+      {
+        motion: { junction: v.name, side: side.name },
+      },
+    );
+    isotopeJunction(fs, v, EdgePath.of(side));
+  });
 }
 
 /** Names of strips as structured text: "a, b and c". */

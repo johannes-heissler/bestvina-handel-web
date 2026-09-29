@@ -6,6 +6,7 @@
  */
 import type { FibredSurface } from "../fibred/fibred-surface";
 import type { Move } from "../fibred/move";
+import type { Motion } from "../fibred/narration";
 import type { SuggestionKind } from "../fibred/suggestions";
 import { type HistoryNode, type Preview, Session, type SessionFile, type Start } from "../session/session";
 import { encodeSession } from "../session/share";
@@ -58,7 +59,7 @@ export class AppState {
    * A surface to show in the views instead of the current one (a step of a move on the timeline of "What will
    * happen"); undefined shows the current state.
    */
-  shown = $state.raw<FibredSurface | undefined>(undefined);
+  shown = $state.raw<Shown | undefined>(undefined);
 
   /** Applies a move; with `thenAutomatic`, the automatic kinds follow (see {@link automatic}). */
   apply(move: Move, options: { thenAutomatic?: boolean } = {}): void {
@@ -113,3 +114,13 @@ export class AppState {
 }
 
 export const app = new AppState();
+
+/** What the views show instead of the current state: a surface, or a moment between two (see `drawBetween`). */
+export type Shown =
+  | { readonly surface: FibredSurface }
+  | {
+      readonly from: FibredSurface;
+      readonly to: FibredSurface;
+      readonly t: number;
+      readonly motion?: Motion;
+    };

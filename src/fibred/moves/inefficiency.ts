@@ -12,7 +12,7 @@ import { findGates } from "../gates";
 import { type FoldOption, foldInitialSegments, foldOptions, type PointTransform } from "./fold";
 import { pullTight, pullTightExtremalJunction } from "./pull-tight";
 import { subdivide } from "./subdivide";
-import { narrate } from "../narration";
+import { narrate, stateNow } from "../narration";
 
 /**
  * An inefficiency: a point inside an image g(e) where g turns illegally, i.e. the strips a = Dg-before and
@@ -213,14 +213,20 @@ function splitFirstStrip(
   for (let j = 0; j < toSplit.length; j++) {
     const e = toSplit[j] as OrientedEdge;
     const length = fs.g.image(e).length; // the images of the later strips got longer through the earlier splits
+    const before = stateNow(); // (narrated afterwards, with the names it gives)
     const { first, second, transform } = subdivide(fs, e.edge, e.isForward ? 1 : length - 1);
-    narrate([
-      "Subdivide it after the first letter of its image, into ",
-      { strip: first.name },
-      " and ",
-      { strip: second.name },
-      ".",
-    ]);
+    narrate(
+      [
+        "Subdivide it after the first letter of its image, into ",
+        { strip: first.name },
+        " and ",
+        { strip: second.name },
+        ".",
+      ],
+      {
+        before,
+      },
+    );
     transforms.push(transform);
     // A strip end at the source of the subdivided strip now belongs to the first part, one at its target to
     // the second part.

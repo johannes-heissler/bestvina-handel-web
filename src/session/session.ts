@@ -19,7 +19,7 @@ import {
   type Text,
 } from "../fibred/suggestions";
 import { perronFrobenius } from "../fibred/perron-frobenius";
-import { narrated } from "../fibred/narration";
+import { type Motion, narrated } from "../fibred/narration";
 import { type FibredSurfaceOptions, initialFibredSurface, type SurfaceModel } from "../examples/models";
 import { buildPreset, PRESETS, randomGenus2 } from "../examples/presets";
 
@@ -56,6 +56,8 @@ export interface HistoryNode {
 export interface PreviewStep {
   readonly text: Text;
   readonly after: FibredSurface;
+  /** A junction crossing a side in this step (an isotopy), for animating it. */
+  readonly motion?: Motion;
 }
 
 /**
@@ -181,6 +183,7 @@ export class Session {
       const steps = told.map((step, k) => ({
         text: step.text,
         after: (told[k + 1]?.before ?? result) as FibredSurface,
+        ...(step.motion && { motion: step.motion }),
       }));
       const auto: { move: Move; steps: readonly Text[]; surface: FibredSurface }[] = [];
       if (automatic.size > 0) {
