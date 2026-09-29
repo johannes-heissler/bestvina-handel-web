@@ -1,6 +1,6 @@
 <!--
-  The history as a tree from the start (top) downwards: λ at each state, the move between the levels. Click a state
-  to go there.
+  The history: back to the start or one step, forward to the moves made from here, what the last moves did, and the
+  tree from the start (top) downwards (λ at each state, the move between the levels; click a state to go there).
 -->
 <script lang="ts">
   import { perronFrobenius } from "../fibred/perron-frobenius";
@@ -8,6 +8,7 @@
   import type { HistoryNode } from "../session/session";
   import { stripColors } from "./colors";
   import { app } from "./state.svelte";
+  import TextView from "./TextView.svelte";
 
   const STEP_X = 190;
   const STEP_Y = 64;
@@ -74,15 +75,71 @@
     };
   });
 
+  const node = $derived.by(() => {
+    void app.version;
+    return app.session?.current;
+  });
+
+  /**
+   * The last moves up to the current state, back to the last one that explains what it did (usually the move chosen,
+   * followed by the automatic steps after it), at most five.
+   */
+  const recent = $derived.by(() => {
+    const list: HistoryNode[] = [];
+    for (let n = node; n?.parent !== undefined && list.length < 5; n = n.parent) {
+      list.unshift(n);
+      if (n.steps?.length) break;
+    }
+    return list.some((n) => n.steps?.length) ? list : [];
+  });
+
   let container = $state<HTMLDivElement | undefined>(undefined);
   $effect(() => {
     void tree;
-    container?.querySelector(".current")?.scrollIntoView({ block: "nearest", inline: "nearest" });
+    container?.querySelector(".current")?.scrollIntoView?.({ block: "nearest", inline: "nearest" }); // (not in jsdom)
   });
 </script>
 
 <section class="panel history">
   <h2>History</h2>
+  {#if node}
+    <div class="history-controls">
+    <div class="buttons">
+      <button disabled={!node.parent} onclick={() => app.session && app.select(app.session.root)}>⤒ Start</button>
+      <button disabled={!node.parent} onclick={() => node.parent && app.select(node.parent)}>
+        ↑ Back{#if node.move}: <TextView text={describeMove(node.move)} surface={node.parent?.surface} />{/if}
+      </button>
+    </div>
+    {#if node.children.length > 0}
+      <ul class="options">
+        {#each node.children as child (child.id)}
+          <li>
+            <button class="link" onclick={() => app.select(child)}
+              >↓ {#if child.move}<TextView text={describeMove(child.move)} surface={node.surface} />{/if}</button
+            >
+          </li>
+        {/each}
+      </ul>
+    {/if}
+    {#if recent.length > 0}
+      <details class="what-happened">
+        <summary>What happened</summary>
+        {#each recent as step (step.id)}
+          <div class="happened">
+            <div class="happened-move">
+              {#if step.move}<TextView text={describeMove(step.move)} surface={step.parent?.surface} />{/if}
+            </div>
+            {#if step.steps?.length}
+              <ol>
+                {#each step.steps as text, i (i)}<li><TextView text={text} surface={step.surface} /></li>{/each}
+              </ol>
+            {/if}
+          </div>
+        {/each}
+      </details>
+    {/if}
+    </div>
+  {/if}
   {#if tree}
     <div class="scroll" bind:this={container}>
       <svg width={tree.width} height={tree.height} role="tree" aria-label="The history of moves">

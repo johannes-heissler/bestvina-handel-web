@@ -63,7 +63,6 @@
     <label class="button">Open <input type="file" accept="application/json,.json" onchange={open} hidden /></label>
     <button onclick={copyLink} disabled={!app.session}>Copy link</button>
     <button onclick={() => (secondView = !secondView)}>{secondView ? "One view" : "Two views"}</button>
-    <button onclick={() => (app.showHistory = !app.showHistory)}>{app.showHistory ? "Hide" : "Show"} the history tree</button>
     <button onclick={() => (app.sidebarLeft = !app.sidebarLeft)} title="Swap the panel of the algorithm and the panel of the analysis"
       >Swap panels</button
     >
@@ -112,13 +111,12 @@
 
 {#snippet algorithm()}
   <PaneGroup direction="vertical" autoSaveId="algorithm">
-    <Pane defaultSize={app.showHistory ? 65 : 100} minSize={20}>
+    <Pane defaultSize={65} minSize={20}>
       <div class="sidebar"><SuggestionPanel /></div>
     </Pane>
-    {#if app.showHistory}
-      <PaneResizer class="resizer" />
-      <Pane defaultSize={35} minSize={10}><HistoryView /></Pane>
-    {/if}
+    <PaneResizer class="resizer" />
+    <!-- (Always there; drag it small to see more of the step.) -->
+    <Pane defaultSize={35} minSize={4}><HistoryView /></Pane>
   </PaneGroup>
 {/snippet}
 

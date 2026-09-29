@@ -4,6 +4,7 @@ import { flushSync } from "svelte";
 import { describe, expect, it } from "vitest";
 import InfoPanel from "./InfoPanel.svelte";
 import { app } from "./state.svelte";
+import HistoryView from "./HistoryView.svelte";
 import SuggestionPanel from "./SuggestionPanel.svelte";
 
 describe("components", () => {
@@ -16,6 +17,7 @@ describe("components", () => {
   it("applies the selected option of the next step and records it in the history", async () => {
     app.start({ kind: "preset", preset: "Point push" });
     render(SuggestionPanel);
+    render(HistoryView);
     expect(screen.getAllByText(/g is not tight|invariant|inefficien/).length).toBeGreaterThan(0);
     await fireEvent.click(screen.getByRole("button", { name: "Apply" }));
     flushSync();

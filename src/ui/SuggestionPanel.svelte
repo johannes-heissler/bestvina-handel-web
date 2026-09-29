@@ -2,7 +2,7 @@
   The next step of the algorithm with its options (the C# suggestion menu) and, under the focused option, its further
   choices. "What will happen" shows what the selected move does, step by step, computed before it is applied (and
   used when it is), with a timeline to see each step in the views. After a step, the kinds ticked under "Automatic
-  steps" follow by themselves (e.g. pulling tight). Below: back and forth in the history.
+  steps" follow by themselves (e.g. pulling tight). Going back and forth is in the history panel (`HistoryView`).
 -->
 <script lang="ts">
   import { combine, type MoveOption, type SuggestionKind, type Text, variants } from "../fibred/suggestions";
@@ -177,19 +177,6 @@
     else if (selectedMove) app.apply(selectedMove, { thenAutomatic: true });
   }
 
-  /**
-   * The last moves up to the current state, back to the last one that explains what it did (usually the move chosen,
-   * followed by the automatic steps after it), at most five.
-   */
-  const recent = $derived.by(() => {
-    const list: NonNullable<typeof node>[] = [];
-    for (let n = node; n?.parent !== undefined && list.length < 5; n = n.parent) {
-      list.unshift(n);
-      if (n.steps?.length) break;
-    }
-    return list.some((n) => n.steps?.length) ? list : [];
-  });
-
   function toggleAutomatic(kind: SuggestionKind) {
     app.automatic = app.automatic.includes(kind) ? app.automatic.filter((k) => k !== kind) : [...app.automatic, kind];
   }
@@ -267,6 +254,16 @@
     </div>
   {/if}
 
+  <details class="automatic">
+    <summary>Automatic steps ({app.automatic.length})</summary>
+    <p class="hint">After each step you apply, steps of these kinds are done automatically; each is kept in the history.</p>
+    <div class="checklist">
+      {#each KINDS as { kind, label } (kind)}
+        <label><input type="checkbox" checked={app.automatic.includes(kind)} onchange={() => toggleAutomatic(kind)} /> {label}</label>
+      {/each}
+    </div>
+  </details>
+
   {#if suggestion?.options.length}
     <div class="will-happen-block">
     <h3>What will happen</h3>
@@ -330,55 +327,5 @@
       </p>
     {/if}
     </div>
-  {/if}
-
-  <details class="automatic">
-    <summary>Automatic steps ({app.automatic.length})</summary>
-    <p class="hint">After each step you apply, steps of these kinds are done automatically; each is kept in the history.</p>
-    <div class="checklist">
-      {#each KINDS as { kind, label } (kind)}
-        <label><input type="checkbox" checked={app.automatic.includes(kind)} onchange={() => toggleAutomatic(kind)} /> {label}</label>
-      {/each}
-    </div>
-  </details>
-
-  <h3>History</h3>
-  {#if node}
-    <div class="buttons">
-      <button disabled={!node.parent} onclick={() => app.session && app.select(app.session.root)}>⤒ Start</button>
-      <button disabled={!node.parent} onclick={() => node.parent && app.select(node.parent)}>
-        ↑ Back{#if node.move}: <TextView text={describeMove(node.move)} surface={node.parent?.surface} />{/if}
-      </button>
-      <button onclick={() => (app.showHistory = !app.showHistory)}>{app.showHistory ? "Hide" : "Show"} the tree</button
-      >
-    </div>
-    {#if recent.length > 0}
-      <details class="what-happened">
-        <summary>What happened</summary>
-        {#each recent as step (step.id)}
-          <div class="happened">
-            <div class="happened-move">
-              {#if step.move}<TextView text={describeMove(step.move)} surface={step.parent?.surface} />{/if}
-            </div>
-            {#if step.steps?.length}
-              <ol>
-                {#each step.steps as text, i (i)}<li><TextView text={text} surface={step.surface} /></li>{/each}
-              </ol>
-            {/if}
-          </div>
-        {/each}
-      </details>
-    {/if}
-    {#if node.children.length > 0}
-      <ul class="options">
-        {#each node.children as child (child.id)}
-          <li>
-            <button class="link" onclick={() => app.select(child)}
-              >↓ {#if child.move}<TextView text={describeMove(child.move)} surface={node.surface} />{/if}</button
-            >
-          </li>
-        {/each}
-      </ul>
-    {/if}
   {/if}
 </section>

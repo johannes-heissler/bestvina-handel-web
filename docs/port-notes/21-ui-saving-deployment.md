@@ -215,6 +215,10 @@ exchanges the two sides; the header button shows or hides the history tree.
   dragging it (or its arrow keys) scrolled the side panel, as the browser keeps a focused slider in view. Now it is a
   short horizontal slider in a row with ▶, the step number and "Now" (back to the current state), and that row sticks
   to the top of the panel while the steps scroll. Clicking a step shows the state after it.
+- **History panel:** ⤒ Start, ↑ Back, the moves made from here (↓) and "What happened" moved from the step panel to
+  the history panel, above the tree (they scroll within at most half of it). The history panel can't be hidden any
+  more; it can be dragged small instead. "Automatic steps" comes before "What will happen", as it decides what the
+  preview contains.
 - **Explanations:** collapsing a tree and removing junctions of valence 1 and 2 narrate their steps (the junction
   sliding along the strip across the sides, animated, then the contraction or merge with the new image); pulling tight
   narrates each cancellation; absorbing into the periphery says how the circles are rebuilt. See port note 10.

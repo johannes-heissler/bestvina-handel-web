@@ -323,6 +323,17 @@ pre {
   flex-direction: column;
   padding-bottom: 0;
 }
+/* The controls above the tree keep their height (what happened scrolls within a part); the tree gets the rest. */
+.history {
+  overflow: hidden;
+}
+.history > :not(.scroll) {
+  flex: none;
+}
+.history .history-controls {
+  max-height: 50%;
+  overflow: auto;
+}
 .history .scroll {
   flex: 1;
   min-height: 0;

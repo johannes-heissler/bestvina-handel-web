@@ -21,7 +21,6 @@ export class AppState {
   hovered = $state<string | undefined>(undefined);
   error = $state<string | undefined>(undefined);
   message = $state<string | undefined>(undefined);
-  showHistory = $state(true);
   showStart = $state(false);
   busy = $state(false);
   /**
