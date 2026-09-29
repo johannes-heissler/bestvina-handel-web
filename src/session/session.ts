@@ -289,6 +289,7 @@ export class Session {
     const session = Session.create(file.start);
     // Older sessions replay with the names they were saved with.
     if (file.version < 2) session.root.surface.legacyNames = true;
+    if (file.version < 3) session.root.surface.legacyPeripheralNames = true;
     let skipped = 0;
     const replay = (node: HistoryNode, saved: SavedNode): HistoryNode[] =>
       saved.children.map((child) => {
@@ -333,8 +334,12 @@ export class Session {
 }
 
 export const FILE_FORMAT = "bestvina-handel-session";
-/** 2: subdivisions during folds keep the name of the rest (see `FibredSurface.legacyNames`). */
-export const FILE_VERSION = 2;
+/**
+ * 2: subdivisions during folds keep the name of the rest (see `FibredSurface.legacyNames`).
+ * 3: new peripheral strips get Greek names, and unchanged peripheral circles keep theirs
+ * (`FibredSurface.legacyPeripheralNames`).
+ */
+export const FILE_VERSION = 3;
 
 export interface SavedNode {
   readonly move?: Move;

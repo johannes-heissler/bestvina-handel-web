@@ -89,3 +89,18 @@ With `ignoreReducible`, that example makes "remove inefficiency" cycle with peri
 the map. The inefficiency lies in g(s) and not in the stratum carrying λ, so folding doesn't lower λ. This is a known
 limit of the absolute Bestvina–Handel algorithm on reducible maps. `runAlgorithm`'s step limit stops it. Reducing (16b)
 is the proper way out.
+
+## Update: names and the explanation
+
+- **Names:** new peripheral strips get Greek names (`PERIPHERAL_EDGE_NAMES`), first those whose capitals (their
+  inverses) don't look like Latin capitals: γ δ θ ξ π φ ψ ω, then σ and λ (which also denote the cyclic order and the
+  growth), then the other Greek letters, never μ (the marking) or υ (Υ looks like Y), then with subscripts.
+- **Unchanged circles keep their names:** a circle whose new circle has one junction per old junction (as many gates as
+  junctions, one at each) keeps the names and colours of its strips and junctions, and the orientations of its strips.
+- **Session format 3:** saved sessions replay moves by strip names, so files of format < 3 are replayed with the old
+  naming (`FibredSurface.legacyPeripheralNames`: the next ordinary names, also for unchanged circles).
+- **Explanation:** for each circle, the strips leaving it in their cyclic order, their Dg in G/P (the first strip of
+  the image outside P), the peripheral gates, and where the cyclic order is cut open: between two gates, or, with a
+  single gate, before the strip s maximizing ℓ(s), the signed length of the initial piece of g(s) in P. When the
+  resulting linear order differs from the order at the old junction (as in the last absorption of BH 6.2: c, A instead
+  of A, c), the explanation says so.

@@ -71,4 +71,35 @@ describe("absorbIntoPeriphery", () => {
     const outside = fs.g.image(a.forward).letters.filter((x) => !fs.peripheral.has(x.edge));
     expect(outside.map(String)).toEqual(["a", "b"]);
   });
+
+  describe("names", () => {
+    it("keeps the names, colours and orientations of a circle that keeps its junctions", () => {
+      const fs = stem(twisted);
+      const [before] = fs.peripheral;
+      const { name, color } = before!;
+      const junction = before!.source.name;
+      absorbIntoPeriphery(fs);
+      const [after] = fs.peripheral;
+      expect([after!.name, after!.color, after!.source.name]).toEqual([name, color, junction]);
+
+      const two = FibredSurface.fromText(
+        [
+          ["a", "b", "A", "B", "s", "p1", "t"],
+          ["T", "p2", "S"],
+          ["P2", "P1"],
+        ],
+        "a -> a b, b -> b a b, s -> a b A B s p1 p2, t -> P1 P2 t b a B A, p1 -> p1, p2 -> p2",
+        ["p1", "p2"],
+      );
+      absorbIntoPeriphery(two);
+      expect([...two.peripheral].map((e) => e.name).sort()).toEqual(["p1", "p2"]);
+      expect(two.checkIntegrity()).toEqual([]);
+    });
+
+    it("gives a changed circle Greek names whose capitals don't look Latin", () => {
+      const fs = stem("a -> a b, b -> b a b, s -> s p, p -> p"); // one junction on the circle becomes three
+      absorbIntoPeriphery(fs);
+      expect([...fs.peripheral].map((e) => e.name).sort()).toEqual(["γ", "δ", "θ"]);
+    });
+  });
 });

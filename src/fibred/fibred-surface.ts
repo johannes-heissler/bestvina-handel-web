@@ -20,6 +20,7 @@ import {
   EDGE_COLORS,
   EDGE_NAMES,
   firstUnusedName,
+  PERIPHERAL_EDGE_NAMES,
   leastUsedColor,
   VERTEX_COLORS,
   VERTEX_NAMES,
@@ -62,6 +63,11 @@ export class FibredSurface {
    * sessions keep the name of the rest of a subdivided strip at once and call the initial segment "name₁".
    */
   legacyNames = false;
+  /**
+   * The names absorbing into the periphery gives, as before session format 3: the new peripheral strips get the next
+   * ordinary names, and unchanged circles get new names too. Set when replaying older saved sessions.
+   */
+  legacyPeripheralNames = false;
   /**
    * The reduction curves of the reductions so far, as cyclically reduced closed paths in G₀. After a reduction, G is a
    * spine of a subsurface of the original surface (μ still describes its embedding), and μ maps each boundary word of
@@ -127,6 +133,7 @@ export class FibredSurface {
     result.isTrainTrack = this.isTrainTrack; // the C# Copy() forgot this flag
     result.isClosed = this.isClosed;
     result.legacyNames = this.legacyNames;
+    result.legacyPeripheralNames = this.legacyPeripheralNames;
     result.reductionCurves.push(...this.reductionCurves);
     result.onError = this.onError;
     return { copy: result, correspondence: graphCopy };
@@ -184,6 +191,12 @@ export class FibredSurface {
 
   nextEdgeName(): string {
     return firstUnusedName(EDGE_NAMES, new Set(this.graph.edges.map((e) => e.name.toLowerCase())));
+  }
+
+  /** The next free name for a peripheral strip (a Greek letter, see {@link PERIPHERAL_EDGE_NAMES}). */
+  nextPeripheralEdgeName(): string {
+    const used = new Set(this.graph.edges.map((e) => e.name.toLowerCase()));
+    return firstUnusedName(this.legacyPeripheralNames ? EDGE_NAMES : PERIPHERAL_EDGE_NAMES, used);
   }
 
   nextVertexName(): string {

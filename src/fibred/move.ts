@@ -438,6 +438,7 @@ export function removeAllValenceTwoJunctions(fs: FibredSurface): void {
 function keepFlags(from: FibredSurface, to: FibredSurface): FibredSurface {
   to.isClosed = from.isClosed;
   to.legacyNames = from.legacyNames;
+  to.legacyPeripheralNames = from.legacyPeripheralNames;
   to.onError = from.onError;
   return to;
 }

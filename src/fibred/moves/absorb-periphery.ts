@@ -17,6 +17,7 @@ import { mod } from "../../util/number";
 import type { FibredSurface } from "../fibred-surface";
 import { collapseSubforest } from "./collapse-forest";
 import { narrate } from "../narration";
+import type { TextPart } from "../suggestions";
 import { maximalInvariantSubgraphRetractingTo } from "./reducibility";
 
 const TOLERANCE = 1e-9;
@@ -131,21 +132,58 @@ export function absorbIntoPeriphery(fs: FibredSurface): void {
   const gateOf = new Map<OrientedEdge, { placed: Placed; index: number }>();
   for (const pl of placed)
     pl.gates.forEach((gate, index) => gate.forEach((s) => gateOf.set(s, { placed: pl, index })));
+  for (const pl of placed)
+    explainCircle(pl, dgQuotient, (s) =>
+      signedLength(pl.circle, EdgePath.from(firstOutsideP(s).theta).reduced().letters),
+    );
   narrate([
-    "Rebuild the periphery: each peripheral circle is replaced by a new circle with one junction per gate of the strips leaving it (",
-    placed.length === 1
-      ? `${placed[0]?.gates.length} ${placed[0]?.gates.length === 1 ? "junction" : "junctions"}`
-      : `${placed
-          .map((pl) => pl.gates.length)
-          .join(", ")
-          .replace(/, (\d+)$/, " and $1")} junctions`,
-    "), and the leaving strips move along the old circle to the junction of their gate. g maps the new circles by an automorphism, and every piece of an image inside a circle becomes the path along the new circle between the gates at its ends.",
+    "g maps the new circles by an automorphism following the gates (the gate junction of s goes to the gate junction of Dg(s)), and every piece of an image inside a circle becomes the path along the new circle between the gate junctions at its ends.",
   ]);
+  // A circle that keeps one junction per old junction keeps its names and colours (and the orientations of its strips);
+  // the others get new junctions and Greek names.
+  const unchanged = (pl: Placed) => {
+    const n = pl.circle.vertices.length;
+    return (
+      !fs.legacyPeripheralNames &&
+      pl.gates.length === n &&
+      new Set(pl.gatePosition.map((p) => mod(Math.floor(p), n))).size === n
+    );
+  };
+  const oldVertex = (pl: Placed, index: number) =>
+    pl.circle.vertices[
+      mod(Math.floor(pl.gatePosition[index] as number), pl.circle.vertices.length)
+    ] as Vertex;
+  const oldEdge = (pl: Placed, index: number) =>
+    pl.circle.edges[
+      mod(Math.floor(pl.gatePosition[index] as number), pl.circle.edges.length)
+    ] as OrientedEdge;
   const junctions = new Map<Placed, Vertex[]>(placed.map((pl) => [pl, pl.gates.map(() => fs.addJunction())]));
   const newEdges = new Map<Placed, OrientedEdge[]>(
     placed.map((pl) => {
       const w = junctions.get(pl) as Vertex[];
-      return [pl, w.map((v, i) => fs.addStrip(v, w[(i + 1) % w.length] as Vertex).forward)];
+      const keep = unchanged(pl);
+      return [
+        pl,
+        w.map((v, i) => {
+          const next = w[(i + 1) % w.length] as Vertex;
+          // (Named at the end, when the old strips are gone.)
+          if (keep && !oldEdge(pl, i).isForward) return fs.addStrip(next, v).backward;
+          return fs.addStrip(v, next, keep ? {} : { name: fs.nextPeripheralEdgeName() }).forward;
+        }),
+      ];
+    }),
+  );
+  const keptNames = placed.filter(unchanged).flatMap((pl) =>
+    pl.gates.map((_, i) => {
+      const [edge, vertex] = [oldEdge(pl, i).edge, oldVertex(pl, i)];
+      return {
+        edge: ((newEdges.get(pl) as OrientedEdge[])[i] as OrientedEdge).edge,
+        vertex: (junctions.get(pl) as Vertex[])[i] as Vertex,
+        old: {
+          edge: { name: edge.name, color: edge.color },
+          vertex: { name: vertex.name, color: vertex.color },
+        },
+      };
     }),
   );
   const isNewEdge = new Set([...newEdges.values()].flat().map((e) => e.edge));
@@ -275,6 +313,78 @@ export function absorbIntoPeriphery(fs: FibredSurface): void {
   for (const circle of circles)
     for (const v of circle.vertices) if (fs.graph.valence(v) === 0) fs.removeJunction(v);
   for (const e of isNewEdge) fs.peripheral.add(e);
+  for (const { edge, vertex, old } of keptNames) {
+    edge.name = old.edge.name;
+    edge.color = old.edge.color;
+    vertex.name = old.vertex.name;
+    vertex.color = old.vertex.color;
+  }
+}
+
+/**
+ * Explains how the strips leaving a circle are grouped into peripheral gates, and where their cyclic order is cut open
+ * into the linear order that the new circle's junctions follow.
+ */
+function explainCircle(
+  pl: Placed,
+  dgQuotient: ReadonlyMap<OrientedEdge, OrientedEdge>,
+  signedInitialLength: (s: OrientedEdge) => number,
+): void {
+  const strips = (xs: readonly OrientedEdge[]): TextPart[] =>
+    xs.flatMap((x, i): TextPart[] => [...(i === 0 ? [] : [", "]), { strip: x.name }]);
+  const cyclic = pl.circle.outside.flat();
+  const linear = pl.gates.flat();
+  const circle = pl.circle.edges;
+  narrate([
+    "The peripheral circle ",
+    ...circle.flatMap((x, i): TextPart[] => [...(i === 0 ? [] : [" "]), { strip: x.name }]),
+    " (counterclockwise around its puncture): the strips leaving it are, in the cyclic order around it, ",
+    ...strips(cyclic),
+    ". Their directions in G/P (the first strip of the image outside P, skipping its initial piece in P): ",
+    ...cyclic.flatMap((s, i): TextPart[] => [
+      ...(i === 0 ? [] : ["; "]),
+      "Dg(",
+      { strip: s.name },
+      ") = ",
+      { strip: (dgQuotient.get(s) as OrientedEdge).name },
+    ]),
+    ". The peripheral gates are the classes of strips whose Dg-iterates in G/P agree eventually: ",
+    ...pl.gates.flatMap((gate, i): TextPart[] => [...(i === 0 ? [] : [", "]), "{", ...strips(gate), "}"]),
+    ".",
+  ]);
+  const lengths = cyclic.map((s) => signedInitialLength(s));
+  if (linear.length === 1) {
+    narrate([
+      "Only one strip leaves it, so the new circle has one junction, where that strip leaves the old circle.",
+    ]);
+    return;
+  }
+  narrate(
+    pl.gates.length > 1
+      ? [
+          "To lay the gates out along a new circle, the cyclic order is cut open between two gates, so each gate is an interval of the linear order ",
+          ...strips(linear),
+          ". The new circle gets one junction per gate, where the gate's first strip leaves the old circle, and every strip moves along the old circle to the junction of its gate.",
+        ]
+      : [
+          "There is only one gate, so the cut is not between gates. It goes before the strip whose image starts with the longest counterclockwise path in P, measured by ℓ(s), the signed length of the initial piece of g(s) in P (counterclockwise +1 per strip, clockwise −1): ",
+          ...cyclic.flatMap((s, i): TextPart[] => [
+            ...(i === 0 ? [] : ["; "]),
+            "ℓ(",
+            { strip: s.name },
+            `) = ${lengths[i]}`,
+          ]),
+          ". Then the images of the strips start at the new junction without running around the circle (the thesis's remark on this case). The linear order is ",
+          ...strips(linear),
+          ...(pl.circle.vertices.length === 1 && linear[0] !== cyclic[0]
+            ? [
+                ", not the order ",
+                ...strips(cyclic),
+                " at the old junction (from the circle strip leaving it clockwise to the one leaving it counterclockwise): the strips before the cut move once around the circle to the end.",
+              ]
+            : ["."]),
+        ],
+  );
 }
 
 /**
