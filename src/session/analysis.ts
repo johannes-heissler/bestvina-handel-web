@@ -161,3 +161,27 @@ export function peripheryInfo(fs: FibredSurface): { pretrivial: Edge[]; layers: 
   }
   return { pretrivial: fs.graph.edges.filter((e) => pretrivial.has(e)), layers };
 }
+
+/** The topology of the surface of the graph G (its thickening): the current piece after reductions. */
+export interface PieceTopology {
+  readonly genus: number;
+  /** The boundary components of G that are punctures of the surface. */
+  readonly punctures: number;
+  /** The boundary components where a reduction cut the surface (μ maps them to reduction curves). */
+  readonly cuts: number;
+}
+
+/**
+ * The genus and boundary of the thickened graph G: χ = V − E = 2 − 2g − b with b the number of boundary words, so
+ * g = (2 − χ − b)/2. A boundary word whose image under μ reduces to a reduction curve is a cut, the others punctures.
+ */
+export function pieceTopology(fs: FibredSurface): PieceTopology {
+  const words = fs.graph.boundaryWords();
+  const chi = fs.graph.vertexCount - fs.graph.edgeCount;
+  const curves = fs.reductionCurves.flatMap((c) => [c, c.inverse]);
+  const cuts = words.filter((word) => {
+    const image = fs.mu.imageOfPath(word).cyclicallyReduced();
+    return curves.some((c) => c.cyclicallyReduced().isRotationOf(image));
+  }).length;
+  return { genus: (2 - chi - words.length) / 2, punctures: words.length - cuts, cuts };
+}

@@ -2,6 +2,7 @@
 <script lang="ts">
   import { topology } from "../examples/models";
   import { perronFrobenius } from "../fibred/perron-frobenius";
+  import { pieceTopology } from "../session/analysis";
   import { app } from "./state.svelte";
 
   const info = $derived.by(() => {
@@ -28,6 +29,7 @@
       peripheral: [...surface.peripheral].map((e) => e.name),
       curves: surface.reductionCurves.map(String),
       closed: surface.isClosed,
+      piece: pieceTopology(surface),
     };
   });
 </script>
@@ -47,6 +49,12 @@
       <dd>{info.growth === undefined ? "—" : info.growth.toFixed(6)}</dd>
       <dt>Surface</dt>
       <dd>genus {info.genus}, {info.closed ? "closed" : `${info.punctures} punctures`}</dd>
+      <dt title="The thickening of the graph G: χ = V − E = 2 − 2g − b, with b its boundary words. After a reduction, the piece the algorithm continues on.">Graph surface</dt>
+      <dd>
+        genus {info.piece.genus}, {info.piece.punctures}
+        {info.piece.punctures === 1 ? "puncture" : "punctures"}{#if info.piece.cuts > 0}, {info.piece.cuts}
+          {info.piece.cuts === 1 ? "cut" : "cuts"} (boundary along a reduction curve){/if}
+      </dd>
       <dt>Graph</dt>
       <dd>{info.strips} strips, {info.junctions} junctions{info.peripheral.length ? `, peripheral: ${info.peripheral.join(", ")}` : ""}</dd>
       {#if info.curves.length}

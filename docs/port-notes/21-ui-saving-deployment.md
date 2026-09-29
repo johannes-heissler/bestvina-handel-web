@@ -222,3 +222,7 @@ exchanges the two sides; the header button shows or hides the history tree.
 - **Explanations:** collapsing a tree and removing junctions of valence 1 and 2 narrate their steps (the junction
   sliding along the strip across the sides, animated, then the contraction or merge with the new image); pulling tight
   narrates each cancellation; absorbing into the periphery says how the circles are rebuilt. See port note 10.
+- **The surface of the graph** (State panel, "Graph surface"): genus and boundary of the thickened graph G, from
+  χ = V − E = 2 − 2g − b with b its boundary words (`pieceTopology`). Boundary words that μ maps to a reduction curve
+  are counted as cuts, the others as punctures. After a reduction this is the piece the algorithm continues on, while
+  "Surface" still describes the whole surface of the model.
