@@ -133,18 +133,7 @@
       app.shown = undefined;
       return;
     }
-    const k = Math.min(Math.floor(position), states.length - 1);
-    const t = position - k;
-    const motion = moments[k]?.motion;
-    app.shown =
-      t < 1e-6 || k >= states.length - 1
-        ? { surface: states[k] as FibredSurface }
-        : {
-            from: states[k] as FibredSurface,
-            to: states[k + 1] as FibredSurface,
-            t,
-            ...(motion && { motion }),
-          };
+    app.shown = { states, motions: moments.map((m) => m.motion), position };
     return () => (app.shown = undefined);
   });
   // Playing: 1.2 seconds per step, smoothly.

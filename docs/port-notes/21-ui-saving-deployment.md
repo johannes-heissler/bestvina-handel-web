@@ -189,3 +189,9 @@ exchanges the two sides; the header button shows or hides the history tree.
   layout (μ changes at t = ½); for two states with the same strips and μ (e.g. a new Tutte layout), every point
   interpolated; otherwise the old state until t = ½, then the new one. The other junctions still jump at t = ½ when
   the Tutte layout of the new state differs.
+- **Isotopies through states that can't be laid out:** the intermediate states of an isotopy need not be drawable (a
+  strip can run parallel to another one with the same μ until they are folded; the strand order is then not
+  determined). The timeline (`drawTimeline`) now sees all states: an isotopy (consecutive crossings of the same
+  junction) is one journey through the ports, and each moment is drawn with its own state if it can be laid out, else
+  with the state before the isotopy, the junction moved; a state after a crossing that can't be laid out keeps the
+  junction where the crossing left it (also during the next step, until halfway).

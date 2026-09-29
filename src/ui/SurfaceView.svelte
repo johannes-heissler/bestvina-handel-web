@@ -10,7 +10,7 @@
   import type { Text } from "../fibred/suggestions";
   import { matrixInfo, type MatrixInfo } from "../session/analysis";
   import { graphColors } from "./colors";
-  import { draw, drawBetween, type DrawOptions } from "./drawing";
+  import { draw, drawTimeline, type DrawOptions } from "./drawing";
   import TextView from "./TextView.svelte";
   import { exportImage, type ExportFormat } from "./export";
   import { app } from "./state.svelte";
@@ -55,8 +55,8 @@
       stripWidth: toScale ? "toScale" : "uniform",
       size: 800,
     };
-    if (shown !== undefined && "from" in shown)
-      return drawBetween(node.model, shown.from, shown.to, shown.t, shown.motion, options);
+    if (shown !== undefined && "states" in shown)
+      return drawTimeline(node.model, shown.states, shown.motions, shown.position, options);
     return draw(node.model, shown?.surface ?? node.surface, options);
   });
 
@@ -84,7 +84,12 @@
   const weights = new WeakMap<FibredSurface, MatrixInfo>();
   const card = $derived.by(() => {
     const shown = app.shown;
-    const surface = shown === undefined ? node?.surface : "from" in shown ? (shown.t < 0.5 ? shown.from : shown.to) : shown.surface;
+    const surface =
+      shown === undefined
+        ? node?.surface
+        : "states" in shown
+          ? shown.states[Math.min(Math.round(shown.position), shown.states.length - 1)]
+          : shown.surface;
     const name = app.hovered;
     if (!surface || name === undefined || dragging) return undefined;
     const e = surface.graph.edges.find((x) => x.name === name);

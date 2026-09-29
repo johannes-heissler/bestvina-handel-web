@@ -10,7 +10,6 @@ import type { RibbonGraph } from "../graph/ribbon-graph";
 import { spineOfGraph, type SurfaceModel } from "../examples/models";
 import { type Chart, chartOf } from "../embedding/chart";
 import { type Layout, layout, type LayoutOptions } from "../embedding/layout";
-import type { Port } from "../embedding/chart";
 import type { Motion } from "../fibred/narration";
 import type { Complex } from "../math/complex";
 import type { Edge, Vertex } from "../graph/ribbon-graph";
@@ -62,49 +61,94 @@ const modelId = (model: SurfaceModel) => {
 };
 
 /**
- * The SVG of a moment between two consecutive states of a move (0 ≤ t ≤ 1), for its timeline:
+ * The SVG of a moment of the timeline of a move: `states` are the surfaces before and after each step, `motions` the
+ * junction crossing a side in each step (if any), and 0 ≤ `position` ≤ number of steps.
  *
- * - a junction crossing a side (`motion`): until t = ½ it slides in the layout of `from` to the port of the side it
- *   crosses; from t = ½ on it comes from the partner port on the other side to its place in the layout of `to`
- *   (μ changes at t = ½);
- * - the same strips with the same μ (e.g. a new Tutte layout): every point of the layout is interpolated;
- * - otherwise (a subdivision, a fold, …): `from` until t = ½, then `to`.
+ * - At a whole number, the state there (or, if it can't be laid out, the nearest earlier one that can).
+ * - During an isotopy (consecutive steps moving the same junction across sides), the junction travels: from its place
+ *   to the port of the side it leaves through, from the partner port on the other side on to the next port, and so on,
+ *   to its place after the isotopy. Each moment is drawn with the state of that moment if it can be laid out
+ *   (intermediate states of an isotopy need not be: strips can run parallel with the same μ), else with the state
+ *   before the isotopy, with the junction moved.
+ * - Between two states with the same strips and μ (e.g. a new Tutte layout), everything is interpolated; between
+ *   other states (a subdivision, a fold, …) the earlier one is shown until halfway.
  */
-export function drawBetween(
+export function drawTimeline(
   model: SurfaceModel,
-  from: FibredSurface,
-  to: FibredSurface,
-  t: number,
-  motion: Motion | undefined,
+  states: readonly FibredSurface[],
+  motions: readonly (Motion | undefined)[],
+  position: number,
   options: DrawOptions = {},
 ): Rendered {
   try {
-    const chart = chartFor(model, from);
+    const chart = chartFor(model, states[0] as FibredSurface);
     const layoutOf = (surface: FibredSurface) => layoutFor(model, surface, chart, options);
-    const [a, b] = [layoutOf(from), layoutOf(to)];
+    /** The latest state at or before index i that can be laid out. */
+    const drawableAt = (i: number): number => {
+      for (let j = Math.min(i, states.length - 1); j > 0; j--)
+        if (layoutOf(states[j] as FibredSurface)) return j;
+      return 0;
+    };
+    let k = Math.min(Math.floor(position), states.length - 1);
+    let t = position - k;
+    const plain = (i: number) => {
+      const j = drawableAt(i);
+      const surface = states[j] as FibredSurface;
+      return renderSvg(surface, layoutOf(surface) as Layout, options);
+    };
+    // At the end of a crossing whose state can't be laid out, the junction stays where that crossing left it.
+    if (t < 1e-6 && k > 0 && motions[k - 1] !== undefined && !layoutOf(states[k] as FibredSurface))
+      [k, t] = [k - 1, 1];
+    else if (t < 1e-6 || k >= states.length - 1) return plain(k);
+
+    const motion = motions[k];
     if (motion !== undefined) {
-      const early = t < 0.5;
-      const [surface, base] = early ? [from, a] : [to, b];
-      const port = [...chart.ports.entries()].find(([x]) => x.name === motion.side);
-      const v = surface.graph.vertices.find((u) => u.name === motion.junction);
-      if (port !== undefined && v !== undefined) {
-        const [side, leaving] = port;
-        const entering = chart.ports.get(side.reversed) ?? leaving;
-        const middle = (p: Port) => p.left.add(p.right).scale(0.5);
-        const at = base.junctions.get(v) as Complex;
-        const position = early
-          ? at.add(
-              middle(leaving)
-                .sub(at)
-                .scale(2 * t),
-            )
-          : middle(entering).add(at.sub(middle(entering)).scale(2 * t - 1));
-        return renderSvg(surface, withJunctionAt(surface, base, v, position), options);
+      // The isotopy: the steps i..j moving the same junction.
+      let [i, j] = [k, k];
+      while (i > 0 && motions[i - 1]?.junction === motion.junction) i--;
+      while (j < motions.length - 1 && motions[j + 1]?.junction === motion.junction) j++;
+      const port = (name: string, leaving: boolean) => {
+        const entry = [...chart.ports.entries()].find(([x]) => x.name === name);
+        if (entry === undefined) return undefined;
+        const p = leaving ? entry[1] : (chart.ports.get(entry[0].reversed) ?? entry[1]);
+        return p.left.add(p.right).scale(0.5);
+      };
+      const place = (index: number): Complex | undefined => {
+        const surface = states[index] as FibredSurface;
+        const l = layoutOf(surface);
+        const v = surface.graph.vertices.find((u) => u.name === motion.junction);
+        return l && v ? l.junctions.get(v) : undefined;
+      };
+      const leave = port(motion.side, true);
+      const enter = port(motion.side, false);
+      if (leave && enter) {
+        // Start and end of this step: the junction's place (before the isotopy, or after it), else between the ports.
+        const nextLeave = k < j ? port((motions[k + 1] as Motion).side, true) : undefined;
+        const previousEnter = k > i ? port((motions[k - 1] as Motion).side, false) : undefined;
+        const between = (p: Complex, q: Complex) => p.add(q).scale(0.5).scale(0.7); // pulled towards the centre
+        const start = k === i ? place(i) : previousEnter && between(previousEnter, leave);
+        const end = k === j ? place(j + 1) : nextLeave && between(enter, nextLeave);
+        const early = t < 0.5;
+        const position2 = early
+          ? (start ?? leave).add(leave.sub(start ?? leave).scale(2 * t))
+          : enter.add((end ?? enter).sub(enter).scale(2 * t - 1));
+        // Draw with the state of this moment if possible, else with the state before the isotopy.
+        const index = early ? k : k + 1;
+        const own = layoutOf(states[index] as FibredSurface);
+        const surface = (own ? states[index] : states[drawableAt(i)]) as FibredSurface;
+        const base = own ?? (layoutOf(surface) as Layout);
+        const v = surface.graph.vertices.find((u) => u.name === motion.junction);
+        if (v !== undefined) return renderSvg(surface, withJunctionAt(surface, base, v, position2), options);
       }
     }
-    const blended = interpolated(from, to, a, b, t);
-    if (blended !== undefined) return renderSvg(to, blended, options);
-    return t < 0.5 ? renderSvg(from, a, options) : renderSvg(to, b, options);
+    const [from, to] = [states[k] as FibredSurface, states[k + 1] as FibredSurface];
+    const [a, b] = [layoutOf(from), layoutOf(to)];
+    if (a && b) {
+      const blended = interpolated(from, to, a, b, t);
+      if (blended !== undefined) return renderSvg(to, blended, options);
+    }
+    // (At a whole position, a state that can't be laid out after a crossing keeps the junction where it was left.)
+    return drawTimeline(model, states, motions, t < 0.5 ? k : k + 1, options);
   } catch (e) {
     return {
       svg: "",
@@ -114,16 +158,27 @@ export function drawBetween(
   }
 }
 
-/** The layout of a surface, cached (see {@link draw}). */
-function layoutFor(model: SurfaceModel, surface: FibredSurface, chart: Chart, options: DrawOptions): Layout {
+/** The layout of a surface (cached, see {@link draw}), or undefined if it can't be laid out (cached as well). */
+function layoutFor(
+  model: SurfaceModel,
+  surface: FibredSurface,
+  chart: Chart,
+  options: DrawOptions,
+): Layout | undefined {
   const layoutOptions: LayoutOptions = {
     widthExponent: options.widthExponent ?? 0,
     smoothing: options.straightening ?? 0,
   };
-  return layouts.get(surface, JSON.stringify([modelId(model), layoutOptions]), () =>
-    layout(surface, chart, layoutOptions),
-  );
+  const result = attempts.get(surface, JSON.stringify([modelId(model), layoutOptions]), () => {
+    try {
+      return { layout: layout(surface, chart, layoutOptions) };
+    } catch {
+      return {};
+    }
+  });
+  return result.layout;
 }
+const attempts = new PerSurface<{ layout?: Layout }>(6);
 
 /** The layout with the junction v moved to `position`, and the ends of its strips with it. */
 function withJunctionAt(surface: FibredSurface, base: Layout, v: Vertex, position: Complex): Layout {

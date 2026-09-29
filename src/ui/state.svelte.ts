@@ -119,8 +119,7 @@ export const app = new AppState();
 export type Shown =
   | { readonly surface: FibredSurface }
   | {
-      readonly from: FibredSurface;
-      readonly to: FibredSurface;
-      readonly t: number;
-      readonly motion?: Motion;
+      readonly states: readonly FibredSurface[];
+      readonly motions: readonly (Motion | undefined)[];
+      readonly position: number;
     };
