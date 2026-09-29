@@ -314,3 +314,15 @@ to the target.
   rounds, and moves its partner on the other side with it. It does this only for straightened layouts, and only up to
   halfway to the neighbouring crossings on the same side, so the order is kept. The layout now exposes its gluing
   maps and its number of rounds for this.
+
+### Hairpins in the strand order
+
+A junction of valence 2 whose two strips leave through the same side (the intermediate states of an isotopy that
+moves a subdivision point across sides: the junction sits just beyond the side, and both of its strips cross it next
+to each other) makes both of its corners read a cancelling pair ℓ ℓ̄ in the boundary words. Only the corner inside
+the hairpin is the gap between the two strands; the face at the other corner wraps around the tip, and its two
+letters belong to gaps with other strands. The ribbon structure can't tell the two corners of a junction of valence 2
+apart, so `strandOrder` now first reduces as before, and if the strands don't form chains, forbids the cancellation at
+one corner of each such junction (the reduction then pairs those letters with others), trying the choices until they
+do. Before, these states could not be laid out, and the timeline drew them with the state before the isotopy, so the
+strips at the moving junction kept their old μ.

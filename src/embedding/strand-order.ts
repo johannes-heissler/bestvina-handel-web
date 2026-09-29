@@ -52,82 +52,129 @@ export function strandKey(strand: Strand): string {
   return `${strand.edge.id}:${strand.index}`;
 }
 
-/** One letter of a concatenated boundary word: which strand's side it is. */
+/** One letter of a concatenated boundary word: which strand's side it is, and the letter of the word it comes from. */
 interface Side {
   readonly letter: OrientedEdge;
   readonly strand: Strand;
+  readonly from: number;
 }
 
 /**
  * The order of the strands of `map` along each target edge.
  *
+ * **Hairpins.** A junction of valence 2 whose two strips leave through the same side (e.g. while an isotopy moves it
+ * across a side: it sits just beyond the side, and both strips cross it next to each other) makes both of its corners
+ * read a cancelling pair ℓ ℓ̄ in the boundary words, but only the corner inside the hairpin lies in the gap between the
+ * two strands; the face at the other corner wraps around the tip of the hairpin, and its two letters belong to gaps
+ * with other strands. Which corner is inside is not visible in the ribbon structure (both corners of a junction of
+ * valence 2 look alike). So if the strands don't form chains, the cancellation at one corner of each such junction is
+ * forbidden (the reduction then pairs those letters with others), trying the choices until they do.
+ *
  * @throws Error if the relations don't form one chain per target edge, i.e. the map doesn't come from an embedding
  *   (it doesn't preserve boundary words, or the ribbon structures don't match).
  */
 export function strandOrder(map: CombinatorialMap): StrandOrder {
-  // leftOf.get(A) = the strand immediately left of A, along A's target edge (forward orientation).
-  const leftOf = new Map<string, PlacedStrand>();
-  const rightmost = new Map<Edge, PlacedStrand>();
-  const leftmost = new Map<Edge, PlacedStrand>();
   const count = new Map<Edge, number>();
-
   for (const e of map.source.edges)
     for (const letter of map.image(e.forward).letters)
       count.set(letter.edge, (count.get(letter.edge) ?? 0) + 1);
 
   /** The strand of a side, with its direction along the target edge. */
-  const placed = (s: Side): PlacedStrand => ({ strand: s.strand, forward: isForwardInImage(map, s.strand) });
-  /** Records that the strand of `a` is immediately left of that of `b` in the direction of `a`'s letter. */
-  const adjacent = (a: Side, b: Side) => {
-    const [left, right] = a.letter.isForward ? [a, b] : [b, a]; // along the edge's forward orientation
-    set(leftOf, strandKey(right.strand), placed(left), "left neighbour");
-  };
+  const placed = (side: Side): PlacedStrand => ({
+    strand: side.strand,
+    forward: isForwardInImage(map, side.strand),
+  });
 
-  for (const word of map.source.boundaryWords()) {
-    const sides: Side[] = word.letters.flatMap((x) => {
-      const letters = map.image(x).letters;
-      return letters.map((letter, k) => ({
+  // The boundary words as sequences of sides, and the hairpin corners in them: the positions (i, i + 1) of the last
+  // side before and the first side after a junction of valence 2, whose letters cancel.
+  const words = map.source.boundaryWords().map((word) => {
+    const letters = word.letters;
+    const sides: Side[] = letters.flatMap((x, from) => {
+      const image = map.image(x).letters;
+      return image.map((letter, k) => ({
         letter,
-        strand: { edge: x.edge, index: x.isForward ? k : letters.length - 1 - k },
+        strand: { edge: x.edge, index: x.isForward ? k : image.length - 1 - k },
+        from,
       }));
     });
-    const { pairs, survivors } = cyclicReduction(sides.map((s) => s.letter));
-    for (const [i, j] of pairs) {
-      const [a, b] = [sides[i] as Side, sides[j] as Side]; // a's letter ℓ comes before b's ℓ̄
-      adjacent(a, b);
-    }
-    for (const i of survivors) {
-      const s = sides[i] as Side;
-      // The target face is on the right of s's letter: s is the rightmost along the letter's direction.
-      set(s.letter.isForward ? rightmost : leftmost, s.letter.edge, placed(s), "outermost strand");
-    }
-  }
+    return { letters, sides };
+  });
+  const corners = new Map<string, string[]>(); // junction → its hairpin corners, as "word:i:j"
+  words.forEach(({ letters, sides }, w) => {
+    sides.forEach((side, i) => {
+      const j = (i + 1) % sides.length;
+      const next = sides[j] as Side;
+      if (next.from === side.from || next.letter !== side.letter.reversed) return;
+      const v = (letters[side.from] as OrientedEdge).target;
+      if (map.source.valence(v) !== 2) return;
+      const key = String(v.id);
+      corners.set(key, [...(corners.get(key) ?? []), `${w}:${i}:${j}`]);
+    });
+  });
 
-  const along = new Map<Edge, PlacedStrand[]>();
-  const position = new Map<string, number>();
-  for (const [edge, n] of count) {
-    const chain: PlacedStrand[] = [];
-    for (
-      let s = rightmost.get(edge);
-      s !== undefined && chain.length <= n;
-      s = leftOf.get(strandKey(s.strand))
-    )
-      chain.push(s);
-    const last = chain.at(-1);
-    const expectedLast = leftmost.get(edge);
-    if (
-      chain.length !== n ||
-      last === undefined ||
-      expectedLast === undefined ||
-      strandKey(last.strand) !== strandKey(expectedLast.strand)
-    )
-      throw new Error(
-        `The strands along ${edge} don't form one chain: the map doesn't come from an embedding`,
+  const attempt = (forbidden: ReadonlySet<string>): StrandOrder => {
+    // leftOf.get(A) = the strand immediately left of A, along A's target edge (forward orientation).
+    const leftOf = new Map<string, PlacedStrand>();
+    const rightmost = new Map<Edge, PlacedStrand>();
+    const leftmost = new Map<Edge, PlacedStrand>();
+    words.forEach(({ sides }, w) => {
+      const { pairs, survivors } = cyclicReduction(
+        sides.map((side) => side.letter),
+        (i, j) => forbidden.has(`${w}:${i}:${j}`),
       );
-    chain.forEach((s, i) => position.set(strandKey(s.strand), i));
-    along.set(edge, chain);
+      for (const [i, j] of pairs) {
+        const [a, b] = [sides[i] as Side, sides[j] as Side]; // a's letter ℓ comes before b's ℓ̄
+        const [left, right] = a.letter.isForward ? [a, b] : [b, a]; // along the edge's forward orientation
+        set(leftOf, strandKey(right.strand), placed(left), "left neighbour");
+      }
+      for (const i of survivors) {
+        const side = sides[i] as Side;
+        // The target face is on the right of the letter: this strand is the rightmost along the letter's direction.
+        set(side.letter.isForward ? rightmost : leftmost, side.letter.edge, placed(side), "outermost strand");
+      }
+    });
+
+    const along = new Map<Edge, PlacedStrand[]>();
+    const position = new Map<string, number>();
+    for (const [edge, n] of count) {
+      const chain: PlacedStrand[] = [];
+      for (
+        let side = rightmost.get(edge);
+        side !== undefined && chain.length <= n;
+        side = leftOf.get(strandKey(side.strand))
+      )
+        chain.push(side);
+      const last = chain.at(-1);
+      const expectedLast = leftmost.get(edge);
+      if (
+        chain.length !== n ||
+        last === undefined ||
+        expectedLast === undefined ||
+        strandKey(last.strand) !== strandKey(expectedLast.strand)
+      )
+        throw new Error(
+          `The strands along ${edge} don't form one chain: the map doesn't come from an embedding`,
+        );
+      chain.forEach((side, i) => position.set(strandKey(side.strand), i));
+      along.set(edge, chain);
+    }
+    return { along, position };
+  };
+
+  // First as they are; then, for the junctions with two hairpin corners, forbid one of them (at most 2⁸ choices).
+  const junctions = [...corners.values()].filter((list) => list.length > 1);
+  const choices = Math.min(2 ** junctions.length, 256);
+  let failure: unknown;
+  for (let choice = -1; choice < (junctions.length > 0 ? choices : 0); choice++) {
+    try {
+      return attempt(
+        new Set(choice < 0 ? [] : junctions.map((list, k) => list[(choice >> k) & 1] as string)),
+      );
+    } catch (e) {
+      failure = e;
+    }
   }
-  return { along, position };
+  throw failure;
 }
 
 /** Whether the strand's letter in the image of its edge's forward orientation is a forward letter of the target. */
@@ -145,9 +192,13 @@ function set<K, V>(map: Map<K, V>, key: K, value: V, what: string): void {
 
 /**
  * The cyclic reduction of a word, with the cancelling pairs (i, j), i before j (cyclically: the pairs cancelled
- * across the end have i near the end and j near the start), and the positions of the surviving letters.
+ * across the end have i near the end and j near the start), and the positions of the surviving letters. The letters
+ * at positions i, j for which `forbidden(i, j)` holds are not cancelled with each other.
  */
-export function cyclicReduction(word: readonly OrientedEdge[]): {
+export function cyclicReduction(
+  word: readonly OrientedEdge[],
+  forbidden: (i: number, j: number) => boolean = () => false,
+): {
   pairs: [number, number][];
   survivors: number[];
 } {
@@ -155,7 +206,7 @@ export function cyclicReduction(word: readonly OrientedEdge[]): {
   const pairs: [number, number][] = [];
   word.forEach((letter, j) => {
     const top = stack.at(-1);
-    if (top !== undefined && word[top] === letter.reversed) {
+    if (top !== undefined && word[top] === letter.reversed && !forbidden(top, j)) {
       stack.pop();
       pairs.push([top, j]);
     } else stack.push(j);
@@ -163,7 +214,8 @@ export function cyclicReduction(word: readonly OrientedEdge[]): {
   let [first, last] = [0, stack.length - 1];
   while (
     last > first &&
-    word[stack[last] as number] === (word[stack[first] as number] as OrientedEdge).reversed
+    word[stack[last] as number] === (word[stack[first] as number] as OrientedEdge).reversed &&
+    !forbidden(stack[last] as number, stack[first] as number)
   ) {
     pairs.push([stack[last] as number, stack[first] as number]); // ℓ near the end, ℓ̄ at the start
     first++;

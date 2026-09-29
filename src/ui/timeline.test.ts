@@ -15,7 +15,7 @@ describe("the timeline of a move", () => {
     const choice = session
       .suggestion()
       .options.flatMap((o) => variants(session.current.surface, o.move))
-      .find((c) => plainText(c.label).includes("B A b"));
+      .find((c) => plainText(c.label).includes("crosses B A b (its"));
     expect(choice).toBeDefined();
     const preview = session.preview(choice!.move);
     const states = [preview.before, ...preview.steps.map((s) => s.after)];
@@ -23,5 +23,20 @@ describe("the timeline of a move", () => {
     expect(motions.filter(Boolean)).toHaveLength(3); // across B, A and b
     for (let position = 0; position <= preview.steps.length; position += 0.25)
       expect(drawTimeline(session.current.model, states, motions, position, { size: 200 }).notes).toEqual([]);
+  });
+});
+
+describe("the strand order with a hairpin", () => {
+  it("lays out the states of an isotopy that moves a junction of valence 2 across sides", async () => {
+    const { strandOrder } = await import("../embedding/strand-order");
+    const { session } = Session.fromFile((await decodeSession(LINK))!);
+    const choice = session
+      .suggestion()
+      .options.flatMap((o) => variants(session.current.surface, o.move))
+      .find((c) => plainText(c.label).includes("crosses B A b (its"));
+    const preview = session.preview(choice!.move);
+    // Each state after crossing a side has the junction just beyond it, both of its strips crossing that side.
+    for (const step of preview.steps.filter((s) => s.motion))
+      expect(() => strandOrder(step.after.mu)).not.toThrow();
   });
 });
