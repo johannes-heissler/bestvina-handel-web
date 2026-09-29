@@ -68,7 +68,7 @@ export interface Gluing {
 
 export function layout(fs: FibredSurface, chart: Chart, options: LayoutOptions = {}): Layout {
   const c = options.widthExponent ?? 0;
-  const order = strandOrder(fs.mu);
+  const order = strandOrder(fs.mu, fs.reductionCurves); // (a reduction piece has holes there)
   const weight = strandWeights(fs, c);
 
   // 1. Lateral coordinates u ∈ (−1, 1) of each strand, along the forward orientation of its edge of G₀: `front` at the

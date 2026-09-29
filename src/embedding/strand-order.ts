@@ -16,6 +16,11 @@
  * Since each side of each strand faces exactly one face, one pass over all boundary words gives every "immediate
  * neighbour" relation, and the order along each target edge is the chain of these relations.
  *
+ * **Holes.** For a piece of a reduction, G is a subsurface: a face of G whose word reduces to a reduction curve (not to
+ * a boundary word of the target) is a hole, where the rest of the surface was cut away, and it crosses the target edges
+ * between strands. Its surviving letters are the strands next to it, so they end one chain along the edge and start
+ * the next; the chains are joined from the outermost strand on the right to the one on the left.
+ *
  * Cancelling pairs are found with a stack, which pairs ℓ with the ℓ̄ after a subword that reduces to nothing: the
  * part of F's boundary around a disk. Two different choices can't both be geometric (a strand side bounds only one
  * gap), so for a map that comes from an embedding the pairing is the right one.
@@ -23,6 +28,7 @@
  * @module
  */
 import type { CombinatorialMap } from "../graph/combinatorial-map";
+import type { EdgePath } from "../graph/edge-path";
 import type { Edge, OrientedEdge } from "../graph/ribbon-graph";
 
 /** A strand: the letter `index` of the image of the forward orientation of `edge`. */
@@ -73,7 +79,7 @@ interface Side {
  * @throws Error if the relations don't form one chain per target edge, i.e. the map doesn't come from an embedding
  *   (it doesn't preserve boundary words, or the ribbon structures don't match).
  */
-export function strandOrder(map: CombinatorialMap): StrandOrder {
+export function strandOrder(map: CombinatorialMap, holes: readonly EdgePath[] = []): StrandOrder {
   const count = new Map<Edge, number>();
   for (const e of map.source.edges)
     for (const letter of map.image(e.forward).letters)
@@ -112,11 +118,20 @@ export function strandOrder(map: CombinatorialMap): StrandOrder {
     });
   });
 
+  const holeWords = new Set(
+    holes
+      .flatMap((curve) => [curve, curve.inverse])
+      .map((curve) => cyclicKey(curve.cyclicallyReduced().letters)),
+  );
+
   const attempt = (forbidden: ReadonlySet<string>): StrandOrder => {
     // leftOf.get(A) = the strand immediately left of A, along A's target edge (forward orientation).
     const leftOf = new Map<string, PlacedStrand>();
     const rightmost = new Map<Edge, PlacedStrand>();
     const leftmost = new Map<Edge, PlacedStrand>();
+    // Next to a hole (see below): the strands with the hole immediately on their left, and on their right.
+    const holeOnLeft = new Map<Edge, PlacedStrand[]>();
+    const holeOnRight = new Map<Edge, PlacedStrand[]>();
     words.forEach(({ sides }, w) => {
       const { pairs, survivors } = cyclicReduction(
         sides.map((side) => side.letter),
@@ -127,30 +142,70 @@ export function strandOrder(map: CombinatorialMap): StrandOrder {
         const [left, right] = a.letter.isForward ? [a, b] : [b, a]; // along the edge's forward orientation
         set(leftOf, strandKey(right.strand), placed(left), "left neighbour");
       }
+      // A face whose reduced image is one of the `holes` (a reduction curve) is a hole: the map is the embedding of a
+      // subsurface (a piece after a reduction), and the face is where the rest of the surface was cut away. Its
+      // surviving letters are strands next to that hole, which crosses the target edge between strands.
+      const hole =
+        holeWords.size > 0 && holeWords.has(cyclicKey(survivors.map((i) => (sides[i] as Side).letter)));
       for (const i of survivors) {
         const side = sides[i] as Side;
-        // The target face is on the right of the letter: this strand is the rightmost along the letter's direction.
-        set(side.letter.isForward ? rightmost : leftmost, side.letter.edge, placed(side), "outermost strand");
+        const edge = side.letter.edge;
+        // The face is on the right of the letter: along the edge's forward orientation, on the right of the strand if
+        // the letter is forward, else on its left.
+        if (!hole) set(side.letter.isForward ? rightmost : leftmost, edge, placed(side), "outermost strand");
+        else {
+          const list = side.letter.isForward ? holeOnRight : holeOnLeft;
+          list.set(edge, [...(list.get(edge) ?? []), placed(side)]);
+        }
       }
     });
 
     const along = new Map<Edge, PlacedStrand[]>();
     const position = new Map<string, number>();
     for (const [edge, n] of count) {
-      const chain: PlacedStrand[] = [];
-      for (
-        let side = rightmost.get(edge);
-        side !== undefined && chain.length <= n;
-        side = leftOf.get(strandKey(side.strand))
-      )
-        chain.push(side);
-      const last = chain.at(-1);
-      const expectedLast = leftmost.get(edge);
+      // The chains from right to left: from the rightmost strand, or from a strand with a hole on its right, to the
+      // leftmost one or one with a hole on its left. Without holes, one chain.
+      const starts = [
+        ...(rightmost.has(edge) ? [rightmost.get(edge) as PlacedStrand] : []),
+        ...(holeOnRight.get(edge) ?? []),
+      ];
+      const ends = new Set(
+        [
+          ...(holeOnLeft.get(edge) ?? []),
+          ...(leftmost.has(edge) ? [leftmost.get(edge) as PlacedStrand] : []),
+        ].map((s) => strandKey(s.strand)),
+      );
+      const chains = starts.map((start) => {
+        const chain: PlacedStrand[] = [];
+        for (
+          let side: PlacedStrand | undefined = start;
+          side !== undefined && chain.length <= n;
+          side = ends.has(strandKey(side.strand)) ? undefined : leftOf.get(strandKey(side.strand))
+        )
+          chain.push(side);
+        return chain;
+      });
+      // The chain from the rightmost strand first and the one to the leftmost strand last; the chains between holes in
+      // the order found (with one hole crossing the edge, there is none).
+      const lastKey = leftmost.has(edge) ? strandKey((leftmost.get(edge) as PlacedStrand).strand) : undefined;
+      const [first, ...middle] = chains;
+      const final = middle.findIndex(
+        (c) => c.length > 0 && strandKey((c.at(-1) as PlacedStrand).strand) === lastKey,
+      );
+      const ordered = rightmost.has(edge)
+        ? [
+            first ?? [],
+            ...middle.filter((_, i) => i !== final),
+            ...(final >= 0 ? [middle[final] as PlacedStrand[]] : []),
+          ]
+        : chains;
+      const chain = ordered.flat();
+      const lastOfChain = chain.at(-1);
       if (
         chain.length !== n ||
-        last === undefined ||
-        expectedLast === undefined ||
-        strandKey(last.strand) !== strandKey(expectedLast.strand)
+        new Set(chain.map((s) => strandKey(s.strand))).size !== n ||
+        (lastKey !== undefined && (lastOfChain === undefined || strandKey(lastOfChain.strand) !== lastKey)) ||
+        rightmost.has(edge) !== leftmost.has(edge)
       )
         throw new Error(
           `The strands along ${edge} don't form one chain: the map doesn't come from an embedding`,
@@ -175,6 +230,17 @@ export function strandOrder(map: CombinatorialMap): StrandOrder {
     }
   }
   throw failure;
+}
+
+/** A key of a cyclic word, the same for all its rotations. */
+function cyclicKey(letters: readonly OrientedEdge[]): string {
+  const keys = letters.map((x) => `${x.edge.id}${x.isForward ? "+" : "-"}`);
+  let best = keys.join(" ");
+  for (let i = 1; i < keys.length; i++) {
+    const rotated = [...keys.slice(i), ...keys.slice(0, i)].join(" ");
+    if (rotated < best) best = rotated;
+  }
+  return best;
 }
 
 /** Whether the strand's letter in the image of its edge's forward orientation is a forward letter of the target. */

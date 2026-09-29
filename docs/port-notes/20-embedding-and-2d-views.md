@@ -347,3 +347,16 @@ strips at the moving junction kept their old μ.
   points.
 - **Names in the Klein model** are scaled by the geometric mean of the radial and tangential factors of the metric
   (it is not conformal), not by the horizontal one, so names at the same distance from the centre have the same size.
+
+## Update: drawing the pieces of a reduction
+
+After reducing to the complement, no state could be drawn ("Two candidates for the outermost strand of c"). The strand
+order assumed that μ maps every boundary word of G to a boundary word of G₀ (every face of G is a puncture). A piece of
+a reduction is a subsurface: one face of G is the hole where the rest was cut away, and μ maps its word to the
+reduction curve (e.g. a b A B), which the integrity check already allows. Its surviving letters were read as "outermost
+strand next to the puncture" and collided with the real ones. Now `strandOrder(map, holes)` takes the reduction curves
+(`fs.reductionCurves`, passed by the layout): a face whose reduced image is one of them is a hole, and its surviving
+letters are the strands next to it. The hole crosses the side between strands, so it ends one chain and starts the
+next, and the chains are joined from the outermost strand on the right to the one on the left (with several holes
+crossing the same side, the chains between them in the order found). Any other face is read as before, so maps that
+don't come from an embedding are still rejected.
