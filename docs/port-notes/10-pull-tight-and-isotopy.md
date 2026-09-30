@@ -61,3 +61,14 @@ common start is removed at an extremal junction. It changes g only, so it has no
 map with nested backtracks (`a b B b B A a b` → `a b`); pulling tight the conjugation by b (g(a) = b a B, g(b) = b b B)
 to the identity, removing letters at both ends of loops; tightening only selected strips; μ staying unchanged; and
 `isotopeJunction` conjugating μ of loops while keeping the boundary words (checked by `checkIntegrity`).
+
+## Update: moving the image of a junction (a shortcut)
+
+`moveJunctionImage(fs, v, a)` moves g(v) along a strip a leaving it (a homotopy of g; μ stays): every image of a strip
+end at v loses an initial a, or gets ā in front, and g(v) becomes the end of a (for a loop, both ends change). Pulling
+an extremal junction tight is the case where all images start with a. At a junction with a single gate (gatewise
+extremal), moving g(v) along one of the strips a = Dg(e) can shorten the images enough to lower λ. The suggestions
+shown in the UI (`SuggestionContext.shortcuts`, not the autopilot) add it as an option for every such v and a for which
+λ, after pulling tight on a copy, is smaller, e.g. in BH 6.1 at step 6 "move the image of v along y: λ 3.2340 → 3.0000
+after pulling tight". Tested: after each shortcut offered in BH 6.1, g is consistent and the algorithm ends with the
+same λ.

@@ -108,7 +108,7 @@ export class Session {
 
   /** The suggestion at the current state. */
   suggestion(): Suggestion {
-    return nextSuggestion(this.current.surface, { followUp: this.current.followUp });
+    return nextSuggestion(this.current.surface, { followUp: this.current.followUp, shortcuts: true });
   }
 
   /**

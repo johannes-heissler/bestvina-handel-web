@@ -20,12 +20,13 @@ import {
   removeInefficiencyStep,
   removePeripheralInefficiency,
 } from "./moves/inefficiency";
-import { loosePositions } from "./moves/pull-tight";
+import { loosePositions, moveJunctionImage, pullTight } from "./moves/pull-tight";
 import { reduce, type ReductionPiece } from "./moves/reduce";
 import { disconnectedJunctions, type SplitPiece, splitJunctions } from "./moves/split-junctions";
 import { finiteOrder, type ReductionCandidate, reductionCandidates } from "./moves/reducibility";
 import { valenceOneJunctions, valenceTwoJunctions } from "./moves/valence";
 import { EdgePoint } from "./edge-point";
+import { findGates } from "./gates";
 import { narrated, quietly } from "./narration";
 import { peripheryCandidates, peripheryProblems } from "./periphery";
 import { perronFrobenius } from "./perron-frobenius";
@@ -113,6 +114,11 @@ export interface Suggestion {
 export interface SuggestionContext {
   /** After a fold step: the inefficiency it followed and the strips of its next fold (see `MoveHooks.followUp`). */
   readonly followUp?: FollowUp | undefined;
+  /**
+   * Also offer the shortcuts that lower λ (moving the image of a junction with a single gate; each is tried on a copy,
+   * so only for the suggestions shown to the user, not for the autopilot).
+   */
+  readonly shortcuts?: boolean;
 }
 
 /**
@@ -120,7 +126,7 @@ export interface SuggestionContext {
  * suggestion also offers splitting the junctions there, greyed out: the algorithm does that only at the end.
  */
 export function nextSuggestion(fs: FibredSurface, context: SuggestionContext = {}): Suggestion {
-  const suggestion = nextStep(fs, context);
+  const suggestion = withShortcuts(fs, nextStep(fs, context), context);
   if (suggestion.kind === "finished" || suggestion.kind === "disconnected train track" || fs.ignoreReducible)
     return suggestion;
   const disconnected = disconnectedJunctions(fs);
@@ -140,6 +146,72 @@ export function nextSuggestion(fs: FibredSurface, context: SuggestionContext = {
       },
     ],
   };
+}
+
+/** The suggestion with the shortcuts that lower λ added (for single choices, while the algorithm isn't finished). */
+function withShortcuts(fs: FibredSurface, suggestion: Suggestion, context: SuggestionContext): Suggestion {
+  if (!context.shortcuts || suggestion.multiple || suggestion.kind === "finished") return suggestion;
+  const shortcuts = junctionImageShortcuts(fs);
+  return shortcuts.length === 0
+    ? suggestion
+    : { ...suggestion, options: [...suggestion.options, ...shortcuts] };
+}
+
+/**
+ * At each junction v with a single gate (gatewise extremal), moving g(v) along a strip a = Dg(e), e at v: every image
+ * at v that starts with a loses it, the others get ā in front. Offered only if λ, after pulling tight, is smaller. (If
+ * all images at v start with a, this is pulling tight, which the algorithm does anyway.)
+ */
+function junctionImageShortcuts(fs: FibredSurface): MoveOption[] {
+  const growth = (surface: FibredSurface) => {
+    try {
+      return perronFrobenius(surface, { essentialOnly: true }).growth;
+    } catch {
+      return undefined;
+    }
+  };
+  const before = growth(fs);
+  if (before === undefined) return [];
+  const gateCount = new Map<Vertex, number>();
+  for (const gate of findGates(fs.graph, fs.g)) gateCount.set(gate.at, (gateCount.get(gate.at) ?? 0) + 1);
+  const options: MoveOption[] = [];
+  for (const v of fs.graph.vertices) {
+    const star = fs.graph.star(v);
+    if (gateCount.get(v) !== 1 || star.length < 2) continue;
+    const firsts = [...new Set(star.map((e) => fs.g.image(e).first).filter((a) => a !== undefined))];
+    if (firsts.length < 2) continue; // all alike: pulling tight
+    for (const a of firsts) {
+      const copy = fs.copy();
+      copy.onError = () => {};
+      let after: number | undefined;
+      try {
+        quietly(() => {
+          moveJunctionImage(
+            copy,
+            copy.graph.vertices.find((u) => u.name === v.name) as Vertex,
+            strip(copy, a.name),
+          );
+          pullTight(copy);
+        });
+        after = growth(copy);
+      } catch {
+        after = undefined;
+      }
+      if (after === undefined || after >= before - 1e-9) continue;
+      options.push({
+        move: { kind: "move junction image", junction: v.name, along: a.name },
+        label: [
+          "Shortcut: move the image of ",
+          { junction: v.name },
+          " along ",
+          { strip: a.name },
+          ` (${v.name} has a single gate): λ ${before.toFixed(4)} → ${after.toFixed(4)} after pulling tight`,
+        ],
+        rating: after,
+      });
+    }
+  }
+  return options;
 }
 
 function nextStep(fs: FibredSurface, context: SuggestionContext): Suggestion {

@@ -25,7 +25,7 @@ import {
   removeInefficiencyStep,
   removePeripheralInefficiency,
 } from "./moves/inefficiency";
-import { pullTight } from "./moves/pull-tight";
+import { moveJunctionImage, pullTight } from "./moves/pull-tight";
 import { reduce } from "./moves/reduce";
 import { splitJunctions } from "./moves/split-junctions";
 import {
@@ -78,6 +78,8 @@ export type Move =
   /** Choose the peripheral subgraph P (strips by name). */
   | { readonly kind: "set peripheral subgraph"; readonly strips: readonly string[] }
   | { readonly kind: "ignore peripheral subgraph" }
+  /** Move the image of a junction along a strip leaving it (a shortcut at a junction with a single gate). */
+  | { readonly kind: "move junction image"; readonly junction: string; readonly along: string }
   | {
       /** Split the junctions whose gate graphs are disconnected (τ is disconnected there: f is reducible). */
       readonly kind: "split junctions";
@@ -225,6 +227,20 @@ function introduction(fs: FibredSurface, move: Move): Text {
         ...(move.strips.length === 0 ? ["the empty subgraph"] : list(move.strips)),
         " as the peripheral subgraph P: the circles around all punctures but one orbit, which is essential.",
       ];
+    case "move junction image":
+      return [
+        "Shortcut: move the image of the junction ",
+        { junction: move.junction },
+        " along ",
+        { strip: move.along },
+        " (a homotopy of g; the embedding stays). Every image at ",
+        { junction: move.junction },
+        " that starts with ",
+        { strip: move.along },
+        " loses it, the others get ",
+        { strip: strip(fs, move.along).reversed.name },
+        " in front.",
+      ];
     case "ignore peripheral subgraph":
       return [
         "Continue with the peripheral subgraph as it is, although it doesn't fulfil its definition. Convergence and correctness are not guaranteed.",
@@ -371,6 +387,9 @@ function applyMoveQuietly(fs: FibredSurface, move: Move, hooks: MoveHooks = {}):
       return fs;
     case "ignore peripheral subgraph":
       fs.ignorePeriphery = true;
+      return fs;
+    case "move junction image":
+      moveJunctionImage(fs, junction(fs, move.junction), strip(fs, move.along));
       return fs;
     case "split junctions":
       splitJunctions(fs, (pieces) => {

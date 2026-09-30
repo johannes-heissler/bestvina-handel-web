@@ -9,6 +9,7 @@
  *
  * @module
  */
+import { EdgePath } from "../../graph/edge-path";
 import type { OrientedEdge, Vertex } from "../../graph/ribbon-graph";
 import { sharedPrefixLength } from "../../util/iter";
 import type { FibredSurface } from "../fibred-surface";
@@ -106,6 +107,22 @@ export function pullTightExtremalJunction(fs: FibredSurface, v: Vertex, all = fa
   if (k < 1 || lastRemoved === undefined) throw new Error(`The junction ${v} is not extremal`);
   for (const e of star) fs.g.setImage(e, fs.g.image(e).slice(k)); // reads the current image, so loops lose both ends
   fs.g.setVertexImage(v, lastRemoved.target);
+}
+
+/**
+ * Moves the image of the junction v along the strip a leaving g(v) (a homotopy of g; μ doesn't change): every image of
+ * a strip end at v loses an initial a, or gets ā in front if it doesn't start with a, and g(v) becomes the end of a.
+ * This generalizes pulling an extremal junction tight (where all images start with a); at a junction with a single
+ * gate it can shorten the images enough to lower λ. For a loop at v both ends change.
+ */
+export function moveJunctionImage(fs: FibredSurface, v: Vertex, a: OrientedEdge): void {
+  if (a.source !== fs.g.vertexImage(v))
+    throw new Error(`The strip ${a.name} doesn't leave the image of ${v.name}`);
+  for (const e of fs.graph.star(v)) {
+    const image = fs.g.image(e); // (read now: for a loop, the second end sees the first change)
+    fs.g.setImage(e, image.first === a ? image.slice(1) : EdgePath.of(a.reversed).concat(image));
+  }
+  fs.g.setVertexImage(v, a.target);
 }
 
 /** Removes the backtrack (one pair of letters, or with `all` the maximal backtracking segment around it). */

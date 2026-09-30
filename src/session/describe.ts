@@ -38,6 +38,8 @@ export function describeMove(move: Move): Text {
       return move.strips.length === 0 ? ["P = ∅"] : ["P = ", ...strips(move.strips)];
     case "ignore peripheral subgraph":
       return ["Ignore the peripheral subgraph"];
+    case "move junction image":
+      return ["Move g(", { junction: move.junction }, ") along ", { strip: move.along }];
     case "split junctions":
       return ["Split junctions along τ", ...(move.piece !== undefined ? [` (piece ${move.piece + 1})`] : [])];
     case "remove valence-2 junctions":
