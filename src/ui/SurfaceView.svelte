@@ -31,7 +31,6 @@
   /** The part of each side the crossings may use (undefined: the default of the kind of polygon). */
   let sideFraction = $state<number | undefined>(undefined);
   let pointerSize = $state(4); // the radius of the dot under the mouse, in pixels at the centre (0: no dot)
-  let toScale = $state(false);
   let labels = $state(true);
   let showOptions = $state(true);
 
@@ -59,7 +58,6 @@
       straightening,
       ...(sideFraction !== undefined && { sideFraction }),
       labels,
-      stripWidth: toScale ? "toScale" : "uniform",
       size: 800,
     };
     if (shown !== undefined && "states" in shown)
@@ -218,7 +216,7 @@
       {/if}
       <label title="Copies of the polygon by deck transformations">Copies <input type="number" min="0" max="4" bind:value={deckDepth} /></label>
       <label
-        title="The weights w(e)^c of the strips, with the Perron–Frobenius widths w(e) (as in 'Transition matrix, widths, lengths'). With 'Strip widths to scale', every strip is drawn with a width proportional to w(e)^c: c = 0 all equally wide, c = 1 exactly in the ratios of the widths w, in between in the same order but closer together. (All widths are then shrunk by one common factor until the strands fit.) The weights also space the strands on the sides before straightening."
+        title="The weights w(e)^c of the strips, with the Perron–Frobenius widths w(e) (as in 'Transition matrix, widths, lengths'). Every strip is drawn with a width proportional to w(e)^c: c = 0 all equally wide, c = 1 exactly in the ratios of the widths w, in between in the same order but closer together. (All widths are then shrunk by one common factor until the strands fit.) The weights also space the strands on the sides before straightening."
         >Width exponent c <input type="range" min="0" max="1" step="0.1" bind:value={widthExponent} />
         {widthExponent.toFixed(1)}</label
       >
@@ -240,10 +238,6 @@
           {Math.round((sideFraction ?? defaultSideFraction) * 100)}% of a side</label
         >
       {/if}
-      <label
-        title="Draw the strips with widths proportional to w(e)^c, as wide as fits between their neighbours (the positions don't change)"
-        ><input type="checkbox" bind:checked={toScale} /> Strip widths to scale</label
-      >
       <label title="The dot under the mouse, shown in the polygon and in every copy; its radius in pixels at the centre of the model, shrinking with the metric (0: no dot)"
         >Pointer size <input type="range" min="0" max="12" step="0.5" bind:value={pointerSize} /> {pointerSize}</label
       >

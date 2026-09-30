@@ -44,8 +44,6 @@ export interface RenderOptions {
   readonly size?: number;
   /** Draw the names of strips and junctions. */
   readonly labels?: boolean;
-  /** "uniform": thin lines; "toScale": as wide as their share of the ports (with the layout's width exponent c). */
-  readonly stripWidth?: "uniform" | "toScale";
   /** How the sides of the polygon are drawn (with constant hyperbolic width, like the strips). */
   readonly sideStyle?: SideStyle;
   /** Down to which width (in pixels) the sides are dashed or dotted; thinner, they fade to a faint solid line. */
@@ -185,29 +183,25 @@ export function renderSvg(fs: FibredSurface, layout: Layout, options: RenderOpti
   };
 
   // Strip widths, constant in the hyperbolic metric for hyperbolic charts (so the strips get thinner towards the
-  // boundary, and in the copies): thin and uniform, or to scale with their share of the ports, measured in pixels at
-  // the centre of the model. To scale, all are scaled down so that the strands of each gate together are no wider than
-  // the disk of its junction.
+  // boundary, and in the copies): to scale with their share of the ports (with the layout's width exponent c; c = 0
+  // makes them all equally wide), measured in pixels at the centre of the model. All are scaled down so that the
+  // strands of each gate together are no wider than the disk of its junction.
   const metric = (z: Complex, direction: Complex) => (hyperbolic ? lengthFactor(model, z, direction) : 1);
   const centreMetric = metric(toDisplay(Complex.ZERO), Complex.ONE);
   const portPixels = averagePortPixels(chart, toDisplay) * scale;
-  const basePixels = (e: Edge) =>
-    options.stripWidth === "toScale"
-      ? Math.max(0.8, (layout.relativeWidth.get(e) ?? 0.2) * portPixels * 0.9)
-      : 2.2;
+  const basePixels = (e: Edge) => Math.max(0.8, (layout.relativeWidth.get(e) ?? 0.2) * portPixels * 0.9);
   let shrink = 1;
-  if (options.stripWidth === "toScale")
-    for (const v of fs.graph.vertices) {
-      // The strands of a gate leave side by side, so their widths add up (as the widths of a train track do).
-      const at = toDisplay(layout.junctions.get(v) as Complex);
-      const gateWidths = new Map<Vertex, number>();
-      for (const [x, s] of gatesOf(v).switchOf)
-        gateWidths.set(
-          s,
-          (gateWidths.get(s) ?? 0) + ((basePixels(x.edge) / scale) * centreMetric) / metric(at, Complex.ONE),
-        );
-      for (const width of gateWidths.values()) shrink = Math.min(shrink, (2 * radiusOf(v)) / width);
-    }
+  for (const v of fs.graph.vertices) {
+    // The strands of a gate leave side by side, so their widths add up (as the widths of a train track do).
+    const at = toDisplay(layout.junctions.get(v) as Complex);
+    const gateWidths = new Map<Vertex, number>();
+    for (const [x, s] of gatesOf(v).switchOf)
+      gateWidths.set(
+        s,
+        (gateWidths.get(s) ?? 0) + ((basePixels(x.edge) / scale) * centreMetric) / metric(at, Complex.ONE),
+      );
+    for (const width of gateWidths.values()) shrink = Math.min(shrink, (2 * radiusOf(v)) / width);
+  }
   /** The width of the strip e in the hyperbolic metric (in display units for flat charts). */
   const trueWidth = (e: Edge) => ((basePixels(e) * shrink) / scale) * centreMetric;
   /** The width of e in display units at the display point z, across the unit direction n (at least 0.4 pixels). */
