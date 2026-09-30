@@ -1,10 +1,11 @@
-<!-- What is known about the current state: the classification, λ, the surface, μ. -->
+<!-- What is known about the current state: the name of the map, the classification, λ, the surface, μ. -->
 <script lang="ts">
   import { topology } from "../examples/models";
   import { perronFrobenius } from "../fibred/perron-frobenius";
   import { pieceTopology } from "../session/analysis";
   import { peripheryCandidates, peripheryProblems } from "../fibred/periphery";
   import { app } from "./state.svelte";
+  import MapName from "./MapName.svelte";
 
   const info = $derived.by(() => {
     void app.version;
@@ -21,6 +22,7 @@
     const classification = suggestion?.classification;
     const { genus, punctures } = topology(node.model);
     return {
+      mapName: surface.mapName,
       classification,
       growth,
       genus,
@@ -37,6 +39,18 @@
       possible: peripheryCandidates(surface).length > 0,
     };
   });
+
+  let renaming = $state(false);
+  let newName = $state("");
+  function startRenaming() {
+    newName = info?.mapName ?? "";
+    renaming = true;
+  }
+  function rename() {
+    const name = newName.trim();
+    if (name !== (info?.mapName ?? "")) app.apply({ kind: "rename map", ...(name && { name }) });
+    if (!app.error) renaming = false;
+  }
 </script>
 
 <section class="panel">
@@ -56,6 +70,33 @@
   {/if}
   {#if info}
     <dl>
+      <dt title="The mapping class g represents. The moves of the algorithm keep it; editing the map composes it.">Map</dt>
+      <dd>
+        {#if renaming}
+          <form
+            class="buttons"
+            onsubmit={(event) => {
+              event.preventDefault();
+              rename();
+            }}
+          >
+            <!-- svelte-ignore a11y_autofocus -->
+            <input
+              bind:value={newName}
+              placeholder="e.g. D_b ∘ D_a⁻¹ ∘ h"
+              size="20"
+              aria-label="Name of the map"
+              autofocus
+              onkeydown={(event) => event.key === "Escape" && (renaming = false)}
+            />
+            <button class="primary" type="submit">Rename</button>
+            <button type="button" onclick={() => (renaming = false)}>Cancel</button>
+          </form>
+        {:else}
+          {#if info.mapName !== undefined}<MapName name={info.mapName} />{:else}<span class="hint">no name</span>{/if}
+          <button class="link rename" onclick={startRenaming}>rename</button>
+        {/if}
+      </dd>
       <dt>Result</dt>
       <dd>
         {#if info.classification?.kind === "pseudo-Anosov"}pseudo-Anosov, λ = {info.classification.growth.toFixed(6)}
@@ -82,3 +123,9 @@
     </dl>
   {/if}
 </section>
+
+<style>
+  .rename {
+    margin-left: 0.5rem;
+  }
+</style>

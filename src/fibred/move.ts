@@ -125,7 +125,15 @@ export type Move =
     }
   | { readonly kind: "replace puncture by singularity"; readonly junction: string }
   /** Editing by hand (the map editor): these are moves too, so that a session is its start plus its moves. */
-  | { readonly kind: "edit map"; readonly text: string; readonly mode: MapUpdateMode }
+  | {
+      readonly kind: "edit map";
+      readonly text: string;
+      readonly mode: MapUpdateMode;
+      /** The name of the map entered (e.g. "D_a"), composed into the name of g; without one, g loses its name. */
+      readonly name?: string;
+    }
+  /** Rename the mapping class g represents (undefined: no name). */
+  | { readonly kind: "rename map"; readonly name?: string }
   | { readonly kind: "rename strip"; readonly strip: string; readonly name: string }
   | { readonly kind: "rename junction"; readonly junction: string; readonly name: string };
 
@@ -263,6 +271,8 @@ function introduction(fs: FibredSurface, move: Move): Text {
       ];
     case "edit map":
       return ["Replace g by the map entered."];
+    case "rename map":
+      return [move.name === undefined ? "Remove the name of g." : `Name g ${move.name}.`];
     case "rename strip":
       return ["Rename the strip ", { strip: move.strip }, ` to ${move.name}.`];
     case "rename junction":
@@ -458,7 +468,10 @@ function applyMoveQuietly(fs: FibredSurface, move: Move, hooks: MoveHooks = {}):
       return keepFlags(fs, surface);
     }
     case "edit map":
-      updateMap(fs, move.text, move.mode);
+      updateMap(fs, move.text, move.mode, move.name);
+      return fs;
+    case "rename map":
+      fs.mapName = move.name;
       return fs;
     case "rename strip":
       renameStrip(fs, strip(fs, move.strip).edge, move.name);
@@ -487,6 +500,7 @@ export function removeAllValenceTwoJunctions(fs: FibredSurface): void {
 
 /** The flags that describe the surface rather than the state carry over to a new fibred surface. */
 function keepFlags(from: FibredSurface, to: FibredSurface): FibredSurface {
+  to.mapName = from.mapName;
   to.isClosed = from.isClosed;
   to.legacyNames = from.legacyNames;
   to.legacyPeripheralNames = from.legacyPeripheralNames;

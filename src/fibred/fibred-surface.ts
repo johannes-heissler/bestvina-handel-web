@@ -48,6 +48,11 @@ export class FibredSurface {
    * The peripheral subgraph P. Its vertices have valence 2 in P, and g acts on P as a graph automorphism.
    */
   readonly peripheral: Set<Edge>;
+  /**
+   * The name of the mapping class g represents, e.g. "D_b ∘ D_a ∘ h" (undefined if unknown). The moves of the
+   * algorithm keep it, since they don't change the mapping class; editing the map composes it (see `map-editing.ts`).
+   */
+  mapName: string | undefined = undefined;
   /** Set when the user chose to continue although the map is reducible. */
   ignoreReducible = false;
   /** Set when the user chose to continue although the peripheral subgraph doesn't fulfil its definition. */
@@ -131,6 +136,7 @@ export class FibredSurface {
       mu: this.mu.copy(graphCopy, undefined),
       peripheral: [...this.peripheral].map((e) => graphCopy.edgeMap.get(e) as Edge),
     });
+    result.mapName = this.mapName;
     result.ignoreReducible = this.ignoreReducible;
     result.ignorePeriphery = this.ignorePeriphery;
     result.isTrainTrack = this.isTrainTrack; // the C# Copy() forgot this flag

@@ -68,7 +68,18 @@ export const TORUS_2_GENERATORS: GeneratingSet = {
   ],
 };
 
-/** The maps of a generating set and their inverses, in that order (the list a random mapping class draws from). */
+/**
+ * The maps of a generating set and their inverses with their names ("D_a", "D_a⁻¹"), in that order (the list a random
+ * mapping class draws from).
+ */
+export function namedMapsAndInverses(set: GeneratingSet): { map: string; name: string }[] {
+  return set.generators.flatMap((g) => [
+    { map: g.map, name: g.name },
+    { map: g.inverse, name: `${g.name}⁻¹` },
+  ]);
+}
+
+/** The maps of a generating set and their inverses, in that order. */
 export function mapsAndInverses(set: GeneratingSet): string[] {
-  return set.generators.flatMap((g) => [g.map, g.inverse]);
+  return namedMapsAndInverses(set).map((m) => m.map);
 }

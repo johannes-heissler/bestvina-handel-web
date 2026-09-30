@@ -31,18 +31,22 @@
   let editing = $state(false);
   let text = $state("");
   let mode = $state<MapUpdateMode>("replace");
+  /** The name of the map entered (composed into the name of g). */
+  let name = $state("");
   let strip = $state("");
   let newName = $state("");
 
   function edit() {
-    text = mode === "replace" ? asText : "";
+    changeMode();
     editing = true;
   }
   function changeMode() {
     text = mode === "replace" ? asText : "";
+    name = mode === "replace" ? (surface?.mapName ?? "") : "";
   }
   function apply() {
-    app.apply({ kind: "edit map", text, mode });
+    const trimmed = name.trim();
+    app.apply({ kind: "edit map", text, mode, ...(trimmed && { name: trimmed }) });
     if (!app.error) editing = false;
   }
   // The generators of the example the session started from (written in the strips of its starting graph).
@@ -65,8 +69,9 @@
       ? new Map(generators.generators.flatMap((g) => [g.map, g.inverse]).map((map) => [map, readable(map)]))
       : new Map<string, boolean>(),
   );
-  function insert(map: string) {
+  function insert(map: string, mapName: string) {
     text = map;
+    name = mapName;
   }
   /** "D_a" as D with the subscript a. */
   function nameParts(name: string): { base: string; subscript?: string } {
@@ -98,9 +103,13 @@
       </select>
     </div>
     <textarea rows="8" spellcheck="false" bind:value={text} aria-label="The map"></textarea>
+    <div class="buttons">
+      <input bind:value={name} placeholder="its name, e.g. D_a (optional)" size="24" aria-label="Name of the map" />
+    </div>
     <p class="hint">
       One strip per line: <code>a -&gt; a b</code>, <code>a ↦ a b</code> or <code>g(a) = a b</code>. Named paths
-      <code>ρ := a B</code> and conjugation <code>x°ρ</code> are allowed. Unmentioned strips are fixed.
+      <code>ρ := a B</code> and conjugation <code>x°ρ</code> are allowed. Unmentioned strips are fixed. With a name,
+      the name of g is composed (e.g. D<sub>a</sub> ∘ h); without one, g loses its name.
     </p>
     <div class="buttons">
       <button class="primary" onclick={apply}>Apply</button>
@@ -122,14 +131,14 @@
                 <button
                   disabled={!usable.get(generator.map)}
                   title={usable.get(generator.map) ? `Insert ${generator.map}` : "Its strips are not those of the current graph"}
-                  onclick={() => insert(generator.map)}>Insert</button
+                  onclick={() => insert(generator.map, generator.name)}>Insert</button
                 >
                 <button
                   disabled={!usable.get(generator.inverse)}
                   title={usable.get(generator.inverse)
                     ? `Insert the inverse, ${generator.inverse}`
                     : "Its strips are not those of the current graph"}
-                  onclick={() => insert(generator.inverse)}>Inverse</button
+                  onclick={() => insert(generator.inverse, `${generator.name}⁻¹`)}>Inverse</button
                 >
               </td>
             </tr>

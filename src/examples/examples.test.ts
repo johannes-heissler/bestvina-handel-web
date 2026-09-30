@@ -4,7 +4,7 @@ import { perronFrobenius } from "../fibred/perron-frobenius";
 import { autopilot, nextSuggestion } from "../fibred/suggestions";
 import { gallery } from "./gallery";
 import { initialFibredSurface, spineOf, topology, type SurfaceModel } from "./models";
-import { buildPreset, PRESETS, randomGenus2 } from "./presets";
+import { buildPreset, presetNamed, PRESETS, randomGenus2, randomTorus2 } from "./presets";
 
 const growth = (fs: FibredSurface) => perronFrobenius(fs, { essentialOnly: true }).growth;
 const polygon = (word: string, closed = false): SurfaceModel => ({
@@ -14,6 +14,24 @@ const polygon = (word: string, closed = false): SurfaceModel => ({
   word: word.split(" "),
   geometry: { kind: "ideal" },
   closed,
+});
+
+describe("names of the maps", () => {
+  it("every preset names its map", () => {
+    for (const preset of PRESETS) expect(buildPreset(preset).mapName, preset.name).toBeTruthy();
+  });
+
+  it("names a random mapping class by its composition, the first map applied rightmost", () => {
+    const preset = randomTorus2(1, 3);
+    const names = preset.maps.map((m) => m.name);
+    expect(buildPreset(preset).mapName).toBe(names.reverse().join(" ∘ "));
+    expect(names.every((n) => /^(h|D_[abc])(⁻¹)?$/.test(n ?? ""))).toBe(true);
+  });
+
+  it("names the point push composition", () => {
+    const preset = presetNamed("Point push as a composition");
+    expect(preset && buildPreset(preset).mapName).toBe("P_δ ∘ P_β̄ ∘ P_γ ∘ P_α");
+  });
 });
 
 describe("models", () => {

@@ -7,7 +7,13 @@
 import type { FibredSurface } from "../fibred/fibred-surface";
 import { renameStrip, updateMap, type MapUpdateMode } from "../fibred/map-editing";
 import { applyMove, type Move } from "../fibred/move";
-import { type GeneratingSet, GENUS_2_GENERATORS, mapsAndInverses, TORUS_2_GENERATORS } from "./generators";
+import {
+  type GeneratingSet,
+  GENUS_2_GENERATORS,
+  mapsAndInverses,
+  namedMapsAndInverses,
+  TORUS_2_GENERATORS,
+} from "./generators";
 import { type FibredSurfaceOptions, initialFibredSurface, type SurfaceModel } from "./models";
 
 export interface Preset {
@@ -19,8 +25,8 @@ export interface Preset {
   readonly setup?: readonly Move[];
   /** Strip names changed after the setup (applied at once, so swaps work). */
   readonly renames?: Readonly<Record<string, string>>;
-  /** The map, as one or several texts applied in order. */
-  readonly maps: readonly { readonly text: string; readonly mode: MapUpdateMode }[];
+  /** The map, as one or several texts applied in order, each with its name (composed into the name of g). */
+  readonly maps: readonly { readonly text: string; readonly mode: MapUpdateMode; readonly name?: string }[];
   /** Generators of the mapping class group in the strips of the starting graph, suggested in the map editor. */
   readonly generators?: GeneratingSet;
 }
@@ -37,7 +43,7 @@ export function buildPreset(preset: Preset): FibredSurface {
   });
   edges.forEach((e, i) => (e.name = `__${i}`)); // free the names first
   edges.forEach((e, i) => renameStrip(fs, e, (renames[i] as [string, string])[1]));
-  for (const { text, mode } of preset.maps) updateMap(fs, text, mode);
+  for (const { text, mode, name } of preset.maps) updateMap(fs, text, mode, name);
   return fs;
 }
 
@@ -49,7 +55,7 @@ const polygon = (word: string, closed = false): SurfaceModel => ({
   geometry: closed ? { kind: "compact" } : { kind: "ideal" },
   closed,
 });
-const replace = (text: string) => [{ text, mode: "replace" as const }];
+const replace = (text: string, name: string) => [{ text, mode: "replace" as const, name }];
 
 /** The genus-2 setup of Bestvina–Handel's example 6.1 (c and d reversed and swapped, as in the paper). */
 const bh61Options: FibredSurfaceOptions = { reversed: ["c", "d"], names: { c: "d", d: "c" } };
@@ -98,16 +104,16 @@ export const RANDOM_PRESETS: Readonly<Record<string, (seed: number) => Preset>> 
   "Random mapping class of the twice-punctured torus": randomTorus2,
 };
 
-/** A preset composing `count` maps (or inverses) drawn from its generators. */
+/** A preset composing `count` maps (or inverses) drawn from its generators; g is named by the composition. */
 function randomComposition(preset: Omit<Preset, "maps">, seed: number, count: number): Preset {
   const random = mulberry32(seed);
-  const maps = mapsAndInverses(preset.generators as GeneratingSet);
+  const maps = namedMapsAndInverses(preset.generators as GeneratingSet);
   return {
     ...preset,
-    maps: Array.from({ length: count }, () => ({
-      text: maps[Math.floor(random() * maps.length)] as string,
-      mode: "postcompose" as const,
-    })),
+    maps: Array.from({ length: count }, () => {
+      const { map, name } = maps[Math.floor(random() * maps.length)] as { map: string; name: string };
+      return { text: map, mode: "postcompose" as const, name };
+    }),
   };
 }
 
@@ -130,7 +136,7 @@ export const PRESETS: readonly Preset[] = [
     name: "Anosov map of the torus",
     description: "a ↦ a b, b ↦ b a b on the once-punctured torus: pseudo-Anosov with λ = φ² ≈ 2.618.",
     model: polygon("a b A B"),
-    maps: replace("a -> a b, b -> b a b"),
+    maps: replace("a -> a b, b -> b a b", "Anosov map"),
   },
   randomTorus2(1),
   {
@@ -138,14 +144,14 @@ export const PRESETS: readonly Preset[] = [
     description:
       "The Anosov map on one handle and a Dehn twist on the other: reducible along the curve between the handles.",
     model: polygon("a b A B c d C D"),
-    maps: replace("a -> a B, b -> b A b, c -> c d"),
+    maps: replace("a -> a B, b -> b A b, c -> c d", "Anosov map ⊔ Dehn twist"),
   },
   {
     name: "Bestvina–Handel example 6.1",
     description: "A pseudo-Anosov map of the once-punctured genus-2 surface, from Bestvina–Handel's paper.",
     model: polygon("a b A B c d C D"),
     options: bh61Options,
-    maps: replace("a -> a B A b D C A, b -> a c d B a b c d B, c -> c c d B, d -> b c d B"),
+    maps: replace("a -> a B A b D C A, b -> a c d B a b c d B, c -> c c d B, d -> b c d B", "BH 6.1"),
     generators: GENUS_2_GENERATORS,
   },
   {
@@ -156,7 +162,7 @@ export const PRESETS: readonly Preset[] = [
     options: { peripheral: 3 },
     setup: [{ kind: "collapse invariant subforest", strips: ["a"] }],
     renames: { b: "a", γ: "α", α: "β", β: "γ" },
-    maps: replace("a -> β c γ C a, c -> β c γ C a α A c Γ C β c γ C a α A c Γ"),
+    maps: replace("a -> β c γ C a, c -> β c γ C a α A c Γ C β c γ C a α A c Γ", "BH 6.2"),
   },
   {
     name: "Bestvina–Handel example 6.3",
@@ -175,7 +181,7 @@ export const PRESETS: readonly Preset[] = [
       spine: "rose",
       basePoint: [0, 1],
     },
-    maps: replace("a -> b, b -> c, c -> d, d -> A D C B"),
+    maps: replace("a -> b, b -> c, c -> d, d -> A D C B", "BH 6.3"),
   },
   {
     name: "Point push",
@@ -184,6 +190,7 @@ export const PRESETS: readonly Preset[] = [
     options: { reversed: ["a", "b"] },
     maps: replace(
       "ρ := D C d A b a B c\nd ↦ d ρ\nb ↦ a°Ρ b\nc ↦ c (d ρ C a)°ρ\na ↦ a (Ρ D c d ρ (C a )°ρ d ρ C a)°ρ",
+      "push along ρ",
     ),
   },
   {
@@ -191,12 +198,12 @@ export const PRESETS: readonly Preset[] = [
     description: "The same kind of point push as a composition of four pushes along α, γ, β̄, δ.",
     model: pointPushModel,
     options: { reversed: ["a", "b"] },
-    maps: ["a ↦ b a B c D C d", "c ↦ d A b a B c D", "b ↦ a D c d C b A", "d ↦ C d A b a B c"].map(
-      (text) => ({
-        text,
-        mode: "postcompose" as const,
-      }),
-    ),
+    maps: [
+      { text: "a ↦ b a B c D C d", name: "P_α" },
+      { text: "c ↦ d A b a B c D", name: "P_γ" },
+      { text: "b ↦ a D c d C b A", name: "P_β̄" },
+      { text: "d ↦ C d A b a B c", name: "P_δ" },
+    ].map((map) => ({ ...map, mode: "postcompose" as const })),
   },
   randomGenus2(1),
   {
@@ -213,6 +220,7 @@ export const PRESETS: readonly Preset[] = [
     },
     maps: replace(
       "b -> K Y b X C B y Z d x c, z -> Z d C X D, x -> B y Z d, d -> Y b X C, c -> x c x, k -> z Y, y -> a, a -> K",
+      "closed genus-2 map",
     ),
   },
   {
@@ -226,7 +234,7 @@ export const PRESETS: readonly Preset[] = [
       boundaryWords: ["a b A B s p S".split(" "), ["P"]],
     },
     options: { peripheralStrips: ["p"] },
-    maps: replace("a -> a b, b -> b a b, s -> a b A B s p"),
+    maps: replace("a -> a b, b -> b a b, s -> a b A B s p", "Anosov map, twisted stem"),
   },
   {
     name: "Swapped handles",
@@ -237,7 +245,7 @@ export const PRESETS: readonly Preset[] = [
       description: "Two roses joined by a strip.",
       boundaryWords: ["a b A B e c d C D E".split(" ")],
     },
-    maps: replace("a -> c, b -> d, c -> a b, d -> b a b, e -> E"),
+    maps: replace("a -> c, b -> d, c -> a b, d -> b a b, e -> E", "handle swap"),
   },
 ];
 
@@ -250,7 +258,7 @@ export const LEGACY_PRESETS: readonly Preset[] = [
     name: "Half twist",
     description: "The half twist on the torus with two punctures (C# layout with a split side, b reversed).",
     ...twicePuncturedTorus(),
-    maps: replace("a -> c A b c B"),
+    maps: replace("a -> c A b c B", "h"),
     generators: TORUS_2_GENERATORS,
   },
 ];

@@ -63,12 +63,16 @@ export function describeMove(move: Move): Text {
       ];
     case "replace puncture by singularity":
       return ["Fill the puncture at ", { junction: move.junction }];
-    case "edit map":
+    case "edit map": {
+      const map = move.name ?? "a map";
       return [
         move.mode === "replace"
-          ? "Edit the map"
-          : `${move.mode === "postcompose" ? "Apply a map after g" : "Apply a map before g"}`,
+          ? `Edit the map${move.name === undefined ? "" : ` to ${move.name}`}`
+          : `${move.mode === "postcompose" ? `Apply ${map} after g` : `Apply ${map} before g`}`,
       ];
+    }
+    case "rename map":
+      return [move.name === undefined ? "Remove the name of the map" : `Rename the map to ${move.name}`];
     case "rename strip":
       return ["Rename ", { strip: move.strip }, " to ", { strip: move.name }];
     case "rename junction":

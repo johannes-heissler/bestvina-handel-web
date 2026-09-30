@@ -22,13 +22,42 @@ export type MapUpdateMode = "replace" | "postcompose" | "precompose";
  * conjugation). The new g is not checked here; call `checkIntegrity` to see whether it is a homotopy equivalence
  * that preserves the boundary words.
  *
+ * The name of g changes with it: `name` is the name of h (e.g. "D_a"); without one, the new g has no name.
+ *
  * @throws ParseError for unreadable text, Error if h is not continuous.
  */
-export function updateMap(fs: FibredSurface, text: string, mode: MapUpdateMode = "replace"): void {
+export function updateMap(
+  fs: FibredSurface,
+  text: string,
+  mode: MapUpdateMode = "replace",
+  name?: string,
+): void {
   const h = CombinatorialMap.fromEdgeImages(fs.graph, fs.graph, parseMap(text, fs.graph).images);
   const result = mode === "replace" ? h : mode === "postcompose" ? h.after(fs.g) : fs.g.after(h);
   for (const v of fs.graph.vertices) fs.g.setVertexImage(v, result.vertexImage(v));
   for (const e of fs.graph.edges) fs.g.setImage(e.forward, result.image(e.forward));
+  fs.mapName =
+    name === undefined || (mode !== "replace" && fs.mapName === undefined)
+      ? undefined
+      : mode === "replace"
+        ? name
+        : mode === "postcompose"
+          ? composeMapNames(name, fs.mapName as string)
+          : composeMapNames(fs.mapName as string, name);
+}
+
+/** The name of the identity (the map of a new fibred surface); composing with it leaves a name unchanged. */
+export const IDENTITY_NAME = "id";
+
+/**
+ * The name of f ∘ h, from the names of f and h: "D_b ∘ D_a". Names with spaces that are not compositions themselves
+ * (e.g. "Anosov map") are put in parentheses.
+ */
+export function composeMapNames(f: string, h: string): string {
+  if (f === IDENTITY_NAME) return h;
+  if (h === IDENTITY_NAME) return f;
+  const factor = (name: string) => (/\s/.test(name) && !name.includes(" ∘ ") ? `(${name})` : name);
+  return `${factor(f)} ∘ ${factor(h)}`;
 }
 
 /**

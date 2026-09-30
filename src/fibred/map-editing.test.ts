@@ -1,11 +1,42 @@
 import { describe, expect, it } from "vitest";
 import { FibredSurface } from "./fibred-surface";
-import { invertStrip, renameJunction, renameStrip, updateMap } from "./map-editing";
+import { composeMapNames, invertStrip, renameJunction, renameStrip, updateMap } from "./map-editing";
+import { applyMove } from "./move";
 
 const torus = (map = "") => FibredSurface.fromText([["a", "b", "A", "B"]], map);
 const images = (fs: FibredSurface) =>
   fs.graph.edges.map((e) => `${e.name}↦${fs.g.image(e.forward)}`).join(", ");
 const edge = (fs: FibredSurface, name: string) => fs.graph.edges.find((e) => e.name === name)!;
+
+describe("the name of g", () => {
+  it("composes names; the identity drops out, and names with spaces get parentheses", () => {
+    expect(composeMapNames("D_a", "h")).toBe("D_a ∘ h");
+    expect(composeMapNames("id", "h")).toBe("h");
+    expect(composeMapNames("D_b ∘ D_a", "h")).toBe("D_b ∘ D_a ∘ h");
+    expect(composeMapNames("D_a", "Anosov map")).toBe("D_a ∘ (Anosov map)");
+  });
+
+  it("follows editing the map; a map without a name makes g unnamed", () => {
+    const fs = torus("a -> a b");
+    updateMap(fs, "a -> a b", "replace", "f");
+    updateMap(fs, "b -> b a", "postcompose", "t");
+    expect(fs.mapName).toBe("t ∘ f");
+    updateMap(fs, "b -> b A", "precompose", "t⁻¹");
+    expect(fs.mapName).toBe("t ∘ f ∘ t⁻¹");
+    updateMap(fs, "b -> b a", "postcompose");
+    expect(fs.mapName).toBeUndefined();
+    updateMap(fs, "b -> b a", "postcompose", "t"); // still unknown
+    expect(fs.mapName).toBeUndefined();
+  });
+
+  it("can be renamed by a move, and copies keep it", () => {
+    const fs = torus("a -> a b");
+    applyMove(fs, { kind: "rename map", name: "f" });
+    expect(fs.copy().mapName).toBe("f");
+    applyMove(fs, { kind: "rename map" });
+    expect(fs.mapName).toBeUndefined();
+  });
+});
 
 describe("updateMap", () => {
   it("replaces g; unmentioned strips are fixed", () => {

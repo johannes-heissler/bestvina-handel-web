@@ -21,6 +21,7 @@ import { fromBoundaryWords, fromStars } from "../graph/from-boundary-words";
 import { invertName, isForwardName } from "../graph/names";
 import type { Edge, OrientedEdge, RibbonGraph, Vertex } from "../graph/ribbon-graph";
 import { FibredSurface } from "../fibred/fibred-surface";
+import { IDENTITY_NAME } from "../fibred/map-editing";
 import { EDGE_COLORS } from "../fibred/names-and-colors";
 
 export type Point2 = readonly [number, number];
@@ -204,7 +205,7 @@ export interface FibredSurfaceOptions extends SpineNames {
 
 /**
  * The fibred surface G = G₀ with μ = the identity (a copy of G₀ mapping onto it), g = the identity, and a peripheral
- * lasso for each chosen puncture. The map is then set with `updateMap`.
+ * lasso for each chosen puncture. The map (and its name) is then set with `updateMap`.
  */
 export function initialFibredSurface(model: SurfaceModel, options: FibredSurfaceOptions = {}): FibredSurface {
   const spine = spineOf(model, options);
@@ -215,6 +216,7 @@ export function initialFibredSurface(model: SurfaceModel, options: FibredSurface
   for (const [v, w] of copy.vertexMap) mu.setVertexImage(w, v);
   for (const e of g0.edges) mu.setImage(copy.orient(e.forward), EdgePath.of(e.forward));
   const fs = new FibredSurface({ graph, g: CombinatorialMap.identity(graph), mu });
+  fs.mapName = IDENTITY_NAME;
   fs.isClosed = isClosedModel(model);
   for (const name of options.peripheralStrips ?? []) {
     const e = graph.edges.find((x) => x.name === name);
