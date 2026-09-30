@@ -331,19 +331,19 @@ function nextStep(fs: FibredSurface, context: SuggestionContext): Suggestion {
       order,
     });
 
-  // The peripheral subgraph must fulfil its definition (with the weaker condition on g; see periphery.ts).
+  // The peripheral subgraph must fulfil its definition (with the weaker condition on g; see periphery.ts). While the
+  // graph admits no peripheral subgraph (e.g. the rose, where the boundary words share the junction), the algorithm
+  // continues with P as it is (the State panel warns); a later graph may admit one, which is then suggested.
   if (!fs.ignorePeriphery) {
     const problems = peripheryProblems(fs);
-    if (problems.length > 0) {
-      const candidates = peripheryCandidates(fs);
+    const candidates = problems.length > 0 ? peripheryCandidates(fs) : [];
+    if (candidates.length > 0) {
       return {
         kind: "peripheral subgraph",
         description: [
           "The peripheral subgraph P doesn't fulfil its definition. ",
           problems.join(" "),
-          candidates.length > 0
-            ? " The possible peripheral subgraphs: the circles around the punctures of all orbits but one, which is essential (the thesis, remark under the definition of P)."
-            : " There is no possible peripheral subgraph: for no choice of the essential orbit do the boundary words of the other punctures form disjoint circles that g maps into themselves. (When boundary words of one orbit share junctions, f is usually reducible.)",
+          " The possible peripheral subgraphs: the circles around the punctures of all orbits but one, which is essential (the thesis, remark under the definition of P).",
         ],
         options: [
           ...candidates.map((c) => ({

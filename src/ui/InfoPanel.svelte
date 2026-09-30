@@ -3,7 +3,7 @@
   import { topology } from "../examples/models";
   import { perronFrobenius } from "../fibred/perron-frobenius";
   import { pieceTopology } from "../session/analysis";
-  import { peripheryProblems } from "../fibred/periphery";
+  import { peripheryCandidates, peripheryProblems } from "../fibred/periphery";
   import { app } from "./state.svelte";
 
   const info = $derived.by(() => {
@@ -33,6 +33,8 @@
       piece: pieceTopology(surface),
       periphery: peripheryProblems(surface),
       ignored: surface.ignorePeriphery,
+      /** Whether some choice of P would fulfil the definition (then the algorithm suggests it, unless ignored). */
+      possible: peripheryCandidates(surface).length > 0,
     };
   });
 </script>
@@ -43,6 +45,13 @@
     <div class="warning-box" role="alert">
       <strong>The peripheral subgraph P is inconsistent{info.ignored ? " (ignored)" : ""}.</strong>
       {info.periphery.join(" ")}
+      {#if info.ignored}
+        You chose to continue with P as it is: convergence and correctness of the algorithm are not guaranteed.
+      {:else if !info.possible}
+        No peripheral subgraph exists for this graph: for no choice of the essential orbit do the boundary words of the
+        other punctures form disjoint circles that g maps into themselves. The algorithm continues with P as it is, so
+        convergence and correctness are not guaranteed; as soon as a graph admits a peripheral subgraph, it is suggested.
+      {/if}
     </div>
   {/if}
   {#if info}
