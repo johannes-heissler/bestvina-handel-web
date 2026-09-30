@@ -266,8 +266,10 @@
                 <TextView text={option.label} /></button
               >
             {/if}
-            {#if option.details}<div class="hint option-details"><TextView text={option.details} /></div>{/if}
+            <!-- The places of the inefficiencies behind a fold are long lists: they go into its opened menu. -->
+            {#if option.details && suggestion.kind !== "fold"}<div class="hint option-details"><TextView text={option.details} /></div>{/if}
             {#if i === focused && (open || suggestion.multiple)}
+              {#if option.details && suggestion.kind === "fold"}<div class="hint option-details"><TextView text={option.details} /></div>{/if}
               {#if option.warning}<div class="note option-warning">⚠ {option.warning}</div>{/if}
               {#if choices === undefined}
                 <p class="note choices-note">Computing the choices…</p>
