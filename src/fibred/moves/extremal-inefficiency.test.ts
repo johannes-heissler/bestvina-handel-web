@@ -12,6 +12,7 @@ const LINK =
 describe("gatewise extremal junctions of valence 2", () => {
   it("are inefficiencies, and the follow-up of the last fold is marked by its place", async () => {
     const { session } = Session.fromFile((await decodeSession("s=" + LINK)) ?? expect.fail("no session"));
+    session.disabled = new Set(["move vertices"]); // (these tests are about folds and the bookkeeping steps)
     const fs = session.current.surface;
     expect(session.current.followUp?.point).toEqual({ strip: "b", index: 0 });
 

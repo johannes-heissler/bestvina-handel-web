@@ -162,3 +162,33 @@ uses the signed lengths of the pieces in P, so backtracking there is fine (teste
   out with the warning that convergence and correctness are not guaranteed, as is "Ignore and continue" at a
   reducible map now. The autopilot stops at the suggestion.
 - The summary of a move mentions when P changed.
+
+## Update: moving vertices as a step; switching moves off; no valence-1 step
+
+- **Moving vertices** is its own step (kind "move vertices"), directly after absorbing into the periphery: at every
+  junction v not on P (moving those would change the images of P), for every first strip a of the images at v, the move
+  g(v) ↦ end of a (images starting with a lose it, the others get ā in front), offered if λ after pulling tight is
+  smaller, the smallest first. It is an automatic step by default (the autopilot takes the first option, the least λ).
+- **Options** (formerly "Automatic steps"): besides the automatic kinds, the moves beyond the original algorithm can be
+  switched off: cutting along a singular leaf, reductions (reducing and splitting junctions along τ), moving vertices.
+  Switched off, their options are greyed out with a warning (`SuggestionContext.disabled`, `Session.disabled`), and
+  the autopilot stops at a greyed-out default. The step of moving vertices is then skipped, and its moves are shown
+  greyed out with the next suggestion.
+- **The valence-1 step is gone.** Once there are no invariant forests and g is tight, G has no junction of valence 1
+  (it would be extremal or its strip pretrivial). Checked on 1002 states of 90 runs: none. The move stays for old
+  sessions.
+
+### How much does moving vertices save? (all presets, 40 random mapping classes each of genus 2 and of the
+
+twice-punctured torus, run to the end with the default automatic steps, with and without it)
+
+|                                     | moves with / without             | single folds with / without | time with / without |
+| ----------------------------------- | -------------------------------- | --------------------------- | ------------------- |
+| BH 6.1                              | 17 / 20                          | 5 / 16                      | 58 / 55 ms          |
+| Point push                          | 8 / 9                            | 6 / 7                       | 68 / 111 ms         |
+| random genus 2 (mean)               | 7.9 / 6.8 (from −13 to +8 saved) | 3.2 / 4.8 (−1 to +9 saved)  | 15 / 16 ms          |
+| random twice-punctured torus (mean) | 4.8 / 4.7 (−13 to +5 saved)      | 1.6 / 2.8 (0 to +9 saved)   | 5 / 7 ms            |
+
+All runs end with the same result and λ. Moving vertices saves about a third of the folds, but greedily it takes many
+small steps (e.g. λ 22.86 → 22.69 → 22.47 → …, where one fold goes from 21.2 to 17.5), so the number of moves is about
+the same on average, and sometimes much larger (+13).

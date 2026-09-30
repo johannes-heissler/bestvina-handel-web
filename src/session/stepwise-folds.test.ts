@@ -10,7 +10,7 @@ const LINK =
 const bookkeeping = new Set<SuggestionKind>([
   "collapse invariant subforest",
   "pull tight",
-  "remove valence-1 junction",
+  "move vertices",
   "absorb into periphery",
   "remove valence-2 junctions",
 ]);
@@ -18,6 +18,7 @@ const bookkeeping = new Set<SuggestionKind>([
 describe("folding step by step with the automatic steps in between", () => {
   it("doesn't undo a fold by removing the junction of valence 2 it created, and finishes", async () => {
     const { session } = Session.fromFile((await decodeSession(LINK))!);
+    session.disabled = new Set(["move vertices"]); // (these tests are about folds and the bookkeeping steps)
     let steps = 0;
     for (; steps < 20 && session.suggestion().kind !== "finished"; steps++) {
       session.apply(session.suggestion().options[0]!.move);
@@ -29,6 +30,7 @@ describe("folding step by step with the automatic steps in between", () => {
 
   it("explains the fold step by step, including the Case 2", async () => {
     const { session } = Session.fromFile((await decodeSession(LINK))!);
+    session.disabled = new Set(["move vertices"]); // (these tests are about folds and the bookkeeping steps)
     const node = session.apply(session.suggestion().options[0]!.move);
     const text = (node.steps ?? []).map(plainText);
     expect(text[0]).toMatch(/of order 2/);

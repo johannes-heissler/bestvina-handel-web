@@ -9,10 +9,13 @@ import { autopilot, combine, nextSuggestion, plainText, variants } from "./sugge
 const φ = (1 + Math.sqrt(5)) / 2;
 const growth = (fs: FibredSurface) => perronFrobenius(fs, { essentialOnly: true }).growth;
 
+/** (These tests are about the other steps.) */
+const NO_VERTEX_MOVES = { disabled: new Set(["move vertices" as const]) };
+
 describe("nextSuggestion", () => {
   it("suggests pulling tight, with 'all' first and one option per turning strip", () => {
     const fs = FibredSurface.fromText([["a", "b", "A", "B"]], "a -> a b B b, b -> b a b");
-    const s = nextSuggestion(fs);
+    const s = nextSuggestion(fs, NO_VERTEX_MOVES);
     expect(s.kind).toBe("pull tight");
     expect(s.multiple).toBe(true);
     expect(s.options[0]!.move).toEqual({ kind: "pull tight" });
@@ -20,7 +23,7 @@ describe("nextSuggestion", () => {
   });
 
   it("lists folds by the order of the inefficiencies behind them, as moves that refer to strips by name", () => {
-    const s = nextSuggestion(conjugatedTorusAnosov());
+    const s = nextSuggestion(conjugatedTorusAnosov(), NO_VERTEX_MOVES);
     expect(s.kind).toBe("fold");
     expect(plainText(s.options[0]!.label)).toMatch(/^Fold .* at .*: order \d+, \d+ places?/);
     const ratings = s.options.map((o) => o.rating!);
@@ -30,7 +33,7 @@ describe("nextSuggestion", () => {
 
   it("offers the reductions and 'ignore' at a reducible map", () => {
     const fs = FibredSurface.fromText([["a", "b", "A", "B", "c", "d", "C", "D"]], "a -> a b, b -> b a b");
-    const s = nextSuggestion(fs);
+    const s = nextSuggestion(fs, NO_VERTEX_MOVES);
     expect(s.kind).toBe("reducible");
     expect(s.classification?.kind).toBe("reducible");
     const regular = s.options.filter((o) => !o.discouraged); // (splitting along τ and ignoring are greyed out)
@@ -72,7 +75,7 @@ describe("applyMove", () => {
     const fs = conjugatedTorusAnosov();
     const before = fs.toString();
     const copy = fs.copy();
-    applyMove(copy, nextSuggestion(fs).options[0]!.move);
+    applyMove(copy, nextSuggestion(fs, NO_VERTEX_MOVES).options[0]!.move);
     expect(fs.toString()).toBe(before);
     expect(copy.checkIntegrity()).toEqual([]);
     expect(copy.toString()).not.toBe(before);
@@ -101,7 +104,7 @@ describe("combine", () => {
 describe("variants", () => {
   it("lists the fold options of an inefficiency step, rated by side crossings, each applicable", () => {
     const fs = conjugatedTorusAnosov();
-    const move = nextSuggestion(fs).options[0]!.move;
+    const move = nextSuggestion(fs, NO_VERTEX_MOVES).options[0]!.move;
     const options = variants(fs, move).filter((o) => o.move.kind === "fold");
     expect(options.length).toBeGreaterThan(0);
     const ratings = options.map((o) => o.rating!);
@@ -116,7 +119,7 @@ describe("variants", () => {
 
   it("lists the pieces of a reduction", () => {
     const fs = FibredSurface.fromText([["a", "b", "A", "B", "c", "d", "C", "D"]], "a -> a b, b -> b a b");
-    const reduceAB = nextSuggestion(fs).options.find(
+    const reduceAB = nextSuggestion(fs, NO_VERTEX_MOVES).options.find(
       (o) => o.move.kind === "reduce" && o.move.preserved.length === 2,
     )!.move;
     const pieces = variants(fs, reduceAB);
@@ -132,7 +135,7 @@ describe("variants", () => {
 
   it("offers the centres of a collapse and the strip to remove at a valence-2 junction", () => {
     const fs = FibredSurface.fromText([["x", "y", "b", "Y", "X", "B"]], "x -> x y, y -> b, b -> b x y b");
-    const valence2 = nextSuggestion(fs);
+    const valence2 = nextSuggestion(fs, NO_VERTEX_MOVES);
     expect(valence2.kind).toBe("remove valence-2 junctions");
     const single = valence2.options[1]!.move;
     expect(variants(fs, single)).toHaveLength(2);

@@ -15,6 +15,7 @@ describe("the names that folds give", () => {
 
   it("keeps the name of the rest of a subdivided strip in new sessions", () => {
     const session = Session.create({ kind: "preset", preset: "Bestvina–Handel example 6.1" });
+    session.disabled = new Set(["move vertices"]); // (these tests are about folds and the bookkeeping steps)
     const fold = session.suggestion().options.find((o) => o.move.kind === "fold")!;
     const texts = session.preview(fold.move).steps.map((s) => plainText(s.text));
     expect(texts.some((t) => /the rest keeps the name \w+, the initial segment is called \w+₁/.test(t))).toBe(

@@ -5,7 +5,14 @@
   steps" follow by themselves (e.g. pulling tight). Going back and forth is in the history panel (`HistoryView`).
 -->
 <script lang="ts">
-  import { combine, type MoveOption, type SuggestionKind, type Text, variants } from "../fibred/suggestions";
+  import {
+    combine,
+    type MoveOption,
+    type OptionalMove,
+    type SuggestionKind,
+    type Text,
+    variants,
+  } from "../fibred/suggestions";
   import type { FibredSurface } from "../fibred/fibred-surface";
   import type { Preview } from "../session/session";
   import type { Motion } from "../fibred/narration";
@@ -16,12 +23,30 @@
   const KINDS: { kind: SuggestionKind; label: string }[] = [
     { kind: "collapse invariant subforest", label: "Collapse invariant forests" },
     { kind: "pull tight", label: "Pull tight" },
-    { kind: "remove valence-1 junction", label: "Valence-1 junctions" },
+    { kind: "move vertices", label: "Moving vertices (least λ)" },
     { kind: "remove valence-2 junctions", label: "Valence-2 junctions" },
     { kind: "absorb into periphery", label: "Absorb into the periphery" },
     { kind: "fold", label: "Folds" },
     { kind: "closed surface", label: "Closed surfaces (cut)" },
     { kind: "reducible", label: "Reduce (first piece)" },
+  ];
+
+  const OPTIONAL: { move: OptionalMove; label: string; title: string }[] = [
+    {
+      move: "cut",
+      label: "Cutting along a singular leaf (closed surfaces)",
+      title: "The closed-surface move of the thesis: replace the puncture by the orbit of a singularity",
+    },
+    {
+      move: "reduce",
+      label: "Reductions",
+      title: "Reducing along an invariant subgraph, and splitting junctions along the components of τ",
+    },
+    {
+      move: "move vertices",
+      label: "Moving vertices",
+      title: "Moving the image of a junction along the first strip of some of its images, when that lowers λ",
+    },
   ];
 
   const node = $derived.by(() => {
@@ -265,11 +290,19 @@
   {/if}
 
   <details class="automatic">
-    <summary>Automatic steps ({app.automatic.length})</summary>
+    <summary>Options</summary>
+    <h4>Automatic steps ({app.automatic.length})</h4>
     <p class="hint">After each step you apply, steps of these kinds are done automatically; each is kept in the history.</p>
     <div class="checklist">
       {#each KINDS as { kind, label } (kind)}
         <label><input type="checkbox" checked={app.automatic.includes(kind)} onchange={() => toggleAutomatic(kind)} /> {label}</label>
+      {/each}
+    </div>
+    <h4>Moves beyond the original algorithm</h4>
+    <p class="hint">Switched off, their options are greyed out and never applied automatically.</p>
+    <div class="checklist">
+      {#each OPTIONAL as { move, label, title } (move)}
+        <label {title}><input type="checkbox" checked={!app.disabled.includes(move)} onchange={() => app.toggleMove(move)} /> {label}</label>
       {/each}
     </div>
   </details>

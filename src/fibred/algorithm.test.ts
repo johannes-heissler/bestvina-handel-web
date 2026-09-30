@@ -20,7 +20,8 @@ describe("runAlgorithm", () => {
     fs.onError = (message) => errors.push(message);
     const log = runAlgorithm(fs);
     expect(errors).toEqual([]);
-    expect(log).toContain("fold");
+    // (Moving the image of the junction back along a, undoing the conjugation, does it in one step; else folds.)
+    expect(log.some((kind) => kind === "fold" || kind === "move vertices")).toBe(true);
     expect(inefficiencies(fs)).toEqual([]);
     expect(growth(fs)).toBeCloseTo(φ * φ, 8);
   });

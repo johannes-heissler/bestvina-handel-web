@@ -7,7 +7,7 @@
 import type { FibredSurface } from "../fibred/fibred-surface";
 import type { Move } from "../fibred/move";
 import type { Motion } from "../fibred/narration";
-import type { SuggestionKind } from "../fibred/suggestions";
+import type { OptionalMove, SuggestionKind } from "../fibred/suggestions";
 import { type HistoryNode, type Preview, Session, type SessionFile, type Start } from "../session/session";
 import { encodeSession } from "../session/share";
 import { store } from "./storage";
@@ -32,16 +32,19 @@ export class AppState {
   automatic = $state<SuggestionKind[]>([
     "collapse invariant subforest",
     "pull tight",
-    "remove valence-1 junction",
+    "move vertices",
     "remove valence-2 junctions",
     "absorb into periphery",
   ]);
+  /** The moves beyond the original algorithm that are switched off (greyed out, not applied automatically). */
+  disabled = $state<OptionalMove[]>([]);
   /** Whether the panel with the algorithm is on the left. */
   sidebarLeft = $state(false);
 
   start(start: Start): void {
     this.run(() => {
       this.session = Session.create(start);
+      this.session.disabled = new Set(this.disabled);
       this.showStart = false;
     });
   }
@@ -50,6 +53,7 @@ export class AppState {
     this.run(() => {
       const { session, skipped } = Session.fromFile(file);
       this.session = session;
+      session.disabled = new Set(this.disabled);
       this.showStart = false;
       if (skipped > 0)
         this.message = `${skipped} saved moves couldn't be replayed with this version and were left out.`;
@@ -85,6 +89,15 @@ export class AppState {
       const stopped = this.session?.runAutopilot({ automatic });
       if (stopped && stopped.kind !== "finished") this.message = `The autopilot stopped: ${stopped.kind}.`;
     });
+  }
+
+  /** Switches a move beyond the original algorithm on or off. */
+  toggleMove(move: OptionalMove): void {
+    this.disabled = this.disabled.includes(move)
+      ? this.disabled.filter((m) => m !== move)
+      : [...this.disabled, move];
+    if (this.session) this.session.disabled = new Set(this.disabled);
+    this.version++;
   }
 
   /** Runs an action, shows its error, and saves afterwards. */

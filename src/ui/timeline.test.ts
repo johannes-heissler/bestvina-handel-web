@@ -12,6 +12,7 @@ const LINK =
 describe("the timeline of a move", () => {
   it("draws every moment of an isotopy, also through states that can't be laid out", async () => {
     const { session } = Session.fromFile((await decodeSession(LINK))!);
+    session.disabled = new Set(["move vertices"]); // (these tests are about folds and the bookkeeping steps)
     const choice = session
       .suggestion()
       .options.flatMap((o) => variants(session.current.surface, o.move))
@@ -29,6 +30,7 @@ describe("the timeline of a move", () => {
 describe("contracting strips as isotopies", () => {
   it("slides the junctions of a collapsed tree and of a removed valence-2 junction across the sides, drawably", () => {
     const session = Session.create({ kind: "preset", preset: "Bestvina–Handel example 6.1" });
+    session.disabled = new Set(["move vertices"]); // (these tests are about folds and the bookkeeping steps)
     const found = new Set<string>();
     for (let i = 0; i < 40 && found.size < 2; i++) {
       const s = session.suggestion();
@@ -63,6 +65,7 @@ describe("the strand order with a hairpin", () => {
   it("lays out the states of an isotopy that moves a junction of valence 2 across sides", async () => {
     const { strandOrder } = await import("../embedding/strand-order");
     const { session } = Session.fromFile((await decodeSession(LINK))!);
+    session.disabled = new Set(["move vertices"]); // (these tests are about folds and the bookkeeping steps)
     const choice = session
       .suggestion()
       .options.flatMap((o) => variants(session.current.surface, o.move))

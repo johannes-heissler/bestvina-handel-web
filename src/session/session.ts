@@ -14,6 +14,7 @@ import {
   autopilot,
   type AutopilotOptions,
   nextSuggestion,
+  type OptionalMove,
   type Suggestion,
   type SuggestionKind,
   type Text,
@@ -87,6 +88,8 @@ export class Session {
   current: HistoryNode;
   /** Increased on every change, so that the UI knows when to redraw. */
   version = 0;
+  /** The moves beyond the original algorithm that are switched off (greyed out, never applied automatically). */
+  disabled: ReadonlySet<OptionalMove> = new Set();
   private nextId = 0;
 
   private constructor(
@@ -108,7 +111,7 @@ export class Session {
 
   /** The suggestion at the current state. */
   suggestion(): Suggestion {
-    return nextSuggestion(this.current.surface, { followUp: this.current.followUp, shortcuts: true });
+    return nextSuggestion(this.current.surface, { followUp: this.current.followUp, disabled: this.disabled });
   }
 
   /**
@@ -141,6 +144,7 @@ export class Session {
     copy.onError = () => {};
     let node = this.current;
     const { stoppedAt } = autopilot(copy, {
+      disabled: this.disabled,
       ...options,
       ...(this.current.followUp && { followUp: this.current.followUp }),
       onStep: (move, surface, steps) => {
@@ -162,7 +166,7 @@ export class Session {
    */
   preview(move: Move, automatic: ReadonlySet<SuggestionKind> = new Set()): Preview {
     const node = this.current;
-    const key = JSON.stringify([move, [...automatic].sort()]);
+    const key = JSON.stringify([move, [...automatic].sort(), [...this.disabled].sort()]);
     let byKey = this.previews.get(node);
     if (byKey === undefined) this.previews.set(node, (byKey = new Map()));
     const cached = byKey.get(key);
@@ -191,6 +195,7 @@ export class Session {
         start.onError = () => {};
         autopilot(start, {
           automatic,
+          disabled: this.disabled,
           maxSteps: 50,
           ...(hint.followUp && { followUp: hint.followUp }),
           onStep: (m, surface, texts) => auto.push({ move: m, steps: texts, surface: surface.copy() }),

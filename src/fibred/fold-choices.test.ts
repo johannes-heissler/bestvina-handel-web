@@ -11,6 +11,7 @@ const LINK =
 describe("the choices of a fold", () => {
   it("show the inefficiency points of one image together, and only the fold choices near the best", async () => {
     const { session } = Session.fromFile((await decodeSession(LINK)) ?? expect.fail("no session"));
+    session.disabled = new Set(["move vertices"]); // (these tests are about folds and the bookkeeping steps)
     const option = session.suggestion().options[0] ?? expect.fail("no option");
     expect(plainText(option.details ?? [])).toContain("g(b) = a X B | B₁ | Z;");
 

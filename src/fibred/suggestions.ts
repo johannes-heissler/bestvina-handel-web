@@ -24,7 +24,7 @@ import { loosePositions, moveJunctionImage, pullTight } from "./moves/pull-tight
 import { reduce, type ReductionPiece } from "./moves/reduce";
 import { disconnectedJunctions, type SplitPiece, splitJunctions } from "./moves/split-junctions";
 import { finiteOrder, type ReductionCandidate, reductionCandidates } from "./moves/reducibility";
-import { valenceOneJunctions, valenceTwoJunctions } from "./moves/valence";
+import { valenceTwoJunctions } from "./moves/valence";
 import { EdgePoint } from "./edge-point";
 import { findGates } from "./gates";
 import { narrated, quietly } from "./narration";
@@ -81,7 +81,7 @@ export interface MoveOption {
 export type SuggestionKind =
   | "collapse invariant subforest"
   | "pull tight"
-  | "remove valence-1 junction"
+  | "move vertices"
   | "absorb into periphery"
   | "reducible"
   | "remove valence-2 junctions"
@@ -114,11 +114,51 @@ export interface Suggestion {
 export interface SuggestionContext {
   /** After a fold step: the inefficiency it followed and the strips of its next fold (see `MoveHooks.followUp`). */
   readonly followUp?: FollowUp | undefined;
-  /**
-   * Also offer the shortcuts that lower λ (moving the image of a junction with a single gate; each is tried on a copy,
-   * so only for the suggestions shown to the user, not for the autopilot).
-   */
-  readonly shortcuts?: boolean;
+  /** The moves beyond the original algorithm that are switched off: their options are greyed out. */
+  readonly disabled?: ReadonlySet<OptionalMove>;
+}
+
+/** The moves that are not in the original algorithm, which can be switched off in the options. */
+export type OptionalMove = "cut" | "reduce" | "move vertices";
+
+/** Why a switched-off move is greyed out. */
+const DISABLED_WARNING = "Switched off in the options (not a move of the original algorithm).";
+
+/** Which switchable group a move belongs to, if any. */
+function optionalMoveOf(move: Move): OptionalMove | undefined {
+  switch (move.kind) {
+    case "cut along a singular leaf":
+      return "cut";
+    case "reduce":
+    case "split junctions":
+      return "reduce";
+    case "move junction image":
+      return "move vertices";
+    default:
+      return undefined;
+  }
+}
+
+/** The suggestion with the options of switched-off moves greyed out. */
+function greyedOut(suggestion: Suggestion, context: SuggestionContext): Suggestion {
+  const disabled = context.disabled;
+  if (!disabled || disabled.size === 0) return suggestion;
+  const off = (o: MoveOption) => {
+    const group = optionalMoveOf(o.move);
+    return group !== undefined && disabled.has(group);
+  };
+  if (!suggestion.options.some(off)) return suggestion;
+  return {
+    ...suggestion,
+    options: suggestion.options.map((o) =>
+      off(o) ? { ...o, discouraged: true, warning: DISABLED_WARNING } : o,
+    ),
+  };
+}
+
+/** The options greyed out, with the warning that the move is switched off. */
+function switchedOff(options: readonly MoveOption[]): MoveOption[] {
+  return options.map((o) => ({ ...o, discouraged: true, warning: DISABLED_WARNING }));
 }
 
 /**
@@ -126,7 +166,7 @@ export interface SuggestionContext {
  * suggestion also offers splitting the junctions there, greyed out: the algorithm does that only at the end.
  */
 export function nextSuggestion(fs: FibredSurface, context: SuggestionContext = {}): Suggestion {
-  const suggestion = withShortcuts(fs, nextStep(fs, context), context);
+  const suggestion = greyedOut(withSwitchedOffVertexMoves(fs, nextStep(fs, context), context), context);
   if (suggestion.kind === "finished" || suggestion.kind === "disconnected train track" || fs.ignoreReducible)
     return suggestion;
   const disconnected = disconnectedJunctions(fs);
@@ -148,21 +188,30 @@ export function nextSuggestion(fs: FibredSurface, context: SuggestionContext = {
   };
 }
 
-/** The suggestion with the shortcuts that lower λ added (for single choices, while the algorithm isn't finished). */
-function withShortcuts(fs: FibredSurface, suggestion: Suggestion, context: SuggestionContext): Suggestion {
-  if (!context.shortcuts || suggestion.multiple || suggestion.kind === "finished") return suggestion;
-  const shortcuts = junctionImageShortcuts(fs);
-  return shortcuts.length === 0
+/**
+ * With moving vertices switched off, its step is skipped, and the moves that would lower λ are shown greyed out with the
+ * next suggestion (where one option is chosen).
+ */
+function withSwitchedOffVertexMoves(
+  fs: FibredSurface,
+  suggestion: Suggestion,
+  context: SuggestionContext,
+): Suggestion {
+  if (!context.disabled?.has("move vertices") || suggestion.multiple || suggestion.kind === "finished")
+    return suggestion;
+  const moves = vertexMoves(fs);
+  return moves.length === 0
     ? suggestion
-    : { ...suggestion, options: [...suggestion.options, ...shortcuts] };
+    : { ...suggestion, options: [...suggestion.options, ...switchedOff(moves)] };
 }
 
 /**
- * At each junction v with a single gate (gatewise extremal), moving g(v) along a strip a = Dg(e), e at v: every image
- * at v that starts with a loses it, the others get ā in front. Offered only if λ, after pulling tight, is smaller. (If
- * all images at v start with a, this is pulling tight, which the algorithm does anyway.)
+ * Moving vertices: at each junction v, moving g(v) along a strip a = Dg(e), e at v (a homotopy of g): every image at v
+ * that starts with a loses it, the others get ā in front. Only the moves after which λ, once pulled tight, is smaller,
+ * the smallest first. (If all images at v start with a, this is pulling tight, which the algorithm does before.) Not at
+ * junctions on the periphery P.
  */
-function junctionImageShortcuts(fs: FibredSurface): MoveOption[] {
+export function vertexMoves(fs: FibredSurface): MoveOption[] {
   const growth = (surface: FibredSurface) => {
     try {
       return perronFrobenius(surface, { essentialOnly: true }).growth;
@@ -175,9 +224,11 @@ function junctionImageShortcuts(fs: FibredSurface): MoveOption[] {
   const gateCount = new Map<Vertex, number>();
   for (const gate of findGates(fs.graph, fs.g)) gateCount.set(gate.at, (gateCount.get(gate.at) ?? 0) + 1);
   const options: MoveOption[] = [];
+  // Junctions on P are left out: moving them would change the images of P, on which g must act as an automorphism.
+  const onP = new Set([...fs.peripheral].flatMap((e) => [e.source, e.target]));
   for (const v of fs.graph.vertices) {
+    if (onP.has(v)) continue;
     const star = fs.graph.star(v);
-    if (gateCount.get(v) !== 1 || star.length < 2) continue;
     const firsts = [...new Set(star.map((e) => fs.g.image(e).first).filter((a) => a !== undefined))];
     if (firsts.length < 2) continue; // all alike: pulling tight
     for (const a of firsts) {
@@ -201,19 +252,18 @@ function junctionImageShortcuts(fs: FibredSurface): MoveOption[] {
       options.push({
         move: { kind: "move junction image", junction: v.name, along: a.name },
         label: [
-          "Shortcut: move the image of ",
+          "Move the image of ",
           { junction: v.name },
           " along ",
           { strip: a.name },
-          ` (${v.name} has a single gate): λ ${before.toFixed(4)} → ${after.toFixed(4)} after pulling tight`,
+          `${gateCount.get(v) === 1 ? ` (${v.name} has a single gate)` : ""}: λ ${before.toFixed(4)} → ${after.toFixed(4)} after pulling tight`,
         ],
         rating: after,
       });
     }
   }
-  return options;
+  return options.sort((p, q) => (p.rating as number) - (q.rating as number));
 }
-
 function nextStep(fs: FibredSurface, context: SuggestionContext): Suggestion {
   const forests = invariantSubforests(fs);
   if (forests.length > 0) {
@@ -250,18 +300,6 @@ function nextStep(fs: FibredSurface, context: SuggestionContext): Suggestion {
       multiple: true,
     };
 
-  const valenceOne = valenceOneJunctions(fs);
-  if (valenceOne.length > 0)
-    return {
-      kind: "remove valence-1 junction",
-      description: ["Junctions of valence 1 can be removed together with their strip."],
-      options: valenceOne.map((v) => ({
-        move: { kind: "remove valence-1 junction", junctions: [v.name] },
-        label: ["Remove ", { junction: v.name }],
-      })),
-      multiple: true,
-    };
-
   if (needsAbsorbing(fs))
     return {
       kind: "absorb into periphery",
@@ -271,6 +309,20 @@ function nextStep(fs: FibredSurface, context: SuggestionContext): Suggestion {
       options: [{ move: { kind: "absorb into periphery" }, label: ["Absorb into the periphery"] }],
       multiple: false,
     };
+
+  // Moving vertices (not in the original algorithm; with it switched off, see `withSwitchedOffVertexMoves`).
+  if (!context.disabled?.has("move vertices")) {
+    const moves = vertexMoves(fs);
+    if (moves.length > 0)
+      return {
+        kind: "move vertices",
+        description: [
+          "Moving the image of a junction along one of the first strips of its images (a homotopy of g: images that start with that strip lose it, the others get its inverse in front) lowers the growth λ. The first option lowers it most.",
+        ],
+        options: moves,
+        multiple: false,
+      };
+  }
 
   const order = finiteOrder(fs);
   if (order !== undefined)
@@ -912,7 +964,7 @@ function foldChoiceLabel(o: FoldOption, now: (x: OrientedEdge) => string): Text 
 export const DEFAULT_AUTOMATIC: ReadonlySet<SuggestionKind> = new Set<SuggestionKind>([
   "collapse invariant subforest",
   "pull tight",
-  "remove valence-1 junction",
+  "move vertices",
   "absorb into periphery",
   "remove valence-2 junctions",
   "fold",
@@ -920,6 +972,8 @@ export const DEFAULT_AUTOMATIC: ReadonlySet<SuggestionKind> = new Set<Suggestion
 ]);
 
 export interface AutopilotOptions {
+  /** The moves beyond the original algorithm that are switched off: the autopilot stops at them. */
+  readonly disabled?: ReadonlySet<OptionalMove>;
   /** The follow-up of the fold before the start (see `SuggestionContext`); bookkeeping steps keep it. */
   readonly followUp?: FollowUp;
   /** The suggestion kinds whose default is applied without asking; the autopilot stops at any other. */
@@ -950,8 +1004,14 @@ export function autopilot(fs: FibredSurface, options: AutopilotOptions = {}): Au
   const moves: Move[] = [];
   let surface = fs;
   let followUp = options.followUp;
-  let suggestion = nextSuggestion(surface, { followUp });
+  const context = (followUp: FollowUp | undefined): SuggestionContext => ({
+    followUp,
+    ...(options.disabled && { disabled: options.disabled }),
+  });
+  let suggestion = nextSuggestion(surface, context(followUp));
   while (automatic.has(suggestion.kind) && moves.length < maxSteps) {
+    // A default that is greyed out (a move switched off in the options) is left to the user.
+    if (suggestion.autopilotMove === undefined && suggestion.options[0]?.discouraged) break;
     const move = suggestion.autopilotMove ?? (suggestion.options[0] as MoveOption).move;
     // A fold starts a new follow-up (or ends it); the bookkeeping steps in between keep it.
     const folds = move.kind === "fold" || move.kind === "remove inefficiency";
@@ -963,7 +1023,7 @@ export function autopilot(fs: FibredSurface, options: AutopilotOptions = {}): Au
     const problems = surface.checkIntegrity();
     if (problems.length > 0) throw new Error(`After "${move.kind}":\n${problems.join("\n")}`);
     options.onStep?.(move, surface, done.steps);
-    suggestion = nextSuggestion(surface, { followUp });
+    suggestion = nextSuggestion(surface, context(followUp));
   }
   return { surface, moves, stoppedAt: suggestion };
 }

@@ -18,7 +18,7 @@ export type StepKind = Exclude<SuggestionKind, "reducible" | "closed surface" | 
 const STEP_KINDS: ReadonlySet<SuggestionKind> = new Set<StepKind>([
   "collapse invariant subforest",
   "pull tight",
-  "remove valence-1 junction",
+  "move vertices",
   "absorb into periphery",
   "remove valence-2 junctions",
   "fold",
