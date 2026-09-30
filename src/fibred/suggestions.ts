@@ -27,6 +27,7 @@ import { finiteOrder, type ReductionCandidate, reductionCandidates } from "./mov
 import { valenceOneJunctions, valenceTwoJunctions } from "./moves/valence";
 import { EdgePoint } from "./edge-point";
 import { narrated, quietly } from "./narration";
+import { peripheryCandidates, peripheryProblems } from "./periphery";
 import { perronFrobenius } from "./perron-frobenius";
 import { prongs } from "./singular-leaves";
 import { trainTrack } from "./train-track";
@@ -72,6 +73,8 @@ export interface MoveOption {
   readonly discouraged?: boolean;
   /** More about the option, shown under it (e.g. the inefficiency points behind a fold). */
   readonly details?: Text;
+  /** A warning shown with the option (e.g. that ignoring a problem may break the algorithm). */
+  readonly warning?: string;
 }
 
 export type SuggestionKind =
@@ -84,6 +87,7 @@ export type SuggestionKind =
   | "fold"
   | "closed surface"
   | "disconnected train track"
+  | "peripheral subgraph"
   | "finished";
 
 export interface Suggestion {
@@ -203,6 +207,41 @@ function nextStep(fs: FibredSurface, context: SuggestionContext): Suggestion {
       order,
     });
 
+  // The peripheral subgraph must fulfil its definition (with the weaker condition on g; see periphery.ts).
+  if (!fs.ignorePeriphery) {
+    const problems = peripheryProblems(fs);
+    if (problems.length > 0) {
+      const candidates = peripheryCandidates(fs);
+      return {
+        kind: "peripheral subgraph",
+        description: [
+          "The peripheral subgraph P doesn't fulfil its definition. ",
+          problems.join(" "),
+          candidates.length > 0
+            ? " The possible peripheral subgraphs: the circles around the punctures of all orbits but one, which is essential (the thesis, remark under the definition of P)."
+            : " There is no possible peripheral subgraph: for no choice of the essential orbit do the boundary words of the other punctures form disjoint circles that g maps into themselves. (When boundary words of one orbit share junctions, f is usually reducible.)",
+        ],
+        options: [
+          ...candidates.map((c) => ({
+            move: { kind: "set peripheral subgraph" as const, strips: names(c.edges) },
+            label: (c.edges.size === 0 ? ["P = ∅"] : ["P = ", ...strips(names(c.edges))]) as Text,
+            details: [
+              c.essential.length === 1 ? "Essential puncture: " : "Essential orbit: ",
+              c.essential.map(String).join("; "),
+            ] as Text,
+          })),
+          {
+            move: { kind: "ignore peripheral subgraph" as const },
+            label: ["Ignore and continue with P as it is"],
+            discouraged: true,
+            warning: IGNORE_WARNING,
+          },
+        ],
+        multiple: false,
+      };
+    }
+  }
+
   if (!fs.ignoreReducible) {
     const candidates = reductionCandidates(fs);
     if (candidates.length > 0)
@@ -218,7 +257,12 @@ function nextStep(fs: FibredSurface, context: SuggestionContext): Suggestion {
               ...(c.forest ? [" (an invariant forest with the components of the periphery it touches)"] : []),
             ] as Text,
           })),
-          { move: { kind: "ignore reducibility" }, label: ["Ignore and continue"] },
+          {
+            move: { kind: "ignore reducibility" },
+            label: ["Ignore and continue"],
+            discouraged: true,
+            warning: IGNORE_WARNING,
+          },
         ],
         multiple: false,
         classification: { kind: "reducible", candidates },
@@ -522,6 +566,9 @@ function placesText(fs: FibredSurface, places: readonly string[]): Text {
     ...described.flatMap((text, i) => [...(i === 0 ? [] : ["; "]), ...text]),
   ];
 }
+
+/** The warning on the options that ignore a problem the algorithm found. */
+const IGNORE_WARNING = "Convergence and correctness of the algorithm are not guaranteed.";
 
 function sameNames(a: readonly string[], b: readonly string[]): boolean {
   return a.length === b.length && [...a].sort().join(" ") === [...b].sort().join(" ");

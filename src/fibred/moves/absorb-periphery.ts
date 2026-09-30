@@ -25,6 +25,11 @@ const TOLERANCE = 1e-9;
 /** Whether the move has something to do: Q ≠ P, junctions of valence 2 on P, or strips leaving P that start into P. */
 export function needsAbsorbing(fs: FibredSurface): boolean {
   if (fs.peripheral.size === 0 || !isUnionOfCircles(fs)) return false;
+  // g maps P into P (the weaker condition of periphery.ts), but not as a graph automorphism: e.g. p ↦ p P p.
+  for (const e of fs.peripheral) {
+    const image = fs.g.image(e.forward);
+    if (image.length !== 1 || !fs.peripheral.has((image.first as OrientedEdge).edge)) return true;
+  }
   if (maximalInvariantSubgraphRetractingTo(fs, fs.peripheral).size > fs.peripheral.size) return true;
   const onP = new Set([...fs.peripheral].flatMap((e) => [e.source, e.target]));
   for (const v of onP) {

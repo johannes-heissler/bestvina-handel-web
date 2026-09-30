@@ -72,6 +72,17 @@ describe("absorbIntoPeriphery", () => {
     expect(outside.map(String)).toEqual(["a", "b"]);
   });
 
+  it("makes g an automorphism on P when it only wraps each circle once around its image", () => {
+    // p ↦ p P p runs around the circle once in total (with backtracking): the weaker condition of periphery.ts.
+    const fs = stem("a -> a b, b -> b a b, s -> a b A B s, p -> p P p");
+    expect(fs.checkIntegrity()).toEqual([]);
+    expect(needsAbsorbing(fs)).toBe(true);
+    absorbIntoPeriphery(fs);
+    expect(fs.checkIntegrity()).toEqual([]);
+    for (const e of fs.peripheral) expect(fs.g.image(e.forward).length).toBe(1);
+    expect(needsAbsorbing(fs)).toBe(false);
+  });
+
   describe("names", () => {
     it("keeps the names, colours and orientations of a circle that keeps its junctions", () => {
       const fs = stem(twisted);

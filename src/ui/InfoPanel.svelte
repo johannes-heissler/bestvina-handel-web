@@ -3,6 +3,7 @@
   import { topology } from "../examples/models";
   import { perronFrobenius } from "../fibred/perron-frobenius";
   import { pieceTopology } from "../session/analysis";
+  import { peripheryProblems } from "../fibred/periphery";
   import { app } from "./state.svelte";
 
   const info = $derived.by(() => {
@@ -30,12 +31,20 @@
       curves: surface.reductionCurves.map(String),
       closed: surface.isClosed,
       piece: pieceTopology(surface),
+      periphery: peripheryProblems(surface),
+      ignored: surface.ignorePeriphery,
     };
   });
 </script>
 
 <section class="panel">
   <h2>State</h2>
+  {#if info?.periphery.length}
+    <div class="warning-box" role="alert">
+      <strong>The peripheral subgraph P is inconsistent{info.ignored ? " (ignored)" : ""}.</strong>
+      {info.periphery.join(" ")}
+    </div>
+  {/if}
   {#if info}
     <dl>
       <dt>Result</dt>

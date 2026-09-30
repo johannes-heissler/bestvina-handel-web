@@ -75,6 +75,9 @@ export type Move =
       /** Index into the offered pieces. */ readonly piece?: number;
     }
   | { readonly kind: "ignore reducibility" }
+  /** Choose the peripheral subgraph P (strips by name). */
+  | { readonly kind: "set peripheral subgraph"; readonly strips: readonly string[] }
+  | { readonly kind: "ignore peripheral subgraph" }
   | {
       /** Split the junctions whose gate graphs are disconnected (τ is disconnected there: f is reducible). */
       readonly kind: "split junctions";
@@ -213,7 +216,19 @@ function introduction(fs: FibredSurface, move: Move): Text {
         `: the boundary of a neighbourhood of it is a reduction system; split along it and continue on piece ${(move.piece ?? 0) + 1} with the first-return map of g.`,
       ];
     case "ignore reducibility":
-      return ["Ignore the reducibility found, and continue the algorithm as if the map were irreducible."];
+      return [
+        "Ignore the reducibility found, and continue the algorithm as if the map were irreducible. Convergence and correctness are not guaranteed.",
+      ];
+    case "set peripheral subgraph":
+      return [
+        "Take ",
+        ...(move.strips.length === 0 ? ["the empty subgraph"] : list(move.strips)),
+        " as the peripheral subgraph P: the circles around all punctures but one orbit, which is essential.",
+      ];
+    case "ignore peripheral subgraph":
+      return [
+        "Continue with the peripheral subgraph as it is, although it doesn't fulfil its definition. Convergence and correctness are not guaranteed.",
+      ];
     case "split junctions":
       return [
         `Split the junctions where the gate graph (the gates, joined by the infinitesimal branches of τ) is disconnected, into one junction per component: the boundary of a neighbourhood of τ is a reduction system. Continue on piece ${(move.piece ?? 0) + 1} with the first-return map of g.`,
@@ -253,6 +268,7 @@ interface Snapshot {
   readonly g: Map<string, string[]>;
   readonly mu: Map<string, string>;
   readonly junctions: Set<string>;
+  readonly peripheral: string[];
 }
 
 function snapshot(fs: FibredSurface): Snapshot {
@@ -260,6 +276,7 @@ function snapshot(fs: FibredSurface): Snapshot {
     g: new Map(fs.graph.edges.map((e) => [e.name, fs.g.image(e.forward).letters.map((x) => x.name)])),
     mu: new Map(fs.graph.edges.map((e) => [e.name, String(fs.mu.image(e.forward)) || "·"])),
     junctions: new Set(fs.graph.vertices.map((v) => v.name)),
+    peripheral: [...fs.peripheral].map((e) => e.name).sort(),
   };
 }
 
@@ -298,6 +315,14 @@ function changes(before: Snapshot, after: Snapshot): Text[] {
   for (const [n, image] of muChanged.slice(0, 8))
     lines.push(["μ: ", { strip: n }, ` ↦ ${image} (was ${before.mu.get(n)})`]);
   if (muChanged.length > 8) lines.push([`… and ${muChanged.length - 8} more images under μ changed.`]);
+  if (before.peripheral.join(" ") !== after.peripheral.join(" "))
+    lines.push([
+      "Peripheral subgraph P: ",
+      ...(after.peripheral.length === 0 ? ["∅"] : strips(after.peripheral)),
+      " (was ",
+      ...(before.peripheral.length === 0 ? ["∅"] : strips(before.peripheral)),
+      ")",
+    ]);
   if (lines.length === 0) lines.push(["The graph and the maps stay the same."]);
   return lines;
 }
@@ -339,6 +364,13 @@ function applyMoveQuietly(fs: FibredSurface, move: Move, hooks: MoveHooks = {}):
       return fs;
     case "ignore reducibility":
       fs.ignoreReducible = true;
+      return fs;
+    case "set peripheral subgraph":
+      fs.peripheral.clear();
+      for (const e of edges(fs, move.strips)) fs.peripheral.add(e);
+      return fs;
+    case "ignore peripheral subgraph":
+      fs.ignorePeriphery = true;
       return fs;
     case "split junctions":
       splitJunctions(fs, (pieces) => {

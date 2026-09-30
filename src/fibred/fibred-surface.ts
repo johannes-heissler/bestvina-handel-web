@@ -50,6 +50,8 @@ export class FibredSurface {
   readonly peripheral: Set<Edge>;
   /** Set when the user chose to continue although the map is reducible. */
   ignoreReducible = false;
+  /** Set when the user chose to continue although the peripheral subgraph doesn't fulfil its definition. */
+  ignorePeriphery = false;
   /**
    * Set if the surface is closed: its punctures are artificial (marked points), so a 1-pronged singularity there is
    * not allowed, and the closed-surface move (cutting along a singular leaf) becomes necessary.
@@ -130,6 +132,7 @@ export class FibredSurface {
       peripheral: [...this.peripheral].map((e) => graphCopy.edgeMap.get(e) as Edge),
     });
     result.ignoreReducible = this.ignoreReducible;
+    result.ignorePeriphery = this.ignorePeriphery;
     result.isTrainTrack = this.isTrainTrack; // the C# Copy() forgot this flag
     result.isClosed = this.isClosed;
     result.legacyNames = this.legacyNames;

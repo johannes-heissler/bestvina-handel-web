@@ -34,6 +34,10 @@ export function describeMove(move: Move): Text {
       ];
     case "ignore reducibility":
       return ["Ignore reducibility"];
+    case "set peripheral subgraph":
+      return move.strips.length === 0 ? ["P = ∅"] : ["P = ", ...strips(move.strips)];
+    case "ignore peripheral subgraph":
+      return ["Ignore the peripheral subgraph"];
     case "split junctions":
       return ["Split junctions along τ", ...(move.piece !== undefined ? [` (piece ${move.piece + 1})`] : [])];
     case "remove valence-2 junctions":

@@ -143,3 +143,22 @@ After a fold step, the step reports the inefficiency it followed (now of order k
 (`MoveHooks.followUp`). The session stores this hint at the new node and **passes it on through the automatic steps**
 after the fold: pulling tight changes the images, but not the names of the strips to fold. The next suggestion puts
 that fold first, marked "Next fold of the last inefficiency", with an accent bar in the UI.
+
+## Update: checking the peripheral subgraph
+
+`periphery.ts` checks P against its definition (the thesis, § "Periphery"): (1) its components are disjoint circle
+graphs, each a boundary word of G; (2), weakened: g maps P into P, and the image of each circle, read around it and
+cyclically reduced, is its image circle, once and with the same orientation (backtracking inside P is allowed; g need
+not act as an automorphism); (3) the boundary words outside P form exactly one orbit under g. Absorbing into the
+periphery now also runs when g maps P into P but not as an automorphism (e.g. p ↦ p P p), and restores that; it only
+uses the signed lengths of the pieces in P, so backtracking there is fine (tested).
+
+- The State panel shows a warning while P is inconsistent (also after it was ignored).
+- A new suggestion **"peripheral subgraph"**, after the finite-order check and before the reducibility check, when P
+  is inconsistent: the possible peripheral subgraphs (the thesis's remark under the definition: for each orbit of
+  boundary words taken as essential, the boundary words of the other punctures, if they are disjoint circles that g
+  maps into themselves), with the essential puncture or orbit, as moves "set peripheral subgraph"; if there is none, it
+  says so. "Ignore and continue with P as it is" (move "ignore peripheral subgraph", flag `ignorePeriphery`) is greyed
+  out with the warning that convergence and correctness are not guaranteed, as is "Ignore and continue" at a
+  reducible map now. The autopilot stops at the suggestion.
+- The summary of a move mentions when P changed.

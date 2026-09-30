@@ -195,7 +195,9 @@
           <li
             class:continues={typeof option.label[0] === "string" && option.label[0].startsWith("Next fold")}
             class:discouraged={option.discouraged}
-            title={option.discouraged ? "Possible now, but the algorithm does this only at the end" : undefined}
+            title={option.discouraged
+              ? (option.warning ?? "Possible now, but the algorithm does this only at the end")
+              : undefined}
           >
             {#if suggestion.multiple}
               <label>
@@ -218,6 +220,7 @@
               >
             {/if}
             {#if option.details}<div class="hint option-details"><TextView text={option.details} /></div>{/if}
+            {#if option.warning}<div class="note option-warning">⚠ {option.warning}</div>{/if}
             {#if i === focused}
               {#if choices === undefined}
                 <p class="note choices-note">Computing the choices…</p>
