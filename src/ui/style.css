@@ -693,3 +693,14 @@ table.generators td.actions {
   color: #a0521a;
   font-size: 0.8rem;
 }
+
+/* The sessions saved in the browser (start dialog, "Open"). */
+table.saved {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: 0.9rem;
+}
+table.saved td {
+  padding: 0.2rem 0.4rem;
+  border-top: 1px solid var(--rule);
+}

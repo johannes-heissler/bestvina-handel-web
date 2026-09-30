@@ -22,6 +22,8 @@ export class AppState {
   error = $state<string | undefined>(undefined);
   message = $state<string | undefined>(undefined);
   showStart = $state(false);
+  /** The tab the start dialog opens with. */
+  startTab = $state<"examples" | "surface" | "ribbon" | "open">("examples");
   busy = $state(false);
   /**
    * The kinds of steps that are done automatically after each step the user applies (your semi-automatic mode). By

@@ -49,6 +49,26 @@ test("restores a session from its link", async ({ page }) => {
   await expect(page.locator(".panel dl")).toHaveText(state);
 });
 
+test("saves a session in the browser under a name and opens it again", async ({ page }) => {
+  await startExample(page, "Point push");
+  await page.getByRole("button", { name: "Apply" }).first().click();
+  await expect(page.getByRole("button", { name: /↑ Back:/ })).toBeEnabled();
+  page.once("dialog", (dialog) => void dialog.accept("my push"));
+  await page.getByRole("button", { name: "Save in browser" }).click();
+  await expect(page.getByText("Saved in this browser as “my push”")).toBeVisible();
+
+  await page.goto("about:blank");
+  await page.goto("/");
+  await page.getByRole("dialog").getByRole("tab", { name: "Open" }).click();
+  await page.getByRole("dialog").getByRole("button", { name: "my push" }).click();
+  await expect(page.getByRole("button", { name: /↑ Back:/ })).toBeEnabled();
+
+  await page.getByRole("button", { name: "Open…" }).click();
+  page.once("dialog", (dialog) => void dialog.accept());
+  await page.getByRole("dialog").getByRole("button", { name: "Delete" }).click();
+  await expect(page.getByText("No sessions saved with “Save in browser” yet.")).toBeVisible();
+});
+
 test("opens a link entered into the address bar of the open page", async ({ page }) => {
   await startExample(page, "Anosov map of the torus");
   // Bestvina–Handel example 6.3 after a fold and pulling tight.

@@ -2,8 +2,8 @@
 <script lang="ts">
   import { Pane, PaneGroup, PaneResizer } from "paneforge";
   import { decodeSession, encodeSession } from "../session/share";
-  import type { SessionFile } from "../session/session";
   import { download } from "./export";
+  import { saveSession, savedSessions } from "./storage";
   import HistoryView from "./HistoryView.svelte";
   import BoundaryPanel from "./BoundaryPanel.svelte";
   import EmbeddingPanel from "./EmbeddingPanel.svelte";
@@ -38,13 +38,30 @@
     return () => window.removeEventListener("hashchange", onHashChange);
   });
 
-  function save() {
+  function saveToFile() {
     const file = app.session?.toFile();
     if (file) download(new Blob([JSON.stringify(file, null, 1)], { type: "application/json" }), "session.json");
   }
-  async function open(event: Event) {
-    const file = (event.currentTarget as HTMLInputElement).files?.[0];
-    if (file) app.open(JSON.parse(await file.text()) as SessionFile);
+  /** Saves the session in this browser under a name (asked for; the same name replaces the older session). */
+  async function saveInBrowser() {
+    const session = app.session;
+    if (!session) return;
+    const start = session.start;
+    const origin =
+      start.kind === "preset"
+        ? `${start.preset}${start.seed !== undefined ? ` (seed ${start.seed})` : ""}`
+        : start.model.name;
+    const name = prompt("Save this session in the browser as", `${origin}, ${new Date().toLocaleString()}`)?.trim();
+    if (!name) return;
+    const existing = await savedSessions();
+    if (existing.some((s) => s.name === name) && !confirm(`Replace the saved session “${name}”?`)) return;
+    const ok = await saveSession(name, session.toFile());
+    if (ok) app.message = `Saved in this browser as “${name}”. Open it again with “Open…”.`;
+    else app.error = "The browser didn't allow saving (e.g. in a private window). Use “Save to file” instead.";
+  }
+  function openDialog() {
+    app.startTab = "open";
+    app.showStart = true;
   }
   async function copyLink() {
     const file = app.session?.toFile();
@@ -58,9 +75,17 @@
 <header>
   <h1>Bestvina–Handel</h1>
   <nav>
-    <button onclick={() => (app.showStart = true)}>New…</button>
-    <button onclick={save} disabled={!app.session}>Save</button>
-    <label class="button">Open <input type="file" accept="application/json,.json" onchange={open} hidden /></label>
+    <button
+      onclick={() => {
+        app.startTab = "examples";
+        app.showStart = true;
+      }}>New…</button
+    >
+    <button onclick={saveInBrowser} disabled={!app.session} title="Save the session in this browser, under a name"
+      >Save in browser</button
+    >
+    <button onclick={saveToFile} disabled={!app.session} title="Download the session as a file">Save to file</button>
+    <button onclick={openDialog} title="Open a session saved in this browser or in a file">Open…</button>
     <button onclick={copyLink} disabled={!app.session}>Copy link</button>
     <button onclick={() => (secondView = !secondView)}>{secondView ? "One view" : "Two views"}</button>
     <button onclick={() => (app.sidebarLeft = !app.sidebarLeft)} title="Swap the panel of the algorithm and the panel of the analysis"

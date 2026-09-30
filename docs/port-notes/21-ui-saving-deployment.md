@@ -226,3 +226,8 @@ exchanges the two sides; the header button shows or hides the history tree.
   χ = V − E = 2 − 2g − b with b its boundary words (`pieceTopology`). Boundary words that μ maps to a reduction curve
   are counted as cuts, the others as punctures. After a reduction this is the piece the algorithm continues on, while
   "Surface" still describes the whole surface of the model.
+- **Saving in the browser under a name:** besides the autosave (after every step, one slot "last-session" in
+  IndexedDB, and the address #s=…), "Save in browser" asks for a name and stores the session in a list in IndexedDB
+  (the same name replaces the older one). "Save" is now "Save to file"; "Open…" opens the start dialog on its Open tab,
+  which lists the sessions saved in the browser (name, date, number of moves; open or delete), the autosaved last
+  session, and opening a file. Sessions saved in the browser stay in that browser (not in private windows).

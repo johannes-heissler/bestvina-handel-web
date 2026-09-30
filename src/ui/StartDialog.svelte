@@ -6,10 +6,10 @@
   import { PRESETS } from "../examples/presets";
   import type { SessionFile } from "../session/session";
   import { app, AUTOSAVE_KEY } from "./state.svelte";
-  import { load } from "./storage";
+  import { deleteSession, load, type SavedSession, savedSessions } from "./storage";
   import Thumbnail from "./Thumbnail.svelte";
 
-  let tab = $state<"examples" | "surface" | "ribbon" | "open">("examples");
+  const tab = $derived(app.startTab);
   let genus = $state(2);
   let punctures = $state(1);
   let peripheral = $state(0);
@@ -20,10 +20,25 @@
   let peripheralStrips = $state("");
   let seed = $state(1);
   let last = $state<SessionFile | undefined>(undefined);
+  let saved = $state.raw<SavedSession<SessionFile>[]>([]);
 
+  // Read the stored sessions whenever the dialog opens.
   $effect(() => {
+    if (!app.showStart) return;
     void load<SessionFile>(AUTOSAVE_KEY).then((file) => (last = file));
+    void savedSessions<SessionFile>().then((list) => (saved = list));
   });
+  async function remove(name: string) {
+    if (!confirm(`Delete the saved session “${name}”?`)) return;
+    await deleteSession(name);
+    saved = await savedSessions<SessionFile>();
+  }
+  /** The number of moves in a saved session (the nodes of its history tree). */
+  function moves(file: SessionFile): number {
+    const count = (node: { children?: readonly unknown[] }): number =>
+      (node.children ?? []).reduce<number>((n, child) => n + 1 + count(child as { children?: readonly unknown[] }), 0);
+    return count(file.tree as { children?: readonly unknown[] });
+  }
 
   const models = $derived.by((): SurfaceModel[] => {
     try {
@@ -64,7 +79,7 @@
       <Dialog.Description class="hint">Choose a surface and a mapping class.</Dialog.Description>
       <div class="tabs" role="tablist">
         {#each [["examples", "Examples"], ["surface", "New surface"], ["ribbon", "Ribbon graph"], ["open", "Open"]] as [id, label] (id)}
-          <button role="tab" aria-selected={tab === id} class:active={tab === id} onclick={() => (tab = id as typeof tab)}>{label}</button>
+          <button role="tab" aria-selected={tab === id} class:active={tab === id} onclick={() => (app.startTab = id as typeof tab)}>{label}</button>
         {/each}
       </div>
 
@@ -128,7 +143,31 @@
         <label class="wide">Map<textarea rows="3" bind:value={map} placeholder="a -> a b, b -> b a b"></textarea></label>
         <button class="primary" onclick={startRibbon}>Start</button>
       {:else}
-        <p>Open a session saved with “Save”.</p>
+        <h3>Saved in this browser</h3>
+        {#if last}
+          <button class="link" onclick={() => last && app.open(last)}>Continue the last session (saved automatically after every step)</button>
+        {/if}
+        {#if saved.length === 0}
+          <p class="hint">No sessions saved with “Save in browser” yet.</p>
+        {:else}
+          <table class="saved">
+            <tbody>
+              {#each saved as entry (entry.name)}
+                <tr>
+                  <td><button class="link" onclick={() => app.open(entry.file)}>{entry.name}</button></td>
+                  <td class="hint">{new Date(entry.savedAt).toLocaleString()}, {moves(entry.file)} moves</td>
+                  <td><button onclick={() => remove(entry.name)} title="Delete this saved session">Delete</button></td>
+                </tr>
+              {/each}
+            </tbody>
+          </table>
+        {/if}
+        <p class="hint">
+          Sessions saved in the browser stay in this browser on this computer (not in a private window). To keep them
+          elsewhere, use “Save to file” or “Copy link”.
+        </p>
+        <h3>From a file</h3>
+        <p>Open a session saved with “Save to file”.</p>
         <input type="file" accept="application/json,.json" onchange={openFile} />
       {/if}
       {#if app.error}<p class="error">{app.error}</p>{/if}
