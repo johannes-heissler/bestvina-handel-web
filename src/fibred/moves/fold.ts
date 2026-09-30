@@ -11,6 +11,7 @@ import { EDGE_COLORS, leastUsedColor } from "../names-and-colors";
 import { EdgePoint } from "../edge-point";
 import type { FibredSurface } from "../fibred-surface";
 import { isCyclicInterval } from "../fibred-surface";
+import { singleGateOrders } from "../gate-order";
 import { isotopeJunction, moveJunction } from "./isotopy";
 import { narrate, quietly, stateNow } from "../narration";
 import type { TextPart } from "../suggestions";
@@ -70,6 +71,15 @@ export function inCyclicOrder(fs: FibredSurface, edges: readonly OrientedEdge[])
   const set = new Set(edges);
   if (!isCyclicInterval(star, set))
     throw new Error(`The strips ${edges.join(", ")} are not adjacent at ${source}`);
+  // At a junction with a single gate, they must also be adjacent in its linear order (not around the place where g cuts
+  // the cyclic order open). Since g comes from an embedding, the strips whose images start alike always are.
+  if (star.length >= 3 && set.size < star.length) {
+    const linear = singleGateOrders(fs.graph, fs.g).get(source);
+    if (linear !== undefined && !isCyclicInterval([...linear, undefined], set))
+      fs.reportInconsistency(
+        `The strips ${edges.join(", ")} are adjacent at ${source}, but not in the linear order ${linear.join(" ")} of its single gate`,
+      );
+  }
   const first = star.find((e) => set.has(e) && !set.has(fs.graph.previous(e)));
   return first === undefined ? [...star] : fs.graph.starFrom(first).filter((e) => set.has(e));
 }

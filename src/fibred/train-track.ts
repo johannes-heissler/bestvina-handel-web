@@ -14,6 +14,7 @@ import { CombinatorialMap } from "../graph/combinatorial-map";
 import { EdgePath } from "../graph/edge-path";
 import { type Edge, type OrientedEdge, RibbonGraph, type Vertex } from "../graph/ribbon-graph";
 import type { FibredSurface } from "./fibred-surface";
+import { singleGateOrders } from "./gate-order";
 import { findGates, reducedDerivative } from "./gates";
 import { perronFrobenius } from "./perron-frobenius";
 
@@ -41,6 +42,12 @@ export interface TrainTrack {
   readonly switchOf: ReadonlyMap<OrientedEdge, Vertex>;
   /** The junction of G containing each switch. */
   readonly junctionOf: ReadonlyMap<Vertex, Vertex>;
+  /**
+   * At the junctions of G with a single gate (gatewise extremal), the linear order of the gate from right to left
+   * across the band (counterclockwise), where it could be decided (see gate-order.ts). At the other junctions each gate
+   * is cut open where the previous gate ends.
+   */
+  readonly singleGateOrder: ReadonlyMap<Vertex, readonly OrientedEdge[]>;
   /** The growth rate λ of g. */
   readonly growth: number;
   /**
@@ -72,6 +79,7 @@ export function trainTrack(fs: FibredSurface): TrainTrack {
   const gateOfEnd = new Map<OrientedEdge, number>();
   gates.forEach((gate, i) => gate.edges.forEach((e) => gateOfEnd.set(e, i)));
   const switchOfGate = new Map<number, Vertex>();
+  const singleGateOrder = singleGateOrders(fs.graph, g);
   for (const v of fs.graph.vertices) {
     const star = fs.graph.star(v);
     // Start at a boundary between two gates, so that each gate forms one block.
@@ -155,7 +163,9 @@ export function trainTrack(fs: FibredSurface): TrainTrack {
     const star = fs.graph.star(v);
     switches.forEach((s, j) => {
       const real = star.filter((e) => switchOf.get(e) === s);
-      const first = real.find((e) => switchOf.get(fs.graph.previous(e)) !== s) ?? real[0];
+      // A single gate is cut open where g decides (its linear order), else at the first edge of the star.
+      const first =
+        real.find((e) => switchOf.get(fs.graph.previous(e)) !== s) ?? singleGateOrder.get(v)?.[0] ?? real[0];
       const realInOrder =
         first === undefined ? [] : fs.graph.starFrom(first).filter((e) => switchOf.get(e) === s);
       const others = [...switches.slice(j + 1), ...switches.slice(0, j)];
@@ -213,6 +223,7 @@ export function trainTrack(fs: FibredSurface): TrainTrack {
     kind,
     realBranch,
     switchOf,
+    singleGateOrder,
     junctionOf,
     growth: pf.growth,
     widths,

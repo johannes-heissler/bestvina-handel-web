@@ -107,10 +107,19 @@ export function renderSvg(fs: FibredSurface, layout: Layout, options: RenderOpti
   // Junction disks and the switches of the gates.
   const junctionPixels = Math.max(5, size / 110);
   const junctionRadius = junctionPixels / scale; // in display units
-  let gatesOf: (v: Vertex) => { switchOf: Map<OrientedEdge, Vertex>; infinitesimal: [Vertex, Vertex][] };
+  /**
+   * The gates at a junction: the switch of each strip end, the infinitesimal branches, and for a single gate its linear
+   * order (if g decides it; see gate-order.ts).
+   */
+  let gatesOf: (v: Vertex) => {
+    switchOf: Map<OrientedEdge, Vertex>;
+    infinitesimal: [Vertex, Vertex][];
+    singleOrder?: readonly OrientedEdge[];
+  };
   try {
     const tt = trainTrack(fs);
     gatesOf = (v) => ({
+      ...(tt.singleGateOrder.has(v) && { singleOrder: tt.singleGateOrder.get(v) as readonly OrientedEdge[] }),
       switchOf: new Map(fs.graph.star(v).map((x) => [x, tt.switchOf.get(x) as Vertex])),
       infinitesimal: tt.graph.edges
         .filter((b) => tt.kind.get(b) === "infinitesimal" && tt.junctionOf.get(b.source) === v)
@@ -465,7 +474,18 @@ export function renderSvg(fs: FibredSurface, layout: Layout, options: RenderOpti
     for (const v of fs.graph.vertices) {
       const center = junctionAt(v);
       const junctionRadius = radiusOf(v);
-      const { switchOf } = gatesOf(v);
+      const { switchOf, singleOrder } = gatesOf(v);
+      const star0 = fs.graph.star(v);
+      // A single gate whose linear order g doesn't decide (pretrivial strips, g not tight, no train track): the junction
+      // is drawn without aligning its strips, as in the standard view.
+      if (
+        star0.length >= 2 &&
+        star0.every((y) => switchOf.get(y) === switchOf.get(star0[0] as OrientedEdge)) &&
+        !singleOrder
+      ) {
+        switchPoints.set(v, new Map());
+        continue;
+      }
       // Each gate leaves in the middle of its angular span: the directions of its strands, taken in the cyclic order
       // of the star and unrolled counterclockwise, from the first to the last. Then the direction straight behind the
       // gate lies outside its span, so that the strands side by side (in star order) don't have to cross. (The node of
@@ -501,12 +521,8 @@ export function renderSvg(fs: FibredSurface, layout: Layout, options: RenderOpti
         };
         let inGate: OrientedEdge[];
         if (star.every((y) => switchOf.get(y) === s)) {
-          // A single gate has no boundary in the star: start after the largest gap between consecutive strands.
-          const gaps = star.map((y, i) =>
-            step(chartAngle(y), chartAngle(star[(i + 1) % star.length] as OrientedEdge)),
-          );
-          const widest = gaps.indexOf(Math.max(...gaps));
-          inGate = [...star.slice(widest + 1), ...star.slice(0, widest + 1)];
+          // A single gate has no boundary in the star: its linear order, as g decides it (a single strip: itself).
+          inGate = singleOrder ? [...singleOrder] : [...star];
         } else {
           const start = Math.max(0, gateStart(s));
           inGate = [...star.slice(start), ...star.slice(0, start)].filter((y) => switchOf.get(y) === s);
@@ -551,7 +567,7 @@ export function renderSvg(fs: FibredSurface, layout: Layout, options: RenderOpti
         const toSide = (z: Complex) =>
           Math.min(Infinity, ...polygonSides.map(([a, b]) => distanceToSegment(z, a, b)));
         const length = Math.max(0, Math.min(radius * 0.9, toSide(junctionInChart) * 0.5 - radius * 1.2));
-        // The same order as for the gate's direction (a single gate is cut at its widest gap, not where the star starts).
+        // The same order as for the gate's direction (a single gate in its linear order, not from where the star starts).
         const lanes = lanesOf.get(s) as OrientedEdge[];
         list.sort((p, q) => lanes.indexOf(p) - lanes.indexOf(q));
         list.forEach((x, j) => {

@@ -56,3 +56,26 @@ g_τ passes `checkContinuity()` in all cases.
 The thesis remarks that "absorbing into the periphery" is the same as building τ on G/P when each peripheral component has at
 least three gates in G/P. That move (C# `FibredSurfaceAbsorbingIntoPeriphery.cs`, 623 lines) will be ported with this
 structure in mind.
+
+## Update: the linear order of a single gate
+
+Every gate has a linear order of its edges (across the band that f maps the junction's neighbourhood into, right to
+left). At a junction with several gates, it is the cyclic order of the star cut open after the previous gate. At a
+junction with a single gate (gatewise extremal), the star only gives a cyclic order; before, τ cut it open at the first
+edge of the star and the drawing at the widest angular gap of the layout, both arbitrary. This decides which turn at the
+junction is smooth (around the back of the switch) and which are cusps, so it matters for the singularities.
+
+`gate-order.ts` now finds it from the strands of f[F] ⊆ F (`strandOrder(g)`, as in the striped view): two edges x, y
+whose images start with the same strip d are ordered by their first strands across d; otherwise their images leave the
+image junction by different strips of one gate there, which are compared recursively (at a junction with several gates
+by the known order). Unlike following where the images of g^k diverge, this also decides when g(x) = g(y). The result
+must be a rotation of the star (f preserves the orientation), which is checked. Tested: at junctions with several
+gates, it reproduces the known order in all states of BH 6.1.
+
+- τ (`TrainTrack.singleGateOrder`) and the drawing use it. Where it is undecided (pretrivial strips, whose images have
+  no strands; g not tight; no train track), τ keeps the old convention and the drawing shows the junction without
+  aligning its strips, as in the standard view. Such states occur only in the middle of the algorithm.
+- Folding doesn't need it: the strips to fold are those whose images start with the common initial segment, and since
+  g comes from an embedding they form an interval of the linear order, including the branches in between.
+  `inCyclicOrder` now also checks this at junctions with a single gate and reports an inconsistency otherwise (never
+  seen in the examples).
