@@ -34,7 +34,7 @@
 </script>
 
 <details class="panel" bind:open>
-  <summary><h2>Embedding <span class="math">μ</span></h2></summary>
+  <summary><h2>Embedding <span class="math">μ: G ⟶ G₀</span></h2></summary>
   {#if info}
     <ul class="map">
       {#each info.lines as line, i (i)}
