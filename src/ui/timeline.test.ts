@@ -75,4 +75,25 @@ describe("the strand order with a hairpin", () => {
     for (const step of preview.steps.filter((s) => s.motion))
       expect(() => strandOrder(step.after.mu)).not.toThrow();
   });
+
+  it("keeps the strips visible while the moved junctions wait for the fold", async () => {
+    // Twice-punctured torus, seed 2: after the first isotopy the layout puts the moved junction right next to a strip,
+    // which used to shrink every strip of the picture to nothing until the fold.
+    const hash =
+      "s=fY2xasQwEER_RUwtg0m6bfMHaY8rFGvPViKtjHblK4z_PfjATYowzcxjmNnxqK0EA-GL1bYkYViCRM6DsmqqAo-N28vRu4daaAba8ZMkgrA2Vjb4yxA-g8RaXAnrmmR2Uw6qrj6cLezsmSYe1i6T9cbRWW1d4aHMEfR2eFhjPuenJeXYWEC3HaVuL3h99pydpXkxHP7f5hnd93mXqrhUwszwuAAI2wiPkKvMIHz8mbsfpzym3hqLgW6jH-_HLw";
+    const { session } = Session.fromFile((await decodeSession(hash))!);
+    const preview = session.preview(session.suggestion().options[0]!.move);
+    const states = [preview.before, ...preview.steps.map((s) => s.after)];
+    const motions = preview.steps.map((s) => s.motion);
+    const fold = preview.steps.findIndex((s) => plainText(s.text).startsWith("Fold")) + 1; // the state after it
+    expect(motions.filter(Boolean).length).toBeGreaterThan(0);
+    /** The widest strip of a moment (half its width in pixels, as the highlight on hovering uses it). */
+    const widest = (position: number) => {
+      const { svg } = drawTimeline(session.current.model, states, motions, position, { size: 800 });
+      return Math.max(...[...svg.matchAll(/--grow:([0-9.]+)px/g)].map((m) => Number(m[1])));
+    };
+    const before = widest(0);
+    for (let position = 0; position < fold; position += 0.5)
+      expect(widest(position), `at ${position}`).toBeGreaterThan(before / 2);
+  });
 });

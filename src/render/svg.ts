@@ -54,10 +54,11 @@ export interface RenderOptions {
   /** In the Klein model, shape the names by the metric (squeezed towards the boundary), not only scale them. */
   readonly kleinNames?: boolean;
   /**
-   * The junction (by name) that an animation is moving right now. Its passing close to other junctions, strips or
-   * sides doesn't shrink them, their strips or the widths of all strips; its own disk keeps at least half its size.
+   * The junctions (by name) that an animation moves, is moving or has moved (e.g. the new junctions of a fold, until
+   * the fold merges them). Their coming close to other junctions, strips or sides doesn't shrink those, their strips
+   * or the widths of all strips; their own disks keep at least half their size.
    */
-  readonly moving?: string;
+  readonly moving?: readonly string[];
   /** Strip ends to highlight with the space between them, e.g. the fold that is selected (see fold-highlight.ts). */
   readonly highlight?: readonly Wedge[];
 }
@@ -152,12 +153,12 @@ export function renderSvg(fs: FibredSurface, layout: Layout, options: RenderOpti
       ? d.vertices.map((a, i) => [a, d.vertices[(i + 1) % d.vertices.length] as Complex] as const)
       : [],
   );
-  const moving = fs.graph.vertices.find((v) => v.name === options.moving);
+  const moving = new Set(fs.graph.vertices.filter((v) => options.moving?.includes(v.name)));
   const nearest = new Map<Vertex, number>(
     fs.graph.vertices.map((v) => {
       const p = layout.junctions.get(v) as Complex;
-      // (The moving junction and its strips pass by; the others don't make room for them.)
-      const passing = v === moving ? [] : moving ? [moving] : [];
+      // (The moving junctions and their strips pass by; the others don't make room for them.)
+      const passing = moving.has(v) ? [] : [...moving];
       const toJunctions = fs.graph.vertices
         .filter((u) => u !== v && !passing.includes(u))
         .map((u) => (layout.junctions.get(u) as Complex).sub(p).abs());
@@ -194,7 +195,7 @@ export function renderSvg(fs: FibredSurface, layout: Layout, options: RenderOpti
           .abs()
       : Infinity;
     const full = junctionRadius * localScale(p, transform);
-    return Math.min(full, Math.max(nearestOnScreen * 0.3, v === moving ? full / 2 : 0));
+    return Math.min(full, Math.max(nearestOnScreen * 0.3, moving.has(v) ? full / 2 : 0));
   };
 
   // Strip widths, constant in the hyperbolic metric for hyperbolic charts (so the strips get thinner towards the
@@ -207,7 +208,7 @@ export function renderSvg(fs: FibredSurface, layout: Layout, options: RenderOpti
   const basePixels = (e: Edge) => Math.max(0.8, (layout.relativeWidth.get(e) ?? 0.2) * portPixels * 0.9);
   let shrink = 1;
   for (const v of fs.graph.vertices) {
-    if (v === moving) continue; // (its strands may be wider than its disk for a moment)
+    if (moving.has(v)) continue; // (its strands may be wider than its disk for a moment)
     // The strands of a gate leave side by side, so their widths add up (as the widths of a train track do).
     const at = toDisplay(layout.junctions.get(v) as Complex);
     const gateWidths = new Map<Vertex, number>();

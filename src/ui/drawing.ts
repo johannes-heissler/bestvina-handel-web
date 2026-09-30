@@ -90,6 +90,12 @@ export function drawTimeline(
 ): Rendered {
   try {
     const chart = chartFor(model, states[0] as FibredSurface, options.sideFraction);
+    // The junctions moved so far (until the fold merges them): they don't shrink the rest of the picture, neither while
+    // they move nor where the layouts of the later states put them (often right next to a strip).
+    const moved = [
+      ...new Set(motions.slice(0, Math.ceil(position)).flatMap((m) => (m === undefined ? [] : [m.junction]))),
+    ];
+    const drawOptions: DrawOptions = moved.length > 0 ? { ...options, moving: moved } : options;
     const layoutOf = (surface: FibredSurface) => layoutFor(model, surface, chart, options);
     /** The latest state at or before index i that can be laid out. */
     const drawableAt = (i: number): number => {
@@ -102,7 +108,7 @@ export function drawTimeline(
     const plain = (i: number) => {
       const j = drawableAt(i);
       const surface = states[j] as FibredSurface;
-      return renderSvg(surface, layoutOf(surface) as Layout, options);
+      return renderSvg(surface, layoutOf(surface) as Layout, drawOptions);
     };
     // Right after a crossing, the junction is where the crossing left it (on its journey), not at its place in the layout.
     if (t < 1e-6 && k > 0 && motions[k - 1] !== undefined) [k, t] = [k - 1, 1];
@@ -154,7 +160,7 @@ export function drawTimeline(
         return renderSvg(
           surface,
           withJunctionAt(surface, base, v, alongside(f / (last + 1), m, last)),
-          { ...options, moving: motion.junction },
+          drawOptions,
         );
       }
       if (leave && enter) {
@@ -169,17 +175,14 @@ export function drawTimeline(
           : enter.add((end ?? enter).sub(enter).scale(2 * t - 1));
         // Draw with the state of this moment if possible, else with the state before the isotopy.
         if (v !== undefined)
-          return renderSvg(surface, withJunctionAt(surface, base, v, position2), {
-            ...options,
-            moving: motion.junction,
-          });
+          return renderSvg(surface, withJunctionAt(surface, base, v, position2), drawOptions);
       }
     }
     const [from, to] = [states[k] as FibredSurface, states[k + 1] as FibredSurface];
     const [a, b] = [layoutOf(from), layoutOf(to)];
     if (a && b) {
       const blended = interpolated(from, to, a, b, t);
-      if (blended !== undefined) return renderSvg(to, blended, options);
+      if (blended !== undefined) return renderSvg(to, blended, drawOptions);
     }
     // (At a whole position, a state that can't be laid out after a crossing keeps the junction where it was left.)
     return drawTimeline(model, states, motions, t < 0.5 ? k : k + 1, options);
