@@ -39,7 +39,7 @@ test("applies a step and goes back in the history", async ({ page }) => {
 });
 
 test("restores a session from its link", async ({ page }) => {
-  await startExample(page, "Half twist");
+  await startExample(page, "Random mapping class of the twice-punctured torus");
   await page.getByRole("button", { name: "Run to the end" }).click();
   await expect.poll(() => page.evaluate(() => location.hash)).toMatch(/^#s=/);
   const url = page.url();

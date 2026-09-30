@@ -7,6 +7,7 @@
 import type { FibredSurface } from "../fibred/fibred-surface";
 import { renameStrip, updateMap, type MapUpdateMode } from "../fibred/map-editing";
 import { applyMove, type Move } from "../fibred/move";
+import { type GeneratingSet, GENUS_2_GENERATORS, mapsAndInverses, TORUS_2_GENERATORS } from "./generators";
 import { type FibredSurfaceOptions, initialFibredSurface, type SurfaceModel } from "./models";
 
 export interface Preset {
@@ -20,6 +21,8 @@ export interface Preset {
   readonly renames?: Readonly<Record<string, string>>;
   /** The map, as one or several texts applied in order. */
   readonly maps: readonly { readonly text: string; readonly mode: MapUpdateMode }[];
+  /** Generators of the mapping class group in the strips of the starting graph, suggested in the map editor. */
+  readonly generators?: GeneratingSet;
 }
 
 /** Builds the fibred surface of a preset. */
@@ -51,30 +54,58 @@ const replace = (text: string) => [{ text, mode: "replace" as const }];
 /** The genus-2 setup of Bestvina–Handel's example 6.1 (c and d reversed and swapped, as in the paper). */
 const bh61Options: FibredSurfaceOptions = { reversed: ["c", "d"], names: { c: "d", d: "c" } };
 
-/** Dehn twists of the genus-2 surface in the names of the BH 6.1 setup (the C# list). */
-export const GENUS_2_TWISTS = [
-  "c -> c d",
-  "c -> c D",
-  "b -> a b",
-  "b -> A b",
-  "d -> C d",
-  "d -> c d",
-  "a -> a B",
-  "a -> a b",
-  "a -> c B a, d -> d C b",
-  "a -> b C a, d -> d B c",
-];
+/** Dehn twists of the genus-2 surface in the names of the BH 6.1 setup and their inverses (the C# list). */
+export const GENUS_2_TWISTS = mapsAndInverses(GENUS_2_GENERATORS);
 
 /** A random composition of `count` of the {@link GENUS_2_TWISTS}, reproducible from `seed`. */
 export function randomGenus2(seed: number, count = 10): Preset {
+  return randomComposition(
+    {
+      name: "Random mapping class in genus 2",
+      description: `A composition of ${count} Dehn twists (seed ${seed}).`,
+      model: polygon("a b A B c d C D"),
+      options: bh61Options,
+      generators: GENUS_2_GENERATORS,
+    },
+    seed,
+    count,
+  );
+}
+
+/** The twice-punctured torus of the half twist (the polygon a c b C A B with a split side, b reversed). */
+const twicePuncturedTorus = (): Pick<Preset, "model" | "options"> => ({
+  model: polygon("a c b C A B"),
+  options: { reversed: ["b"] },
+});
+
+/** A random composition of `count` of the {@link TORUS_2_GENERATORS} and their inverses, reproducible from `seed`. */
+export function randomTorus2(seed: number, count = 10): Preset {
+  return randomComposition(
+    {
+      name: "Random mapping class of the twice-punctured torus",
+      description: `A composition of ${count} of the half twist h, the Dehn twists D_a, D_c, D_b and their inverses (seed ${seed}).`,
+      ...twicePuncturedTorus(),
+      generators: TORUS_2_GENERATORS,
+    },
+    seed,
+    count,
+  );
+}
+
+/** The presets drawn at random, by name: they take a seed. */
+export const RANDOM_PRESETS: Readonly<Record<string, (seed: number) => Preset>> = {
+  "Random mapping class in genus 2": randomGenus2,
+  "Random mapping class of the twice-punctured torus": randomTorus2,
+};
+
+/** A preset composing `count` maps (or inverses) drawn from its generators. */
+function randomComposition(preset: Omit<Preset, "maps">, seed: number, count: number): Preset {
   const random = mulberry32(seed);
+  const maps = mapsAndInverses(preset.generators as GeneratingSet);
   return {
-    name: "Random mapping class in genus 2",
-    description: `A composition of ${count} Dehn twists (seed ${seed}).`,
-    model: polygon("a b A B c d C D"),
-    options: bh61Options,
+    ...preset,
     maps: Array.from({ length: count }, () => ({
-      text: GENUS_2_TWISTS[Math.floor(random() * GENUS_2_TWISTS.length)] as string,
+      text: maps[Math.floor(random() * maps.length)] as string,
       mode: "postcompose" as const,
     })),
   };
@@ -101,13 +132,7 @@ export const PRESETS: readonly Preset[] = [
     model: polygon("a b A B"),
     maps: replace("a -> a b, b -> b a b"),
   },
-  {
-    name: "Half twist",
-    description: "The half twist on the torus with two punctures (C# layout with a split side, b reversed).",
-    model: polygon("a c b C A B"),
-    options: { reversed: ["b"] },
-    maps: replace("a -> c A b c B"),
-  },
+  randomTorus2(1),
   {
     name: "Reducible map",
     description:
@@ -121,6 +146,7 @@ export const PRESETS: readonly Preset[] = [
     model: polygon("a b A B c d C D"),
     options: bh61Options,
     maps: replace("a -> a B A b D C A, b -> a c d B a b c d B, c -> c c d B, d -> b c d B"),
+    generators: GENUS_2_GENERATORS,
   },
   {
     name: "Bestvina–Handel example 6.2",
@@ -214,3 +240,24 @@ export const PRESETS: readonly Preset[] = [
     maps: replace("a -> c, b -> d, c -> a b, d -> b a b, e -> E"),
   },
 ];
+
+/**
+ * Presets that are no longer offered but can still be started by name (saved sessions and links refer to them).
+ * The half twist is one of the generators of the random mapping class of the twice-punctured torus.
+ */
+export const LEGACY_PRESETS: readonly Preset[] = [
+  {
+    name: "Half twist",
+    description: "The half twist on the torus with two punctures (C# layout with a split side, b reversed).",
+    ...twicePuncturedTorus(),
+    maps: replace("a -> c A b c B"),
+    generators: TORUS_2_GENERATORS,
+  },
+];
+
+/** The preset a session starts from, by name (and seed for the random ones). */
+export function presetNamed(name: string, seed = 1): Preset | undefined {
+  const random = RANDOM_PRESETS[name];
+  if (random !== undefined) return random(seed);
+  return PRESETS.find((p) => p.name === name) ?? LEGACY_PRESETS.find((p) => p.name === name);
+}

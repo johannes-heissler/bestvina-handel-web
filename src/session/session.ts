@@ -21,7 +21,7 @@ import {
 import { perronFrobenius } from "../fibred/perron-frobenius";
 import { type Motion, narrated } from "../fibred/narration";
 import { type FibredSurfaceOptions, initialFibredSurface, type SurfaceModel } from "../examples/models";
-import { buildPreset, PRESETS, randomGenus2 } from "../examples/presets";
+import { buildPreset, presetNamed } from "../examples/presets";
 
 /** How a session starts: a preset, or a model with options and a map. Plain data (saved in files and links). */
 export type Start =
@@ -358,10 +358,7 @@ export interface SessionFile {
 /** The surface and model a start describes. */
 export function startSurface(start: Start): { surface: FibredSurface; model: SurfaceModel } {
   if (start.kind === "preset") {
-    const preset =
-      start.preset === "Random mapping class in genus 2"
-        ? randomGenus2(start.seed ?? 1)
-        : PRESETS.find((p) => p.name === start.preset);
+    const preset = presetNamed(start.preset, start.seed ?? 1);
     if (preset === undefined) throw new Error(`There is no example "${start.preset}"`);
     return { surface: buildPreset(preset), model: preset.model };
   }

@@ -1,9 +1,11 @@
 <!--
   The graph map g, shown as coloured text. "Edit" opens the editor: the map as text with the modes replace, apply
-  after, apply before (the C# map editor), and renaming or reversing strips.
+  after, apply before (the C# map editor), a table of generators of the mapping class group (for some examples) to
+  insert, and renaming or reversing strips.
 -->
 <script lang="ts">
-  import type { MapUpdateMode } from "../fibred/map-editing";
+  import { presetNamed } from "../examples/presets";
+  import { type MapUpdateMode, updateMap } from "../fibred/map-editing";
   import type { Text } from "../fibred/suggestions";
   import { app } from "./state.svelte";
   import TextView from "./TextView.svelte";
@@ -43,6 +45,35 @@
     app.apply({ kind: "edit map", text, mode });
     if (!app.error) editing = false;
   }
+  // The generators of the example the session started from (written in the strips of its starting graph).
+  const generators = $derived.by(() => {
+    const start = app.session?.start;
+    return start?.kind === "preset" ? presetNamed(start.preset, start.seed ?? 1)?.generators : undefined;
+  });
+  /** Whether a map can be read in the strips of the current graph (not after moves that renamed or removed them). */
+  function readable(map: string): boolean {
+    if (!surface) return false;
+    try {
+      updateMap(surface.copy(), map, "postcompose");
+      return true;
+    } catch {
+      return false;
+    }
+  }
+  const usable = $derived(
+    editing && generators
+      ? new Map(generators.generators.flatMap((g) => [g.map, g.inverse]).map((map) => [map, readable(map)]))
+      : new Map<string, boolean>(),
+  );
+  function insert(map: string) {
+    text = map;
+  }
+  /** "D_a" as D with the subscript a. */
+  function nameParts(name: string): { base: string; subscript?: string } {
+    const i = name.indexOf("_");
+    return i < 0 ? { base: name } : { base: name.slice(0, i), subscript: name.slice(i + 1) };
+  }
+
   function rename() {
     if (strip && newName) app.apply({ kind: "rename strip", strip, name: newName });
     newName = "";
@@ -75,6 +106,43 @@
       <button class="primary" onclick={apply}>Apply</button>
       <button onclick={() => (editing = false)}>Cancel</button>
     </div>
+    {#if generators}
+      <h3>Generators</h3>
+      <p class="hint">
+        {generators.description} Insert one (or its inverse) into the text above, then apply it after or before g.
+      </p>
+      <table class="generators">
+        <tbody>
+          {#each generators.generators as generator (generator.name)}
+            {@const name = nameParts(generator.name)}
+            <tr title={generator.description}>
+              <th><span class="math">{name.base}</span>{#if name.subscript}<sub class="math">{name.subscript}</sub>{/if}</th>
+              <td><code>{generator.map}</code></td>
+              <td class="actions">
+                <button
+                  disabled={!usable.get(generator.map)}
+                  title={usable.get(generator.map) ? `Insert ${generator.map}` : "Its strips are not those of the current graph"}
+                  onclick={() => insert(generator.map)}>Insert</button
+                >
+                <button
+                  disabled={!usable.get(generator.inverse)}
+                  title={usable.get(generator.inverse)
+                    ? `Insert the inverse, ${generator.inverse}`
+                    : "Its strips are not those of the current graph"}
+                  onclick={() => insert(generator.inverse)}>Inverse</button
+                >
+              </td>
+            </tr>
+          {/each}
+        </tbody>
+      </table>
+      {#if [...usable.values()].some((u) => !u)}
+        <p class="note">
+          Some generators are written in strips that the current graph no longer has (the moves renamed or removed them);
+          they can be inserted at the start of the history.
+        </p>
+      {/if}
+    {/if}
     <h3>Rename or reverse a strip</h3>
     <div class="buttons">
       <select bind:value={strip} aria-label="Strip">

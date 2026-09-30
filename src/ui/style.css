@@ -655,3 +655,27 @@ ol.will-happen {
 .timing {
   opacity: 0.7;
 }
+
+/* The generators in the map editor: name, map, buttons. */
+table.generators {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: 0.85rem;
+}
+table.generators th {
+  text-align: left;
+  font-weight: normal;
+  white-space: nowrap;
+  padding: 0.15rem 0.5rem 0.15rem 0;
+}
+table.generators td {
+  padding: 0.15rem 0.3rem;
+  border-top: 1px solid var(--rule);
+}
+table.generators th {
+  border-top: 1px solid var(--rule);
+}
+table.generators td.actions {
+  white-space: nowrap;
+  text-align: right;
+}

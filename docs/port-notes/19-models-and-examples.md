@@ -111,3 +111,20 @@ reversing, lassos passing the integrity check for several models and P, closed m
 every model's topology and initial surface checked, every preset valid, the torus growth, both point pushes reaching the
 same λ, and random maps reproducible from the seed. `src/fibred/map-editing.test.ts` (6 tests): the three modes,
 named paths, inverting and renaming.
+
+## Update: generating sets
+
+`src/examples/generators.ts` holds generating sets of mapping class groups as maps of the strips of an example's
+starting graph, each generator with a name (e.g. D_a, h), a description, the map and its inverse (both as text). The
+map editor shows the generating set of the example the session started from as a table (name, map, "Insert",
+"Inverse"); a generator whose strips are not those of the current graph (after moves) can't be inserted there.
+
+- **Genus 2, one puncture** (the BH 6.1 setup, also the random mapping class): the Dehn twists D_d, D_a, D_c, D_b, D_c₁
+  along the Lickorish curves a₁ = d, a₂ = a, m₁ = c, m₂ = b and c₁ (the C# list, Primer Theorem 4.13).
+- **Torus, two punctures** (the half twist setup): the half twist h (inverse a ↦ b c B A c) and the Dehn twists
+  D_a = b ↦ A b, D_c = b ↦ b C, D_b = a ↦ a b, c ↦ c b. (b ↦ b A is not geometric in this setup, where b is reversed:
+  the twist around a acts on the left of b.)
+
+A test checks that every generator is geometric and inverse to its inverse. "Half twist" is replaced in the gallery by
+"Random mapping class of the twice-punctured torus" (a composition of generators and inverses, with a seed); it can
+still be started by name (`LEGACY_PRESETS`), so saved sessions and links keep working.
