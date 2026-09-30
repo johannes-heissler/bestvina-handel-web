@@ -30,15 +30,9 @@ export class AppState {
   busy = $state(false);
   /**
    * The kinds of steps that are done automatically after each step the user applies (your semi-automatic mode). By
-   * default the bookkeeping steps; the folds, reductions and closed-surface cuts are left to the user.
+   * default pulling tight and removing valence-2 junctions; everything else is left to the user.
    */
-  automatic = $state<SuggestionKind[]>([
-    "collapse invariant subforest",
-    "pull tight",
-    "move vertices",
-    "remove valence-2 junctions",
-    "absorb into periphery",
-  ]);
+  automatic = $state<SuggestionKind[]>(["pull tight", "remove valence-2 junctions"]);
   /** The moves beyond the original algorithm that are switched off (greyed out, not applied automatically). */
   disabled = $state<OptionalMove[]>([]);
   /** Whether the panel with the algorithm is on the left. */

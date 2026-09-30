@@ -1,5 +1,5 @@
 <!--
-  The punctures (boundary words B₀, B₁, … of G) with the number of infinitesimal branches of τ at each turn, written
+  The boundary words B₀, B₁, … of G (the punctures) with the number of infinitesimal branches of τ at each turn, written
   between the letters, and how g permutes them; the singularities; the pretrivial strips; the layers of the
   pre-periphery (collapsible). The last two only when there are any.
 -->
@@ -25,13 +25,13 @@
 </script>
 
 <details class="panel" bind:open>
-  <summary><h2>Punctures, periphery</h2></summary>
+  <summary><h2>Boundary words</h2></summary>
   {#if info}
-    <h3>Punctures: boundary words of G</h3>
-    <p class="hint">
-      Below each word, between two letters: the number k of infinitesimal branches of τ at that turn. The interior
-      angle there is kπ: k = 1 is smooth (angle π), k = 0 or 2 a cusp (angle 2π), k ≥ 3 a multicusp (angle kπ). The
-      last number is the turn from the last letter back to the first.
+    <p
+      class="hint"
+      title="The interior angle at a turn with k branches is kπ: k = 1 is smooth, k = 0 or 2 a cusp (angle 2π), k ≥ 3 a multicusp. The last number is the turn from the last letter back to the first."
+    >
+      Between the letters: the number of infinitesimal branches of τ at each turn.
     </p>
     {#each info.boundary.words as w, i (i)}
       <div class="boundary-word">
@@ -69,14 +69,12 @@
     {/if}
 
     {#if info.periphery.pretrivial.length}
-      <h3>Pretrivial strips</h3>
-      <p class="hint">Some power of g maps them to a trivial path.</p>
+      <h3 title="Some power of g maps them to a trivial path.">Pretrivial strips</h3>
       <p><TextView text={names(info.periphery.pretrivial)} /></p>
     {/if}
 
     {#if info.periphery.layers[0]?.length}
-      <h3>Periphery</h3>
-      <p class="hint">P₀ = P; Pᵢ are the other strips that g maps into P₀ ∪ ⋯ ∪ Pᵢ₋₁ (pretrivial strips aside).</p>
+      <h3 title="P₀ = P; Pᵢ are the other strips that g maps into P₀ ∪ ⋯ ∪ Pᵢ₋₁ (pretrivial strips aside).">Periphery</h3>
       <ul class="gates">
         {#each info.periphery.layers as layer, i (i)}
           <li>P<sub>{i}</sub>: <TextView text={names(layer)} /></li>

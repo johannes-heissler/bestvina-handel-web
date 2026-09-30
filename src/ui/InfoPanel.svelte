@@ -108,12 +108,14 @@
       <dd>{info.growth === undefined ? "—" : info.growth.toFixed(6)}</dd>
       <dt>Surface</dt>
       <dd>genus {info.genus}, {info.closed ? "closed" : `${info.punctures} punctures`}</dd>
-      <dt title="The thickening of the graph G: χ = V − E = 2 − 2g − b, with b its boundary words. After a reduction, the piece the algorithm continues on.">Graph surface</dt>
-      <dd>
-        genus {info.piece.genus}, {info.piece.punctures}
-        {info.piece.punctures === 1 ? "puncture" : "punctures"}{#if info.piece.cuts > 0}, {info.piece.cuts}
-          {info.piece.cuts === 1 ? "cut" : "cuts"} (boundary along a reduction curve){/if}
-      </dd>
+      {#if info.closed || info.piece.genus !== info.genus || info.piece.punctures !== info.punctures || info.piece.cuts > 0}
+        <dt title="The thickening of the graph G: χ = V − E = 2 − 2g − b, with b its boundary words. After a reduction, the piece the algorithm continues on.">Graph surface</dt>
+        <dd>
+          genus {info.piece.genus}, {info.piece.punctures}
+          {info.piece.punctures === 1 ? "puncture" : "punctures"}{#if info.piece.cuts > 0}, {info.piece.cuts}
+            {info.piece.cuts === 1 ? "cut" : "cuts"} (boundary along a reduction curve){/if}
+        </dd>
+      {/if}
       <dt>Graph</dt>
       <dd>{info.strips} strips, {info.junctions} junctions{info.peripheral.length ? `, peripheral: ${info.peripheral.join(", ")}` : ""}</dd>
       {#if info.curves.length}

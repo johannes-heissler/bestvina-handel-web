@@ -1,4 +1,7 @@
-<!-- The embedding of G, recorded by the marking μ : G → G₀, in the colours of the edges of G₀ (collapsible). -->
+<!--
+  The embedding of G, recorded by the marking μ : G → G₀, in the colours of the edges of G₀, and the boundary words of
+  G₀ (collapsible).
+-->
 <script lang="ts">
   import type { Text } from "../fibred/suggestions";
   import { graphColors } from "./colors";
@@ -22,34 +25,26 @@
             : letters.flatMap((x, i) => (i === 0 ? [{ strip: x.name }] : [" ", { strip: x.name }])),
       };
     });
-    // The cyclic order at each vertex of G₀, in the colours of its edges.
-    const stars = surface.spine0.vertices.map((w): Text =>
-      surface.spine0.star(w).flatMap((x, i) => (i === 0 ? [{ strip: x.name }] : [" ", { strip: x.name }])),
-    );
-    return { lines, palette, stars, polygon: node.model.kind === "polygon", total: surface.mu.totalLength() };
+    // The boundary words of G₀ (its punctures), in the colours of its edges.
+    const words = surface.spine0
+      .boundaryWords()
+      .map((w): Text => w.letters.flatMap((x, i) => (i === 0 ? [{ strip: x.name }] : [" ", { strip: x.name }])));
+    return { lines, palette, words, total: surface.mu.totalLength() };
   });
 </script>
 
 <details class="panel" bind:open>
   <summary><h2>Embedding <span class="math">μ</span></h2></summary>
   {#if info}
-    <p class="hint">
-      G₀ is the fixed reference graph of the model{info.polygon
-        ? ": the rose dual to the polygon, with one loop through each pair of sides"
-        : ""}. μ : G → G₀ records how G lies in the surface: μ(e) is the path in G₀ that the strip e follows{info.polygon
-        ? ", i.e. the sides it crosses, in their colours"
-        : ""}.
-    </p>
-    <p class="hint">Cyclic order of G₀{info.stars.length > 1 ? " at each vertex" : ""} (counterclockwise):</p>
-    <ul class="map">
-      {#each info.stars as star, i (i)}<li>(<TextView text={star} palette={info.palette} />)</li>{/each}
-    </ul>
-    <p class="hint">μ:</p>
     <ul class="map">
       {#each info.lines as line, i (i)}
         <li><TextView text={line.strip} /> ↦ <TextView text={line.image} palette={info.palette} /></li>
       {/each}
     </ul>
     <p class="hint">{info.total} side crossings in total.</p>
+    <h3>Boundary words of G₀</h3>
+    <ul class="map">
+      {#each info.words as word, i (i)}<li>(<TextView text={word} palette={info.palette} />)</li>{/each}
+    </ul>
   {/if}
 </details>

@@ -13,9 +13,8 @@
 </script>
 
 <details class="panel" bind:open>
-  <summary><h2>Gates</h2></summary>
+  <summary><h2>Gates and the cyclic order</h2></summary>
   {#if gates}
-    <p class="hint">At each junction, in the cyclic order.</p>
     <ul class="gates">
       {#each gates as { junction, gates: list } (junction.id)}
         <li>

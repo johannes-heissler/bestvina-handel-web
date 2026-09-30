@@ -11,37 +11,37 @@
   import { matrixInfo, type MatrixInfo } from "../session/analysis";
   import { graphColors } from "./colors";
   import { draw, drawTimeline, type DrawOptions } from "./drawing";
-  import { SIDE_FRACTION } from "../embedding/chart";
   import TextView from "./TextView.svelte";
   import { exportImage, type ExportFormat } from "./export";
   import { app } from "./state.svelte";
 
-  let { initialView = "trainTrack" }: { initialView?: ViewKind } = $props();
+  let { initialView = "standard" }: { initialView?: ViewKind } = $props();
 
   let view = $state<ViewKind>(untrack(() => initialView)); // the prop only sets the initial view
   let model = $state<HyperbolicModel>("poincare");
   let smoothing = $state<Smoothing>("spline");
   let sideStyle = $state<SideStyle>("dashed");
-  let dashUntil = $state(0.3);
+  let dashUntil = $state(0.2);
   let scaleNames = $state(true);
   let kleinNames = $state(false);
-  let deckDepth = $state(0);
-  let widthExponent = $state(0);
+  let deckDepth = $state(1);
+  let widthExponent = $state(0.5);
   let straightening = $state(10);
-  /** The part of each side the crossings may use (undefined: the default of the kind of polygon). */
-  let sideFraction = $state<number | undefined>(undefined);
-  let pointerSize = $state(4); // the radius of the dot under the mouse, in pixels at the centre (0: no dot)
+  /** The part of each side the crossings may use (for polygons). */
+  let sideFraction = $state(0.8);
+  let pointerSize = $state(6); // the radius of the dot under the mouse, in pixels at the centre
   let labels = $state(true);
-  let showOptions = $state(true);
+  let showOptions = $state(false);
 
   const node = $derived.by(() => {
     void app.version;
     return app.session?.current;
   });
   const hyperbolic = $derived(node?.model.kind === "polygon" && node.model.geometry.kind !== "flat");
-  const defaultSideFraction = $derived(
-    node?.model.kind === "polygon" ? SIDE_FRACTION[node.model.geometry.kind] : undefined,
-  );
+  const polygon = $derived(node?.model.kind === "polygon");
+  // The corners are rounded where strips enter bands or cross sides; in the standard view of a hyperbolic polygon
+  // the strips are geodesic through the sides and have no such corners, so the option changes nothing there.
+  const hasCorners = $derived(!(hyperbolic && view === "standard"));
   const rendered = $derived.by(() => {
     if (node === undefined) return undefined;
     const shown = app.shown;
@@ -56,7 +56,7 @@
       deckDepth,
       widthExponent,
       straightening,
-      ...(sideFraction !== undefined && { sideFraction }),
+      ...(polygon && { sideFraction }),
       labels,
       // The highlight belongs to the current state, not to a step of the timeline.
       ...(shown === undefined && app.highlight.length > 0 && { highlight: app.highlight }),
@@ -194,15 +194,17 @@
   </div>
   {#if showOptions}
     <div class="toolbar options">
-      <label
-        title="How the corners of the strips are drawn, e.g. where they enter a band or cross a side that isn't straightened"
-        >Corners
-        <select bind:value={smoothing}>
-          <option value="spline">Smooth</option>
-          <option value="rounded">Rounded</option>
-          <option value="none">Sharp</option>
-        </select></label
-      >
+      {#if hasCorners}
+        <label
+          title="How the corners of the strips are drawn, e.g. where they enter a band or cross a side that isn't straightened"
+          >Corners
+          <select bind:value={smoothing}>
+            <option value="spline">Smooth</option>
+            <option value="rounded">Rounded</option>
+            <option value="none">Sharp</option>
+          </select></label
+        >
+      {/if}
       <label
         >Sides
         <select bind:value={sideStyle}>
@@ -213,7 +215,7 @@
       >
       {#if hyperbolic && sideStyle !== "solid"}
         <label title="Down to which width (pixels) the sides are dashed; thinner, towards the boundary, they fade"
-          >dashed down to <input type="range" min="0.1" max="1.5" step="0.05" bind:value={dashUntil} /> {dashUntil.toFixed(2)} px</label
+          >dashed down to <input type="range" min="0.02" max="1" step="0.02" bind:value={dashUntil} /> {dashUntil.toFixed(2)} px</label
         >
       {/if}
       <label title="Copies of the polygon by deck transformations">Copies <input type="number" min="0" max="4" bind:value={deckDepth} /></label>
@@ -226,22 +228,15 @@
         title="Rounds of moving the crossings with the glued sides so that the strips run straight (geodesically) through them, keeping their order and staying on the side (0: evenly spaced crossings)"
         >Straightening <input type="range" min="0" max="30" step="1" bind:value={straightening} /> {straightening}</label
       >
-      {#if defaultSideFraction !== undefined}
+      {#if polygon}
         <label
           title="How close to the ends of the sides the strips may cross them: the part of each side (around its middle) that the crossings may use. For ideal polygons, whose sides are infinitely long, it is measured along the side in the Klein model."
-          >Crossings reach <input
-            type="range"
-            min="0.1"
-            max="0.98"
-            step="0.02"
-            value={sideFraction ?? defaultSideFraction}
-            oninput={(event) => (sideFraction = Number((event.currentTarget as HTMLInputElement).value))}
-          />
-          {Math.round((sideFraction ?? defaultSideFraction) * 100)}% of a side</label
+          >Crossings reach <input type="range" min="0.5" max="0.98" step="0.02" bind:value={sideFraction} />
+          {Math.round(sideFraction * 100)}% of a side</label
         >
       {/if}
-      <label title="The dot under the mouse, shown in the polygon and in every copy; its radius in pixels at the centre of the model, shrinking with the metric (0: no dot)"
-        >Pointer size <input type="range" min="0" max="12" step="0.5" bind:value={pointerSize} /> {pointerSize}</label
+      <label title="The dot under the mouse, shown in the polygon and in every copy; its radius in pixels at the centre of the model, shrinking with the metric"
+        >Pointer size <input type="range" min="3" max="12" step="0.5" bind:value={pointerSize} /> {pointerSize}</label
       >
       <label><input type="checkbox" bind:checked={labels} /> Show names</label>
       {#if hyperbolic && labels}
@@ -272,7 +267,7 @@
     <div class="surface" bind:this={surfaceElement} style:transform={`translate(${panX}px, ${panY}px) scale(${zoom})`}>
       <!-- The SVG comes from our own renderer (src/render/svg.ts), not from user input. -->
       {@html highlight}{@html rendered?.svg ?? ""}
-      {#if dots.length && pointerSize > 0}
+      {#if dots.length}
         <svg class="echo" viewBox="0 0 800 800" aria-hidden="true">
           {#each dots as d, i (i)}<circle cx={d.x} cy={d.y} r={(d.r * pointerSize) / 4} />{/each}
         </svg>
