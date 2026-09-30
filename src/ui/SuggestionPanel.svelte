@@ -14,6 +14,7 @@
     variants,
   } from "../fibred/suggestions";
   import type { FibredSurface } from "../fibred/fibred-surface";
+  import { foldHighlight, type Wedge } from "../fibred/fold-highlight";
   import type { Preview } from "../session/session";
   import type { Motion } from "../fibred/narration";
   import { describeMove } from "../session/describe";
@@ -126,6 +127,20 @@
     } catch {
       return undefined;
     }
+  });
+
+  // The views highlight the selected fold, and the turns that removing the inefficiencies behind it folds next.
+  $effect(() => {
+    const move = selectedMove;
+    const surface = node?.surface;
+    let wedges: Wedge[] = [];
+    try {
+      if (move && surface) wedges = foldHighlight(surface, move);
+    } catch {
+      // (nothing to highlight)
+    }
+    app.highlight = wedges;
+    return () => (app.highlight = []);
   });
 
   // What will happen: the selected move tried on a copy (with the automatic steps after it), after the panel is drawn.

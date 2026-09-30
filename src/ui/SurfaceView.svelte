@@ -58,6 +58,8 @@
       straightening,
       ...(sideFraction !== undefined && { sideFraction }),
       labels,
+      // The highlight belongs to the current state, not to a step of the timeline.
+      ...(shown === undefined && app.highlight.length > 0 && { highlight: app.highlight }),
       size: 800,
     };
     if (shown !== undefined && "states" in shown)

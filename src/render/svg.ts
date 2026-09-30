@@ -15,6 +15,7 @@ import type { Edge, OrientedEdge, Vertex } from "../graph/ribbon-graph";
 import { Complex } from "../math/complex";
 import type { Color } from "../math/color";
 import type { FibredSurface } from "../fibred/fibred-surface";
+import type { Wedge } from "../fibred/fold-highlight";
 import { trainTrack } from "../fibred/train-track";
 import {
   DiskIsometry,
@@ -52,6 +53,8 @@ export interface RenderOptions {
   readonly scaleNames?: boolean;
   /** In the Klein model, shape the names by the metric (squeezed towards the boundary), not only scale them. */
   readonly kleinNames?: boolean;
+  /** Strip ends to highlight with the space between them, e.g. the fold that is selected (see fold-highlight.ts). */
+  readonly highlight?: readonly Wedge[];
 }
 
 export type SideStyle = "solid" | "dashed" | "dotted";
@@ -73,6 +76,9 @@ const COPY_OPACITY = 0.35;
 const SIDE_LABEL_SIZE = 20;
 /** The dark green of the junctions (the C# `vertexColors[1]`). */
 const JUNCTION_COLOR = "#1a693a";
+/** The highlight of the fold that is selected, and of the turns folded after it. */
+const FOLD_COLOR = "#ff8c00";
+const TURN_COLOR = "#00a0a0";
 
 export function renderSvg(fs: FibredSurface, layout: Layout, options: RenderOptions = {}): Rendered {
   const size = options.size ?? 640;
@@ -790,6 +796,68 @@ export function renderSvg(fs: FibredSurface, layout: Layout, options: RenderOpti
     return mid.add(outward.scale(gap));
   };
 
+  /**
+   * The highlighted wedges (`options.highlight`) in a copy: along the drawn initial pieces of the outermost two strip
+   * ends of each wedge, joined around the junction by an arc that bulges outwards. A fold shows the folded part of the
+   * strips (between 14 and 48 pixels at the centre, and at most 80% of the first piece); a turn a fixed short part.
+   */
+  const wedgeShapes = (
+    lines: Map<Edge, Complex[][]>,
+    junctionAt: (v: Vertex) => Complex,
+    transform: ((z: Complex) => Complex) | undefined,
+  ): string[] => {
+    const shapes: string[] = [];
+    // The turns first, so that the fold is on top where they share a strip.
+    const wedges = (options.highlight ?? []).toSorted((x, y) => Number(x.kind === "fold") - Number(y.kind === "fold"));
+    for (const wedge of wedges) {
+      const ends = wedge.ends.map((name) => fs.graph.orientedEdges.find((x) => x.name === name));
+      if (ends.length < 2 || ends.some((x) => x === undefined)) continue;
+      const v = (ends[0] as OrientedEdge).source;
+      if (ends.some((x) => (x as OrientedEdge).source !== v)) continue;
+      const star = fs.graph.star(v);
+      // The side of the wedge: from the first end counterclockwise (the order of the star) to the last. A fold is given
+      // in that order; for a turn, the side with fewer strips in between.
+      let [first, last] = [ends[0] as OrientedEdge, ends.at(-1) as OrientedEdge];
+      let [firstFraction, lastFraction] = [wedge.fractions?.[0], wedge.fractions?.at(-1)];
+      if (wedge.kind === "turn") {
+        const between = (star.indexOf(last) - star.indexOf(first) - 1 + star.length) % star.length;
+        if (between > star.length - 2 - between) {
+          [first, last] = [last, first];
+          [firstFraction, lastFraction] = [lastFraction, firstFraction];
+        }
+      }
+      const center = junctionAt(v);
+      const k = localScale(layout.junctions.get(v) as Complex, transform);
+      const prefix = (x: OrientedEdge, fraction: number | undefined) => {
+        const { line, atStart } = endAt(lines, x);
+        const path = atStart ? line : line.toReversed();
+        const total = path.slice(1).reduce((sum, p, i) => sum + p.sub(path[i] as Complex).abs(), 0);
+        const pixels =
+          fraction === undefined ? 26 : Math.min(48, Math.max(14, fraction * total * scale));
+        return initialPart(path, Math.min(0.8 * total, (pixels * k) / scale));
+      };
+      const [a, b] = [prefix(first, firstFraction), prefix(last, lastFraction)];
+      const [pa, pb] = [a.at(-1), b.at(-1)];
+      if (pa === undefined || pb === undefined || a.length < 2 || b.length < 2) continue;
+      // The arc from the end of a to the end of b, counterclockwise around the junction (a tiny clockwise step stays
+      // one: parallel strands of a gate), bulging outwards by half the distance of the ends.
+      const [ta, tb] = [pa.sub(center), pb.sub(center)];
+      let sweep = (((tb.arg() - ta.arg()) % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI);
+      if (sweep > 2 * Math.PI - 0.3) sweep -= 2 * Math.PI;
+      const bulge = pa.sub(pb).abs() / 2;
+      const arc = Array.from({ length: 15 }, (_, j) => {
+        const t = (j + 1) / 16;
+        const r = ta.abs() + t * (tb.abs() - ta.abs()) + bulge * Math.sin(Math.PI * t);
+        return center.add(Complex.fromPolar(r, ta.arg() + t * sweep));
+      });
+      const color = wedge.kind === "fold" ? FOLD_COLOR : TURN_COLOR;
+      shapes.push(
+        `<path d="M${[center, ...a, ...arc, ...b.toReversed()].map(px).join("L")}Z" fill="${color}" fill-opacity="0.35" stroke="${color}" stroke-opacity="0.5" stroke-width="${fmt(9 * k)}" stroke-linejoin="round"/>`,
+      );
+    }
+    return shapes;
+  };
+
   const drawSurface = (transform: ((z: Complex) => Complex) | undefined, opacity: number) => {
     const group: string[] = [];
     // The copies get names only when they are scaled with the metric.
@@ -830,6 +898,9 @@ export function renderSvg(fs: FibredSurface, layout: Layout, options: RenderOpti
     if (cornerRadius > 0)
       for (const pieces of lines.values())
         for (const line of pieces) line.splice(0, line.length, ...roundCorners(line, cornerRadius));
+
+    // The highlighted wedges lie under the strips.
+    group.push(...wedgeShapes(lines, junctionAt, transform));
 
     if (view === "striped") {
       let stripes: ReturnType<typeof strandOrder> | undefined;
@@ -978,6 +1049,19 @@ export function renderSvg(fs: FibredSurface, layout: Layout, options: RenderOpti
 const STRIPED_NOTE = "The striped view needs g to be tight: pull tight (or run the algorithm) first.";
 
 /** The polyline of the strip end x, and whether x is its start (otherwise its end is at x's junction). */
+/** The initial part of a polyline up to the arc length `length` (the last point interpolated). */
+function initialPart(line: readonly Complex[], length: number): Complex[] {
+  const result: Complex[] = line.length > 0 ? [line[0] as Complex] : [];
+  let left = length;
+  for (let i = 1; i < line.length && left > 0; i++) {
+    const [p, q] = [line[i - 1] as Complex, line[i] as Complex];
+    const d = q.sub(p).abs();
+    result.push(d <= left ? q : p.add(q.sub(p).scale(left / d)));
+    left -= d;
+  }
+  return result;
+}
+
 function endAt(lines: Map<Edge, Complex[][]>, x: OrientedEdge): { line: Complex[]; atStart: boolean } {
   const pieces = lines.get(x.edge) as Complex[][];
   return x.isForward

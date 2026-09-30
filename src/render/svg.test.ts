@@ -16,6 +16,24 @@ const chartFor = (model: SurfaceModel, fs: FibredSurface) => ({
 describe("SVG", () => {
   const preset = PRESETS.find((p) => p.name === "Bestvina–Handel example 6.1")!;
 
+  it("draws a highlighted fold and turn under the strips", () => {
+    const surface = buildPreset(preset);
+    const { chart } = chartFor(preset.model, surface);
+    const result = layout(surface, chart);
+    const highlight = [
+      { ends: ["a", "b"], kind: "fold" as const, fractions: [0.5, 0.5] },
+      { ends: ["c", "d"], kind: "turn" as const },
+    ];
+    for (const view of ["trainTrack", "standard"] as const) {
+      const { svg } = renderSvg(surface, result, { view, highlight });
+      expect(svg).not.toContain("NaN");
+      expect(svg).toContain('fill="#ff8c00"');
+      expect(svg).toContain('fill="#00a0a0"');
+      // Under the strips: before the first strip band.
+      expect(svg.indexOf('fill="#ff8c00"')).toBeLessThan(svg.indexOf("data-edge="));
+    }
+  });
+
   it("draws the views", () => {
     const surface = autopilot(buildPreset(preset)).surface;
     const { chart } = chartFor(preset.model, surface);

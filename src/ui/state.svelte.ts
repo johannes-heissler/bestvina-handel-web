@@ -5,6 +5,7 @@
  * @module
  */
 import type { FibredSurface } from "../fibred/fibred-surface";
+import type { Wedge } from "../fibred/fold-highlight";
 import type { Move } from "../fibred/move";
 import type { Motion } from "../fibred/narration";
 import type { OptionalMove, SuggestionKind } from "../fibred/suggestions";
@@ -19,6 +20,8 @@ export class AppState {
   version = $state(0);
   /** The strip under the mouse in any view; all views highlight it. */
   hovered = $state<string | undefined>(undefined);
+  /** What the views highlight in the current state for the move selected in the suggestion panel (e.g. a fold). */
+  highlight = $state.raw<readonly Wedge[]>([]);
   error = $state<string | undefined>(undefined);
   message = $state<string | undefined>(undefined);
   showStart = $state(false);
