@@ -46,11 +46,14 @@
   let focused = $state(0);
   /** The choice selected under the focused option (undefined: the option itself, with its default choice). */
   let chosen = $state<number | undefined>(undefined);
+  /** Whether the focused option is opened (clicking it again closes it; it stays selected). */
+  let open = $state(true);
   $effect(() => {
     void suggestion;
     selected = [0];
     focused = 0;
     chosen = undefined;
+    open = true;
   });
   // The further choices of the focused option (e.g. how to fold), computed after the panel is drawn: some need the
   // move to be tried on a copy.
@@ -74,8 +77,12 @@
   });
 
   function toggle(i: number) {
-    if (!suggestion?.multiple && i === focused) return; // (keeps its choice)
+    if (!suggestion?.multiple && i === focused) {
+      open = !open; // (keeps its choice)
+      return;
+    }
     focused = i;
+    open = true;
     chosen = undefined;
     if (!suggestion?.multiple) selected = [i];
     else selected = selected.includes(i) ? selected.filter((j) => j !== i) : [...selected, i];
@@ -213,15 +220,15 @@
               <button
                 class="option-head"
                 class:open={i === focused}
-                aria-expanded={i === focused}
+                aria-expanded={i === focused && open}
                 onclick={() => toggle(i)}
-                ><span class="disclosure" aria-hidden="true">{i === focused ? "▾" : "▸"}</span>
+                ><span class="disclosure" aria-hidden="true">{i === focused && open ? "▾" : "▸"}</span>
                 <TextView text={option.label} /></button
               >
             {/if}
             {#if option.details}<div class="hint option-details"><TextView text={option.details} /></div>{/if}
-            {#if option.warning}<div class="note option-warning">⚠ {option.warning}</div>{/if}
-            {#if i === focused}
+            {#if i === focused && (open || suggestion.multiple)}
+              {#if option.warning}<div class="note option-warning">⚠ {option.warning}</div>{/if}
               {#if choices === undefined}
                 <p class="note choices-note">Computing the choices…</p>
               {:else if choices.error !== undefined}
