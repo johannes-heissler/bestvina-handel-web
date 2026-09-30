@@ -1,5 +1,5 @@
 <!--
-  The graph map g, shown as coloured text. "Edit" opens the editor: the map as text with the modes replace, apply
+  The graph map g, shown as coloured text (collapsible). "Edit" opens the editor: the map as text with the modes replace, apply
   after, apply before (the C# map editor), a table of generators of the mapping class group (for some examples) to
   insert, and renaming or reversing strips.
 -->
@@ -28,6 +28,7 @@
     surface?.graph.edges.map((e) => `${e.name} ↦ ${surface.g.image(e.forward).toString() || "·"}`).join("\n") ?? "",
   );
 
+  let open = $state(true);
   let editing = $state(false);
   let text = $state("");
   let mode = $state<MapUpdateMode>("replace");
@@ -85,11 +86,22 @@
   }
 </script>
 
-<section class="panel">
-  <div class="heading">
+<details class="panel" bind:open>
+  <summary>
     <h2>Graph map <span class="math">g</span></h2>
-    {#if !editing}<button onclick={edit} disabled={!surface}>Edit</button>{/if}
-  </div>
+    {#if !editing}
+      <!-- in the summary, a click would also toggle the panel: prevent that, and open it for editing -->
+      <button
+        class="edit"
+        onclick={(event) => {
+          event.preventDefault();
+          open = true;
+          edit();
+        }}
+        disabled={!surface}>Edit</button
+      >
+    {/if}
+  </summary>
   {#if !editing}
     <ul class="map">
       {#each lines as line, i (i)}<li><TextView text={line} /></li>{/each}
@@ -161,4 +173,10 @@
       <button onclick={rename}>Rename</button>
     </div>
   {/if}
-</section>
+</details>
+
+<style>
+  .edit {
+    float: right;
+  }
+</style>

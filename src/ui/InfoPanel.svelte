@@ -1,4 +1,4 @@
-<!-- What is known about the current state: the name of the map, the classification, λ, the surface, μ. -->
+<!-- What is known about the current state: the name of the map, the classification, λ, the surface (collapsible). -->
 <script lang="ts">
   import { topology } from "../examples/models";
   import { perronFrobenius } from "../fibred/perron-frobenius";
@@ -7,10 +7,11 @@
   import { app } from "./state.svelte";
   import MapName from "./MapName.svelte";
 
+  let open = $state(true);
   const info = $derived.by(() => {
     void app.version;
     const node = app.session?.current;
-    if (!node) return undefined;
+    if (!open || !node) return undefined;
     const surface = node.surface;
     let growth: number | undefined;
     try {
@@ -53,8 +54,8 @@
   }
 </script>
 
-<section class="panel">
-  <h2>State</h2>
+<details class="panel" bind:open>
+  <summary><h2>State</h2></summary>
   {#if info?.periphery.length}
     <div class="warning-box" role="alert">
       <strong>The peripheral subgraph P is inconsistent{info.ignored ? " (ignored)" : ""}.</strong>
@@ -124,7 +125,7 @@
       {/if}
     </dl>
   {/if}
-</section>
+</details>
 
 <style>
   .rename {
