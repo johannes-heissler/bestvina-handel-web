@@ -154,7 +154,7 @@ export function drawTimeline(
         return renderSvg(
           surface,
           withJunctionAt(surface, base, v, alongside(f / (last + 1), m, last)),
-          options,
+          { ...options, moving: motion.junction },
         );
       }
       if (leave && enter) {
@@ -168,7 +168,11 @@ export function drawTimeline(
           ? (start ?? leave).add(leave.sub(start ?? leave).scale(2 * t))
           : enter.add((end ?? enter).sub(enter).scale(2 * t - 1));
         // Draw with the state of this moment if possible, else with the state before the isotopy.
-        if (v !== undefined) return renderSvg(surface, withJunctionAt(surface, base, v, position2), options);
+        if (v !== undefined)
+          return renderSvg(surface, withJunctionAt(surface, base, v, position2), {
+            ...options,
+            moving: motion.junction,
+          });
       }
     }
     const [from, to] = [states[k] as FibredSurface, states[k + 1] as FibredSurface];
@@ -251,7 +255,11 @@ function journey(
       const length = d.abs() || 1;
       return p.add(new Complex(-d.im / length, d.re / length).scale(width));
     });
-  const tracks = pieces.map(offsetLine);
+  // The journey keeps away from the junctions at the ends of the strip: it joins the track a bit after its start and
+  // leaves it a bit before its end (else the junction runs over them, and their disks and strips shrink).
+  const tracks = pieces.map(offsetLine).map((track, n, all) =>
+    trimmed(track, n === 0 ? KEEP_AWAY : 0, n === all.length - 1 ? KEEP_AWAY : 0),
+  );
   // Where the junction starts: its place before the isotopy.
   const u = start.graph.vertices.find((x) => x.name === v.name);
   const from = (u && startLayout?.junctions.get(u)) ?? (tracks[0]?.[0] as Complex);
@@ -273,6 +281,27 @@ function journey(
     void m;
     return pointAlong(part, 2 * t - 1);
   };
+}
+
+/** How far (in the chart) a junction moving alongside a strip keeps away from the strip's ends. */
+const KEEP_AWAY = 0.15;
+
+/**
+ * The polyline without an initial part of length `start` and a final part of length `end`, each at most 35% of its
+ * length.
+ */
+function trimmed(line: readonly Complex[], start: number, end: number): Complex[] {
+  const total = line.slice(1).reduce((sum, p, i) => sum + p.sub(line[i] as Complex).abs(), 0);
+  if (total === 0 || (start === 0 && end === 0)) return [...line];
+  const [a, b] = [Math.min(start, 0.35 * total), total - Math.min(end, 0.35 * total)];
+  const result = [pointAlong(line, a / total)];
+  let length = 0;
+  line.slice(1).forEach((p, i) => {
+    length += p.sub(line[i] as Complex).abs();
+    if (length > a && length < b) result.push(p);
+  });
+  result.push(pointAlong(line, b / total));
+  return result;
 }
 
 /** The point at the fraction f (by length) of a polyline. */
