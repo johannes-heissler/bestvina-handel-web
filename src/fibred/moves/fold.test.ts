@@ -4,6 +4,8 @@ import { EdgePoint } from "../edge-point";
 import { FibredSurface } from "../fibred-surface";
 import { foldInitialSegments, foldOptions, foldPair, inCyclicOrder } from "./fold";
 import { subdivide } from "./subdivide";
+import { narrated } from "../narration";
+import { plainText } from "../suggestions";
 
 const torus = (map: string) => FibredSurface.fromText([["a", "b", "A", "B"]], map);
 const edge = (fs: FibredSurface, name: string) => fs.graph.orientedEdges.find((e) => e.name === name)!;
@@ -116,6 +118,21 @@ describe("folding initial segments", () => {
     expect([colors.get("a"), colors.get("b")]).not.toContain(folded.edge.color);
     expect(fs.graph.edgeCount).toBe(3);
     expect(fs.mu.totalLength()).toBe(2); // the default c is the common prefix of μ(a) = a and μ(b) = b: empty
+    expect(fs.checkIntegrity()).toEqual([]);
+  });
+
+  it("subdivides after the side crossings that μ shares with c, so that only the others are isotoped", () => {
+    const fs = make();
+    const c = parseEdgePath("b", nameTable(fs.spine0));
+    const { result: folded, steps } = narrated(() =>
+      foldInitialSegments(fs, [edge(fs, "a"), edge(fs, "b")], 1, { c }).folded,
+    );
+    // μ(b) = b starts with c: its new junction sits after the crossing and doesn't move. Only a's crosses b.
+    expect(steps.filter((s) => plainText(s).startsWith("Isotopy")).map(plainText)).toEqual([
+      "Isotopy: move the new junction along c = b in G₀, so that the initial segment crosses the sides like the folded segment will (μ = c). It crosses the side b first.",
+    ]);
+    expect(String(fs.mu.image(folded))).toBe("b");
+    expect(images(fs, "mu")).toBe("c:b, a:B a, b:");
     expect(fs.checkIntegrity()).toEqual([]);
   });
 

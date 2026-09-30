@@ -114,10 +114,11 @@ export interface FoldResult {
  * Folds the initial segments of length `i` (in g) of the strips `edges`, which start at the same junction v, are
  * adjacent there, and whose images agree in the first `i` letters.
  *
- * 1. Strips with longer images are subdivided after i letters (the new junction first placed at μ(v), before
- *    the first side crossing).
+ * 1. Strips with longer images are subdivided after i letters. The new junction is placed after the side crossings
+ *    that μ(e) shares with c at its start: μ(e) = c₁ | μ(e₂) where c = c₁ c₂ with c₁ as long as possible.
  * 2. **Isotopy:** the folded segment will have μ = c, a path in G₀ from μ(v). For a subdivided strip, the new
- *    junction is moved along c, so μ(e₁) = c and μ(e₂) = c̄ μ(e) (reduced). For a strip that is folded completely,
+ *    junction is moved along the rest c₂ (not at all if μ(e) starts with c), so μ(e₁) = c and μ(e₂) = c̄ μ(e)
+ *    (reduced). For a strip that is folded completely,
  *    its target is moved along μ(e)⁻¹ c, which also changes the other strips at that junction. (These are the
  *    partial-partial, partial-full and full-full cases of the thesis.)
  * 3. The segments, now with equal g- and μ-images, are folded into the segment of `kept`.
@@ -207,12 +208,17 @@ export function foldInitialSegments(
     ]);
     if (atV.edge !== point.edge.edge)
       throw new Error(`The initial segments of both ends of ${e.edge} overlap; they can't be folded`);
-    // Subdivide so that the part at v has an empty μ-image, then move the new junction along c.
+    // Subdivide as late along μ as the folded segment allows: the part at v gets the longest prefix of μ(e) that is
+    // also a prefix of c (the thesis, § "Subdivision and valence-two vertices": the split of μ is free). Then the new
+    // junction only has to move along the rest of c, often not at all.
+    const muAtV = fs.mu.image(atV);
+    let shared = 0;
+    while (shared < c.length && shared < muAtV.length && muAtV.at(shared) === c.at(shared)) shared++;
     const { first, second, junction, transform } = subdivide(
       fs,
       point.edge.edge,
       point.index,
-      atV.isForward ? 0 : fs.mu.image(atV.edge.forward).length,
+      atV.isForward ? shared : muAtV.length - shared,
     );
     transforms.push(transform);
     for (const [key, value] of segments)
@@ -240,16 +246,16 @@ export function foldInitialSegments(
           .slice(0, c.length)
           .equals(c),
     );
+    const rest = c.slice(shared);
     moveJunction(
       fs,
       junction,
-      c,
+      rest,
       [
-        "Isotopy: move the new junction along c = ",
+        "Isotopy: move the new junction along ",
+        ...(shared === 0 ? ["c = "] : ["the rest ", pathText(rest), " of c = "]),
         pathText(c),
-        " in G₀, so that the initial segment crosses the sides like the folded segment will (μ = c) and the rest has μ = c̄ μ(",
-        { strip: e.edge.name },
-        ").",
+        " in G₀, so that the initial segment crosses the sides like the folded segment will (μ = c).",
       ],
       partner === undefined ? undefined : (segments.get(partner) as OrientedEdge),
     );
