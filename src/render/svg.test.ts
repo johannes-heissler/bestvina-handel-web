@@ -5,9 +5,11 @@ import { chartOf } from "../embedding/chart";
 import { layout } from "../embedding/layout";
 import type { FibredSurface } from "../fibred/fibred-surface";
 import { autopilot } from "../fibred/suggestions";
+import { trainTrack } from "../fibred/train-track";
 import { Session } from "../session/session";
 import { decodeSession } from "../session/share";
-import { renderSvg } from "./svg";
+import { renderSvg, turnSide } from "./svg";
+import type { OrientedEdge, Vertex } from "../graph/ribbon-graph";
 
 const chartFor = (model: SurfaceModel, fs: FibredSurface) => ({
   chart: chartOf(model, {}, spineOfGraph(model, fs.spine0)),
@@ -20,9 +22,26 @@ describe("SVG", () => {
     const surface = buildPreset(preset);
     const { chart } = chartFor(preset.model, surface);
     const result = layout(surface, chart);
+    // A turn inside a gate (only those are drawn): two ends with the same switch, the side between them decided.
+    const tt = trainTrack(surface);
+    const turn = surface.graph.vertices
+      .flatMap((v) => {
+        const star = surface.graph.star(v);
+        const gates = {
+          switchOf: tt.switchOf,
+          ...(tt.singleGateOrder.has(v) && { singleOrder: tt.singleGateOrder.get(v)! }),
+        };
+        return star.flatMap((x) =>
+          star
+            .filter((y) => y !== x && turnSide(star, x, y, gates) !== undefined)
+            .map((y) => [x.name, y.name]),
+        );
+      })
+      .find(([x, y]) => ![x, y].includes("a") && ![x, y].includes("b"));
+    expect(turn).toBeDefined();
     const highlight = [
       { ends: ["a", "b"], kind: "fold" as const, fractions: [0.5, 0.5] },
-      { ends: ["c", "d"], kind: "turn" as const },
+      { ends: turn!, kind: "turn" as const },
     ];
     for (const view of ["trainTrack", "standard"] as const) {
       const { svg } = renderSvg(surface, result, { view, highlight });
@@ -83,6 +102,27 @@ describe("SVG", () => {
     const fs = buildPreset(PRESETS.find((p) => p.name === "Point push")!);
     const { chart } = chartFor(pointPushModel(), fs);
     expect(renderSvg(fs, layout(fs, chart), { view: "striped" }).notes).toHaveLength(1);
+  });
+
+  it("highlights a turn on the side inside its gate", () => {
+    // Strip ends and switches stand in for the real ones: only their identities matter.
+    const [a, b, c, d, e] = ["a", "b", "c", "d", "e"].map(
+      (name) => ({ name }) as unknown as OrientedEdge,
+    ) as [OrientedEdge, OrientedEdge, OrientedEdge, OrientedEdge, OrientedEdge];
+    const [s, t] = [{}, {}] as [Vertex, Vertex];
+    const star = [a, b, c, d, e];
+    // Two gates {a, b, c} and {d, e}: the turn (c, a) lies on the side of b, i.e. from a counterclockwise to c.
+    const gate = (x: OrientedEdge) => ([d, e].includes(x) ? t : s);
+    const two = { switchOf: new Map(star.map((x) => [x, gate(x)] as const)) };
+    expect(turnSide(star, a, c, two)).toBe("counterclockwise");
+    expect(turnSide(star, c, a, two)).toBe("clockwise");
+    expect(turnSide(star, a, d, two)).toBeUndefined(); // different gates
+    // A single gate cut open between b and c (linear order c d e a b): the turn (b, d) doesn't cross the cut.
+    const single = { switchOf: new Map(star.map((x) => [x, s] as const)), singleOrder: [c, d, e, a, b] };
+    expect(turnSide(star, d, b, single)).toBe("counterclockwise");
+    expect(turnSide(star, b, d, single)).toBe("clockwise");
+    // Without a linear order the side is not decided, and the turn is not drawn.
+    expect(turnSide(star, b, d, { switchOf: single.switchOf })).toBeUndefined();
   });
 
   it("scales the widths of the strips and the infinitesimal branches by the width factor", () => {

@@ -33,6 +33,9 @@
   let sideFraction = $state(0.8);
   let pointerSize = $state(6); // the radius of the dot under the mouse, in pixels at the centre
   let labels = $state(true);
+  /** Highlight the selected fold, and the turns of its inefficiency that the later steps fold. */
+  let showFold = $state(true);
+  let showTurns = $state(true);
   let showOptions = $state(false);
 
   const node = $derived.by(() => {
@@ -62,7 +65,7 @@
       ...(polygon && { sideFraction }),
       labels,
       // The highlight belongs to the current state, not to a step of the timeline.
-      ...(shown === undefined && app.highlight.length > 0 && { highlight: app.highlight }),
+      ...(shown === undefined && { highlight: app.highlight.filter((w) => (w.kind === "fold" ? showFold : showTurns)) }),
       size: 800,
     };
     if (shown !== undefined && "states" in shown)
@@ -244,6 +247,12 @@
       {/if}
       <label title="The dot under the mouse, shown in the polygon and in every copy; its radius in pixels at the centre of the model, shrinking with the metric"
         >Pointer size <input type="range" min="3" max="12" step="0.5" bind:value={pointerSize} /> {pointerSize}</label
+      >
+      <label title="While a fold is selected: the strip ends it folds"
+        ><input type="checkbox" bind:checked={showFold} /> Fold sector</label
+      >
+      <label title="While a fold is selected: the turns of its inefficiency that the later steps of removing it fold"
+        ><input type="checkbox" bind:checked={showTurns} /> Turn sectors</label
       >
       <label><input type="checkbox" bind:checked={labels} /> Show names</label>
       {#if hyperbolic && labels}

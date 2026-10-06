@@ -844,12 +844,13 @@ export function renderSvg(fs: FibredSurface, layout: Layout, options: RenderOpti
       if (ends.some((x) => (x as OrientedEdge).source !== v)) continue;
       const star = fs.graph.star(v);
       // The side of the wedge: from the first end counterclockwise (the order of the star) to the last. A fold is given
-      // in that order; for a turn, the side with fewer strips in between.
+      // in that order; for a turn, the side inside its gate (see `turnSide`), and none if that is not decided.
       let [first, last] = [ends[0] as OrientedEdge, ends.at(-1) as OrientedEdge];
       let [firstFraction, lastFraction] = [wedge.fractions?.[0], wedge.fractions?.at(-1)];
       if (wedge.kind === "turn") {
-        const between = (star.indexOf(last) - star.indexOf(first) - 1 + star.length) % star.length;
-        if (between > star.length - 2 - between) {
+        const side = turnSide(star, first, last, gatesOf(v));
+        if (side === undefined) continue;
+        if (side === "clockwise") {
           [first, last] = [last, first];
           [firstFraction, lastFraction] = [lastFraction, firstFraction];
         }
@@ -1095,6 +1096,31 @@ function endAt(lines: Map<Edge, Complex[][]>, x: OrientedEdge): { line: Complex[
   return x.isForward
     ? { line: pieces[0] as Complex[], atStart: true }
     : { line: pieces[pieces.length - 1] as Complex[], atStart: false };
+}
+
+/**
+ * The side of the turn (first, last) at a junction to highlight, from `first` counterclockwise to `last` or the other
+ * way: the side inside their gate (the turns of an inefficiency lie in one gate). At a junction with several gates, the
+ * side whose strips in between are all in the gate; at a single gate, the side that doesn't cross the place where its
+ * linear order cuts the star open. Undefined if that is not decided (no linear order, or the ends in different gates).
+ */
+export function turnSide(
+  star: readonly OrientedEdge[],
+  first: OrientedEdge,
+  last: OrientedEdge,
+  gates: { switchOf: ReadonlyMap<OrientedEdge, Vertex>; singleOrder?: readonly OrientedEdge[] },
+): "counterclockwise" | "clockwise" | undefined {
+  const s = gates.switchOf.get(first);
+  if (s === undefined || gates.switchOf.get(last) !== s) return undefined;
+  if (star.every((x) => gates.switchOf.get(x) === s)) {
+    const order = gates.singleOrder;
+    if (order === undefined) return undefined;
+    // The linear order runs counterclockwise (a rotation of the star).
+    return order.indexOf(first) < order.indexOf(last) ? "counterclockwise" : "clockwise";
+  }
+  const [i, j] = [star.indexOf(first), star.indexOf(last)];
+  const between = Array.from({ length: (j - i - 1 + star.length) % star.length }, (_, k) => star[(i + 1 + k) % star.length]);
+  return between.every((x) => gates.switchOf.get(x as OrientedEdge) === s) ? "counterclockwise" : "clockwise";
 }
 
 function decoration(
