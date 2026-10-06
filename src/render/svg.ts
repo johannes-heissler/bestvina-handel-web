@@ -7,7 +7,9 @@
  * - **trainTrack**: the train track τ: the strips, ending at the switches of their gates on a small transparent disk
  *   around each junction, with the infinitesimal branches of τ between the switches;
  * - **striped**: each strip as a ribbon with one stripe per piece of the image f(F) inside it, in the colour of the
- *   strip it comes from (f[F] ⊆ F). This needs g to be tight (see `strandOrder`).
+ *   strip it comes from (f[F] ⊆ F). This needs g to be tight (see `strandOrder`);
+ * - **image**: f(τ), drawn like τ. The caller passes the image surface, embedded by μ ∘ g (see `imageSurface`), and
+ *   the widths of τ divided by λ (`widths`).
  *
  * @module
  */
@@ -31,7 +33,7 @@ import type { Chart, Decoration } from "../embedding/chart";
 import { type Layout, lineParameter } from "../embedding/layout";
 import { strandOrder } from "../embedding/strand-order";
 
-export type ViewKind = "trainTrack" | "standard" | "striped";
+export type ViewKind = "trainTrack" | "standard" | "striped" | "image";
 export type Smoothing = "none" | "spline" | "rounded";
 
 export interface RenderOptions {
@@ -49,6 +51,11 @@ export interface RenderOptions {
   readonly sideStyle?: SideStyle;
   /** Down to which width (in pixels) the sides are dashed or dotted; thinner, they fade to a faint solid line. */
   readonly dashUntil?: number;
+  /**
+   * A factor for the widths of the strips, the sides and the infinitesimal branches (default 1). Above 1, the strands
+   * of a gate may get wider than the disk of its junction.
+   */
+  readonly widthScale?: number;
   /** Scale the names with the metric (hyperbolic charts); the copies then get names too. */
   readonly scaleNames?: boolean;
   /** In the Klein model, shape the names by the metric (squeezed towards the boundary), not only scale them. */
@@ -61,6 +68,11 @@ export interface RenderOptions {
   readonly moving?: readonly string[];
   /** Strip ends to highlight with the space between them, e.g. the fold that is selected (see fold-highlight.ts). */
   readonly highlight?: readonly Wedge[];
+  /**
+   * The widths of the strips in pixels at the centre of the model (before `widthScale`), instead of fitting them to
+   * the ports and the junctions; e.g. the widths of τ divided by λ for f(τ) (see {@link Rendered.widths}).
+   */
+  readonly widths?: ReadonlyMap<Edge, number>;
 }
 
 export type SideStyle = "solid" | "dashed" | "dotted";
@@ -75,6 +87,8 @@ export interface Rendered {
    * `Display(Point)`); empty outside.
    */
   readonly echo: (x: number, y: number) => { x: number; y: number; r: number }[];
+  /** The widths of the strips in pixels at the centre of the model (before `widthScale`). */
+  readonly widths: ReadonlyMap<Edge, number>;
 }
 
 const COPY_OPACITY = 0.35;
@@ -88,7 +102,7 @@ const TURN_COLOR = "#00a0a0";
 
 export function renderSvg(fs: FibredSurface, layout: Layout, options: RenderOptions = {}): Rendered {
   const size = options.size ?? 640;
-  const view = options.view ?? "trainTrack";
+  const view = options.view === "image" ? "trainTrack" : (options.view ?? "trainTrack");
   const model = options.model ?? "poincare";
   const smoothing = options.smoothing ?? "spline";
   const chart = layout.chart;
@@ -98,6 +112,7 @@ export function renderSvg(fs: FibredSurface, layout: Layout, options: RenderOpti
   const toDisplay = (z: Complex) => (hyperbolic ? fromKlein(model, z) : z);
   const bounds = displayBounds(chart, toDisplay, hyperbolic ? model : undefined);
   const scale = size / Math.max(bounds.width, bounds.height);
+  const widthScale = options.widthScale ?? 1;
   const px = (z: Complex) => `${fmt((z.re - bounds.minX) * scale)},${fmt((bounds.maxY - z.im) * scale)}`;
 
   /**
@@ -219,12 +234,14 @@ export function renderSvg(fs: FibredSurface, layout: Layout, options: RenderOpti
       );
     for (const width of gateWidths.values()) shrink = Math.min(shrink, (2 * radiusOf(v)) / width);
   }
-  /** The width of the strip e in the hyperbolic metric (in display units for flat charts). */
-  const trueWidth = (e: Edge) => ((basePixels(e) * shrink) / scale) * centreMetric;
+  /** The width of the strip e in pixels at the centre, before the width factor. */
+  const pixelsOf = (e: Edge) => options.widths?.get(e) ?? basePixels(e) * shrink;
+  /** The width of the strip e in the hyperbolic metric (in display units for flat charts), times the width factor. */
+  const trueWidth = (e: Edge) => ((pixelsOf(e) * widthScale) / scale) * centreMetric;
   /** The width of e in display units at the display point z, across the unit direction n (at least 0.4 pixels). */
   // (At most twice the width at the centre: in the half-plane, strips high up would get arbitrarily wide.)
   const widthAt = (e: Edge, z: Complex, n: Complex) =>
-    Math.min((2 * trueWidth(e)) / centreMetric, Math.max(0.4 / scale, trueWidth(e) / metric(z, n)));
+    Math.min((2 * trueWidth(e)) / centreMetric, Math.max((0.4 * widthScale) / scale, trueWidth(e) / metric(z, n)));
   /** The region between the offsets from·w and to·w across a display polyline of e (w: the width of e there). */
   const band = (e: Edge, line: readonly Complex[], from: number, to: number): string =>
     bandPath(line, (z, n) => widthAt(e, z, n), from, to);
@@ -257,12 +274,12 @@ export function renderSvg(fs: FibredSurface, layout: Layout, options: RenderOpti
     return left.length < 2 ? "" : `M${[...left, ...right.toReversed()].map(px).join("L")}Z`;
   };
 
-  // The sides of the polygon: 1.5 pixels wide at the centre, constant in the hyperbolic metric; solid, or dashes and
-  // dots whose lengths are constant in the hyperbolic metric as well.
-  const sideWidth = (1.5 / scale) * centreMetric;
-  // (At most 3 pixels: in the half-plane, a side running up to ∞ would get arbitrarily wide.)
+  // The sides of the polygon: 1.5 pixels wide at the centre (times the width factor), constant in the hyperbolic
+  // metric; solid, or dashes and dots whose lengths are constant in the hyperbolic metric as well.
+  const sideWidth = ((1.5 * widthScale) / scale) * centreMetric;
+  // (At most twice the width at the centre: in the half-plane, a side running up to ∞ would get arbitrarily wide.)
   const sideWidthAt = (z: Complex, n: Complex) =>
-    Math.min(3 / scale, Math.max(0.05 / scale, sideWidth / metric(z, n)));
+    Math.min((3 * widthScale) / scale, Math.max((0.05 * widthScale) / scale, sideWidth / metric(z, n)));
   /** The hyperbolic length of the display segment from a to b (display units for flat charts). */
   const lengthOf = (a: Complex, b: Complex) => {
     const step = b.sub(a);
@@ -981,7 +998,7 @@ export function renderSvg(fs: FibredSurface, layout: Layout, options: RenderOpti
           const [p, q] = [points.get(a), points.get(b)];
           if (p && q)
             group.push(
-              `<path d="M${px(p)}Q${px(center)} ${px(q)}" stroke="#555" stroke-width="${fmt(k)}" fill="none"/>`,
+              `<path d="M${px(p)}Q${px(center)} ${px(q)}" stroke="#555" stroke-width="${fmt(k * widthScale)}" fill="none"/>`,
             );
         }
       for (const p of points.values())
@@ -1054,7 +1071,7 @@ export function renderSvg(fs: FibredSurface, layout: Layout, options: RenderOpti
       return Number.isFinite(sx) && Number.isFinite(sy) && r > 0.3 ? [{ x: sx, y: sy, r }] : [];
     });
   };
-  return { svg, notes, echo };
+  return { svg, notes, echo, widths: new Map(fs.graph.edges.map((e) => [e, pixelsOf(e)])) };
 }
 
 const STRIPED_NOTE = "The striped view needs g to be tight: pull tight (or run the algorithm) first.";

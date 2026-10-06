@@ -113,7 +113,8 @@
             ></label
           >
           <label
-            >Peripheral <select bind:value={peripheral}
+            title="Optional: how many punctures get a peripheral circle at the start. Without, the algorithm adds the circles around punctures to the peripheral subgraph P when it finds them invariant."
+            >Peripheral (optional) <select bind:value={peripheral}
               >{#each Array.from({ length: Math.max(punctures, 1) }, (_, i) => i) as k (k)}<option value={k}>{k}</option>{/each}</select
             ></label
           >
@@ -138,7 +139,8 @@
         >
         <div class="buttons">
           <label><input type="checkbox" bind:checked={closed} /> closed surface (the single puncture is artificial)</label>
-          <label>Peripheral strips <input bind:value={peripheralStrips} placeholder="p, q" size="8" /></label>
+          <label title="Optional: strips that form circles around punctures. Without, the algorithm adds such circles to the peripheral subgraph P when it finds them invariant."
+            >Peripheral strips (optional) <input bind:value={peripheralStrips} placeholder="p, q" size="8" /></label>
         </div>
         <label class="wide">Map<textarea rows="3" bind:value={map} placeholder="a -> a b, b -> b a b"></textarea></label>
         <button class="primary" onclick={startRibbon}>Start</button>

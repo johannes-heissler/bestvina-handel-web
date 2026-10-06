@@ -20,6 +20,7 @@ const STEP_KINDS: ReadonlySet<SuggestionKind> = new Set<StepKind>([
   "pull tight",
   "move vertices",
   "absorb into periphery",
+  "peripheral circles",
   "remove valence-2 junctions",
   "fold",
 ]);

@@ -26,6 +26,8 @@
   let kleinNames = $state(false);
   let deckDepth = $state(1);
   let widthExponent = $state(0.5);
+  /** A factor for the widths of the strips, the sides and the infinitesimal branches. */
+  let widthScale = $state(1);
   let straightening = $state(10);
   /** The part of each side the crossings may use (for polygons). */
   let sideFraction = $state(0.8);
@@ -55,6 +57,7 @@
       kleinNames,
       deckDepth,
       widthExponent,
+      widthScale,
       straightening,
       ...(polygon && { sideFraction }),
       labels,
@@ -165,6 +168,7 @@
       >View
       <select bind:value={view}>
         <option value="trainTrack">Train track τ</option>
+        <option value="image">Image f(τ)</option>
         <option value="standard">Standard</option>
         <option value="striped">Striped f(F) ⊆ F</option>
       </select></label
@@ -223,6 +227,9 @@
         title="The weights w(e)^c of the strips, with the Perron–Frobenius widths w(e) (as in 'Transition matrix, widths, lengths'). Every strip is drawn with a width proportional to w(e)^c: c = 0 all equally wide, c = 1 exactly in the ratios of the widths w, in between in the same order but closer together. (All widths are then shrunk by one common factor until the strands fit.) The weights also space the strands on the sides before straightening."
         >Width exponent c <input type="range" min="0" max="1" step="0.1" bind:value={widthExponent} />
         {widthExponent.toFixed(1)}</label
+      >
+      <label title="A factor for the widths of the strips, the sides and the infinitesimal branches (above 1, the strands of a gate may get wider than the disk of its junction)"
+        >Widths × <input type="range" min="0.25" max="2" step="0.05" bind:value={widthScale} /> {widthScale.toFixed(2)}</label
       >
       <label
         title="Rounds of moving the crossings with the glued sides so that the strips run straight (geodesically) through them, keeping their order and staying on the side (0: evenly spaced crossings)"

@@ -4,16 +4,23 @@
  *
  * The definition asks: (1) each component of P is a circle graph representing a boundary word of G; (2) g preserves P
  * and acts on it as a graph automorphism; (3) exactly one orbit of punctures (boundary words) under f has no component
- * of P. Condition (2) is weakened here: g must map P into P, and the image of each circle, read around it and cyclically
- * reduced (backtracking inside P is allowed), must be its image circle, once and with the same orientation. That g acts
- * on P as an automorphism is then restored by absorbing into the periphery, which only uses how far the images run
- * along the circles (their signed lengths).
+ * of P. Condition (2) is weakened here: g must map P into what absorbing into the periphery collapses into P (the
+ * maximal invariant subgraph retracting to P), and the image of each circle, read around it and cyclically reduced
+ * (backtracking inside P is allowed), must be its image circle, once and with the same orientation. That g acts on P as
+ * an automorphism is then restored by absorbing into the periphery, which only uses how far the images run along the
+ * circles (their signed lengths).
+ *
+ * Condition (3) is weakened too: P need not be chosen at the start. More than one orbit of punctures may be essential;
+ * when the algorithm finds an invariant subgraph whose components are circles around punctures, they are added to P
+ * ({@link invariantPunctureCircles}), and absorbing into the periphery does the rest. (Only for χ = 0 could the
+ * invariant circles reach every orbit.)
  *
  * @module
  */
 import type { EdgePath } from "../graph/edge-path";
-import type { Edge } from "../graph/ribbon-graph";
+import type { Edge, Vertex } from "../graph/ribbon-graph";
 import type { FibredSurface } from "./fibred-surface";
+import { maximalInvariantSubgraphRetractingTo } from "./moves/reducibility";
 
 /** The boundary words of G, and the permutation g induces on them (−1 where an image is not a boundary word). */
 function boundaryWordsAndImages(fs: FibredSurface): { words: EdgePath[]; image: number[] } {
@@ -62,15 +69,15 @@ function circleProblems(words: readonly EdgePath[]): string[] {
   return problems;
 }
 
-/** Whether g maps the strips `P` into P. */
-function mapsInto(fs: FibredSurface, P: ReadonlySet<Edge>): Edge | undefined {
-  return [...P].find((e) => fs.g.image(e.forward).letters.some((x) => !P.has(x.edge)));
+/** A strip of `P` that g doesn't map into `target` (by default P itself), if any. */
+function mapsInto(fs: FibredSurface, P: ReadonlySet<Edge>, target: ReadonlySet<Edge> = P): Edge | undefined {
+  return [...P].find((e) => fs.g.image(e.forward).letters.some((x) => !target.has(x.edge)));
 }
 
 /**
- * What is wrong with the peripheral subgraph P, as sentences: empty if P fulfils the definition, with condition (2)
- * weakened (see the module comment). Nothing is reported if g doesn't permute the boundary words (the integrity check
- * reports that).
+ * What is wrong with the peripheral subgraph P, as sentences: empty if P fulfils the definition, with conditions (2)
+ * and (3) weakened (see the module comment). Nothing is reported if g doesn't permute the boundary words (the integrity
+ * check reports that).
  */
 export function peripheryProblems(fs: FibredSurface): string[] {
   const P = fs.peripheral;
@@ -89,11 +96,11 @@ export function peripheryProblems(fs: FibredSurface): string[] {
       `The peripheral strips ${loose.map((e) => e.name).join(", ")} don't form a circle that is a boundary word of G (a circle around a puncture).`,
     );
   problems.push(...circleProblems(peripheral.map((i) => words[i] as EdgePath)));
-  // (2), weakened: g maps P into P, and each circle once around its image circle.
-  const leaving = mapsInto(fs, P);
+  // (2), weakened: g maps P into what absorbing collapses into P, and each circle once around its image circle.
+  const leaving = mapsInto(fs, P, maximalInvariantSubgraphRetractingTo(fs, P));
   if (leaving !== undefined)
     problems.push(
-      `g maps the peripheral strip ${leaving.name} to ${fs.g.image(leaving.forward)}, which leaves P: g doesn't preserve P.`,
+      `g maps the peripheral strip ${leaving.name} to ${fs.g.image(leaving.forward)}, which leaves P (and what absorbing into the periphery would add to it): g doesn't preserve P.`,
     );
   else
     for (const i of peripheral)
@@ -101,17 +108,10 @@ export function peripheryProblems(fs: FibredSurface): string[] {
         problems.push(
           `g maps the peripheral circle ${words[i]} to the boundary word ${words[image[i] as number]}, which is not peripheral.`,
         );
-  // (3) Exactly one orbit of boundary words without P.
-  const essentialOrbits = orbitList.filter((orbit) => orbit.some((i) => !peripheral.includes(i)));
-  if (essentialOrbits.length === 0)
+  // (3), weakened: some orbit of boundary words without P (more than one is fine, see the module comment).
+  if (orbitList.every((orbit) => orbit.every((i) => peripheral.includes(i))))
     problems.push(
-      "Every boundary word is peripheral: exactly one orbit of punctures must be essential (not in P).",
-    );
-  else if (essentialOrbits.length > 1)
-    problems.push(
-      `The boundary words not in P form ${essentialOrbits.length} orbits under g (${essentialOrbits
-        .map((orbit) => orbit.map((i) => `${words[i]}`).join(" → "))
-        .join("; ")}): all but one orbit of punctures must be peripheral.`,
+      "Every boundary word is peripheral: at least one orbit of punctures must be essential (not in P).",
     );
   return problems;
 }
@@ -139,4 +139,47 @@ export function peripheryCandidates(fs: FibredSurface): PeripheryCandidate[] {
     if (mapsInto(fs, edges) !== undefined) return [];
     return [{ edges, essential: essential.map((i) => words[i] as EdgePath) }];
   });
+}
+
+/**
+ * The circles around punctures that an invariant subgraph found by the reducibility check consists of, if it does:
+ * every component of `invariant` is a circle that is a boundary word of G (a curve around a puncture), with trees
+ * attached (which absorbing into the periphery collapses). Such a subgraph doesn't make f reducible (its curves are
+ * peripheral): its circles are added to P instead. Undefined if a component is something else, or if a circle is
+ * already in P or touches it (then P with the circles would not be a disjoint union of circles).
+ */
+export function invariantPunctureCircles(
+  fs: FibredSurface,
+  invariant: ReadonlySet<Edge>,
+): Set<Edge> | undefined {
+  const words = fs.graph.boundaryWords();
+  const onP = new Set([...fs.peripheral].flatMap((e) => [e.source, e.target]));
+  const circles = new Set<Edge>();
+  for (const component of fs.graph.components(invariant)) {
+    if (component.edges.size !== component.vertices.size) return undefined; // not a circle with trees
+    const core = coreOf(component.edges);
+    const isWord = words.some(
+      (w) => w.letters.length === core.size && w.letters.every((x) => core.has(x.edge)),
+    );
+    if (!isWord || [...core].some((e) => fs.peripheral.has(e) || onP.has(e.source) || onP.has(e.target)))
+      return undefined;
+    core.forEach((e) => circles.add(e));
+  }
+  return circles.size > 0 ? circles : undefined;
+}
+
+/** The cycle of a connected graph with one cycle: what is left after pruning the leaves. */
+function coreOf(edges: ReadonlySet<Edge>): Set<Edge> {
+  const core = new Set(edges);
+  const degree = (v: Vertex) =>
+    [...core].reduce((n, e) => n + (e.source === v ? 1 : 0) + (e.target === v ? 1 : 0), 0);
+  for (let pruned = true; pruned;) {
+    pruned = false;
+    for (const e of core)
+      if (degree(e.source) === 1 || degree(e.target) === 1) {
+        core.delete(e);
+        pruned = true;
+      }
+  }
+  return core;
 }

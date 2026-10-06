@@ -84,6 +84,22 @@ describe("SVG", () => {
     const { chart } = chartFor(pointPushModel(), fs);
     expect(renderSvg(fs, layout(fs, chart), { view: "striped" }).notes).toHaveLength(1);
   });
+
+  it("scales the widths of the strips and the infinitesimal branches by the width factor", () => {
+    const surface = autopilot(buildPreset(preset)).surface;
+    const { chart } = chartFor(preset.model, surface);
+    const result = layout(surface, chart);
+    const numbers = (svg: string, pattern: RegExp) => [...svg.matchAll(pattern)].map((m) => Number(m[1]));
+    const [plain, wide] = [1, 2].map(
+      (widthScale) => renderSvg(surface, result, { sideStyle: "solid", widthScale }).svg,
+    ) as [string, string];
+    // The strips (their highlight outline is half their width) and the infinitesimal branches.
+    for (const pattern of [/--grow:([\d.]+)px/g, /stroke="#555" stroke-width="([\d.]+)"/g]) {
+      const [before, after] = [numbers(plain, pattern), numbers(wide, pattern)];
+      expect(before.length).toBeGreaterThan(0);
+      after.forEach((x, i) => expect(x).toBeCloseTo(2 * (before[i] as number), 1));
+    }
+  });
 });
 
 function pointPushModel(): SurfaceModel {

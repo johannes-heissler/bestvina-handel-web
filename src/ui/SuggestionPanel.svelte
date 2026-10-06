@@ -27,6 +27,7 @@
     { kind: "move vertices", label: "Moving vertices (least λ)" },
     { kind: "remove valence-2 junctions", label: "Valence-2 junctions" },
     { kind: "absorb into periphery", label: "Absorb into the periphery" },
+    { kind: "peripheral circles", label: "Invariant circles around punctures into P" },
     { kind: "fold", label: "Folds" },
     { kind: "closed surface", label: "Closed surfaces (cut)" },
     { kind: "reducible", label: "Reduce (first piece)" },

@@ -28,7 +28,7 @@ import { valenceTwoJunctions } from "./moves/valence";
 import { EdgePoint } from "./edge-point";
 import { findGates } from "./gates";
 import { narrated, quietly } from "./narration";
-import { peripheryCandidates, peripheryProblems } from "./periphery";
+import { invariantPunctureCircles, peripheryCandidates, peripheryProblems } from "./periphery";
 import { perronFrobenius } from "./perron-frobenius";
 import { prongs } from "./singular-leaves";
 import { trainTrack } from "./train-track";
@@ -83,6 +83,7 @@ export type SuggestionKind =
   | "pull tight"
   | "move vertices"
   | "absorb into periphery"
+  | "peripheral circles"
   | "reducible"
   | "remove valence-2 junctions"
   | "fold"
@@ -331,24 +332,28 @@ function nextStep(fs: FibredSurface, context: SuggestionContext): Suggestion {
       order,
     });
 
-  // The peripheral subgraph must fulfil its definition (with the weaker condition on g; see periphery.ts). While the
-  // graph admits no peripheral subgraph (e.g. the rose, where the boundary words share the junction), the algorithm
-  // continues with P as it is (the State panel warns); a later graph may admit one, which is then suggested.
+  // The peripheral subgraph must fulfil its definition (with the weaker conditions of periphery.ts). If it doesn't (a P
+  // chosen at the start), P = ∅ is always possible: the algorithm adds the circles around punctures when it finds them.
   if (!fs.ignorePeriphery) {
     const problems = peripheryProblems(fs);
-    const candidates = problems.length > 0 ? peripheryCandidates(fs) : [];
-    if (candidates.length > 0) {
+    if (problems.length > 0) {
+      const candidates = peripheryCandidates(fs).filter((c) => c.edges.size > 0);
       return {
         kind: "peripheral subgraph",
         description: [
           "The peripheral subgraph P doesn't fulfil its definition. ",
           problems.join(" "),
-          " The possible peripheral subgraphs: the circles around the punctures of all orbits but one, which is essential (the thesis, remark under the definition of P).",
+          " Either P = ∅, or the circles around the punctures of all orbits but one, which is essential (the thesis, remark under the definition of P).",
         ],
         options: [
+          {
+            move: { kind: "set peripheral subgraph" as const, strips: [] },
+            label: ["P = ∅"],
+            details: ["The algorithm adds the circles around punctures to P when it finds them invariant."],
+          },
           ...candidates.map((c) => ({
             move: { kind: "set peripheral subgraph" as const, strips: names(c.edges) },
-            label: (c.edges.size === 0 ? ["P = ∅"] : ["P = ", ...strips(names(c.edges))]) as Text,
+            label: ["P = ", ...strips(names(c.edges))] as Text,
             details: [
               c.essential.length === 1 ? "Essential puncture: " : "Essential orbit: ",
               c.essential.map(String).join("; "),
@@ -366,8 +371,37 @@ function nextStep(fs: FibredSurface, context: SuggestionContext): Suggestion {
     }
   }
 
+  // Invariant circles around punctures don't make f reducible (their curves are peripheral): they join P, which therefore
+  // need not be chosen at the start (see periphery.ts). Absorbing into the periphery then does the rest.
+  const reductions = reductionCandidates(fs);
+  const circles = reductions.flatMap((c) => {
+    const found = c.forest ? undefined : invariantPunctureCircles(fs, c.preserved);
+    return found ? [found] : [];
+  });
+  if (circles.length > 0) {
+    const all = invariantPunctureCircles(
+      fs,
+      new Set(reductions.flatMap((c) => (c.forest ? [] : [...c.preserved]))),
+    );
+    const option = (added: ReadonlySet<Edge>, label: Text): MoveOption => ({
+      move: { kind: "set peripheral subgraph", strips: names([...fs.peripheral, ...added]) },
+      label: [...label, ...strips(names(added))],
+    });
+    return {
+      kind: "peripheral circles",
+      description: [
+        "These invariant subgraphs are circles around punctures (with trees attached): their curves are peripheral, so they don't make f reducible. They are added to the peripheral subgraph P, and absorbing into the periphery follows.",
+      ],
+      options: [
+        ...(circles.length > 1 && all ? [option(all, ["Add all to P: "])] : []),
+        ...circles.map((c) => option(c, ["Add to P: "])),
+      ],
+      multiple: false,
+    };
+  }
+
   if (!fs.ignoreReducible) {
-    const candidates = reductionCandidates(fs);
+    const candidates = reductions;
     if (candidates.length > 0)
       return {
         kind: "reducible",
@@ -966,6 +1000,7 @@ export const DEFAULT_AUTOMATIC: ReadonlySet<SuggestionKind> = new Set<Suggestion
   "pull tight",
   "move vertices",
   "absorb into periphery",
+  "peripheral circles",
   "remove valence-2 junctions",
   "fold",
   "closed surface",

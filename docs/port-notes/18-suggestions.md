@@ -149,7 +149,8 @@ that fold first, marked "Next fold of the last inefficiency", with an accent bar
 `periphery.ts` checks P against its definition (the thesis, § "Periphery"): (1) its components are disjoint circle
 graphs, each a boundary word of G; (2), weakened: g maps P into P, and the image of each circle, read around it and
 cyclically reduced, is its image circle, once and with the same orientation (backtracking inside P is allowed; g need
-not act as an automorphism); (3) the boundary words outside P form exactly one orbit under g. Absorbing into the
+not act as an automorphism); (3) the boundary words outside P form exactly one orbit under g (since relaxed, see
+below). Absorbing into the
 periphery now also runs when g maps P into P but not as an automorphism (e.g. p ↦ p P p), and restores that; it only
 uses the signed lengths of the pieces in P, so backtracking there is fine (tested).
 
@@ -162,6 +163,24 @@ uses the signed lengths of the pieces in P, so backtracking there is fine (teste
   out with the warning that convergence and correctness are not guaranteed, as is "Ignore and continue" at a
   reducible map now. The autopilot stops at the suggestion.
 - The summary of a move mentions when P changed.
+
+## Update: the peripheral subgraph is optional (issue #3)
+
+P need not be chosen at the start. As long as no invariant subgraph is a union of circles around punctures, P = ∅
+is no problem (other invariant subgraphs define reduction systems). Once there is one, g preserves its boundary words,
+so its circles can be added to P, and absorbing into the periphery does the rest, as after reducing. Only for χ = 0
+could such circles reach every orbit of punctures.
+
+- A new step **"peripheral circles"**, before the reducibility check: the reduction candidates (not from invariant
+  forests) whose components are each a circle that is a boundary word of G, with trees attached
+  (`invariantPunctureCircles` in `periphery.ts`), as moves "set peripheral subgraph" with P ∪ the circles ("Add all to
+  P" first if there are several). It is an automatic step by default. Circles that are in P already, or touch it, are
+  left to the reducibility check.
+- `peripheryProblems` no longer requires exactly one essential orbit, only at least one. Condition (2) is checked
+  against what absorbing collapses into P (the maximal invariant subgraph retracting to P), not P itself.
+- For an inconsistent P (chosen at the start), the "peripheral subgraph" suggestion offers P = ∅ first, so it is
+  always offered; the State panel's "no peripheral subgraph exists" note is gone.
+- The start dialog marks the peripheral choices as optional.
 
 ## Update: moving vertices as a step; switching moves off; no valence-1 step
 
