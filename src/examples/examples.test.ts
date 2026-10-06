@@ -1,8 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { FibredSurface } from "../fibred/fibred-surface";
 import { perronFrobenius } from "../fibred/perron-frobenius";
-import { autopilot, nextSuggestion } from "../fibred/suggestions";
-import { gallery } from "./gallery";
+import { applyMove, type FollowUp } from "../fibred/move";
+import { autopilot, DEFAULT_AUTOMATIC, nextSuggestion } from "../fibred/suggestions";
+import { canonicalWord, gallery } from "./gallery";
 import { initialFibredSurface, spineOf, topology, type SurfaceModel } from "./models";
 import { buildPreset, presetNamed, PRESETS, randomGenus2, randomTorus2 } from "./presets";
 
@@ -108,15 +109,47 @@ describe("gallery", () => {
   ])("offers several models of genus %i with %i punctures, all with that topology", (g, p) => {
     const models = gallery(g, p);
     expect(models.length).toBeGreaterThanOrEqual(g === 1 && p <= 1 ? 1 : 2);
-    for (const m of models) {
-      expect(topology(m)).toEqual({ genus: g, punctures: p });
-      expect(initialFibredSurface(m).checkIntegrity()).toEqual([]);
+    for (const { model, naming } of models) {
+      expect(topology(model)).toEqual({ genus: g, punctures: p });
+      expect(initialFibredSurface(model, naming).checkIntegrity()).toEqual([]);
     }
   });
 
+  it.each([
+    [1, 2],
+    [2, 0],
+    [2, 3],
+    [3, 2],
+    [0, 5],
+  ])(
+    "shows each polygon of genus %i with %i punctures once, up to renaming and reorienting its sides",
+    (g, p) => {
+      const keys = gallery(g, p).map(({ model }) =>
+        model.kind === "polygon" ? `${model.geometry.kind} ${canonicalWord(model.word)}` : model.name,
+      );
+      expect(new Set(keys).size).toBe(keys.length);
+    },
+  );
+
+  it("compares polygon words up to rotation and renaming and reorienting the sides", () => {
+    const same = (x: string, y: string) => canonicalWord(x.split(" ")) === canonicalWord(y.split(" "));
+    expect(same("a c b C A B", "a b c B A C")).toBe(true); // b and c swapped
+    expect(same("a b A B", "B a b A")).toBe(true); // rotated
+    expect(same("a b A B", "a B A b")).toBe(true); // b reversed
+    expect(same("a b A B c C", "a b c B A C")).toBe(false);
+  });
+
+  it("offers the twice-punctured torus of the examples, which the split sides would only repeat", () => {
+    const models = gallery(1, 2);
+    expect(models.map((m) => m.model.name)).toEqual(["Standard polygon", "Split side (examples)"]);
+    const examples = presetNamed("Half twist")!;
+    expect(models[1]!.model).toBe(examples.model);
+    expect(models[1]!.naming).toEqual(examples.options);
+  });
+
   it("includes the L-shaped surface and the punctured plane", () => {
-    expect(gallery(2, 1).map((m) => m.name)).toContain("L-shaped surface");
-    expect(gallery(0, 4).filter((m) => m.kind === "plane")).toHaveLength(3);
+    expect(gallery(2, 1).map((m) => m.model.name)).toContain("L-shaped surface");
+    expect(gallery(0, 4).filter((m) => m.model.kind === "plane")).toHaveLength(3);
   });
 
   it("refuses surfaces with χ ≥ 0", () => {
@@ -142,6 +175,25 @@ describe("presets", () => {
     );
     expect(growth(named!)).toBeCloseTo(growth(composed!), 6);
     expect(growth(named!)).toBeCloseTo(22.5364, 3);
+  });
+
+  it("finds the half twist composition pseudo-Anosov, folding initial segments of a", () => {
+    let fs = buildPreset(presetNamed("Pseudo-Anosov map of the twice-punctured torus")!);
+    expect(fs.mapName).toBe("D_a⁻¹ ∘ D_b⁻¹ ∘ D_a⁻¹ ∘ D_a⁻¹ ∘ h");
+    // Fold by fold (the default options), as in the panel, recording the strip ends of each fold.
+    const folded: string[][] = [];
+    let followUp: FollowUp | undefined;
+    let suggestion = nextSuggestion(fs);
+    while (DEFAULT_AUTOMATIC.has(suggestion.kind)) {
+      const move = suggestion.options[0]!.move;
+      if (move.kind === "fold") folded.push([...move.strips]);
+      fs = applyMove(fs, move, { followUp: (point) => (followUp = point) });
+      suggestion = nextSuggestion(fs, { followUp });
+    }
+    expect(suggestion.classification).toMatchObject({ kind: "pseudo-Anosov" });
+    expect(growth(fs)).toBeCloseTo(((1 + Math.sqrt(5)) / 2) ** 2, 9);
+    expect(folded).toHaveLength(2);
+    expect(folded.every((strips) => strips[0] === "a")).toBe(true);
   });
 
   it("builds random genus-2 maps reproducibly", () => {

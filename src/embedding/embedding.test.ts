@@ -12,8 +12,8 @@ const chartFor = (model: SurfaceModel, fs = initialFibredSurface(model)) =>
 
 describe("charts", () => {
   it("glues each side to its partner by the deck transformation, u ↦ −u", () => {
-    for (const model of [...gallery(2, 1), ...gallery(2, 0)]) {
-      const { chart } = chartFor(model);
+    for (const { model, naming } of [...gallery(2, 1), ...gallery(2, 0)]) {
+      const { chart } = chartFor(model, initialFibredSurface(model, naming));
       const deck = chart.deck!;
       for (const [x, port] of chart.ports) {
         const partner = chart.ports.get(x.reversed)!;
@@ -30,8 +30,8 @@ describe("charts", () => {
   });
 
   it("has a port for every oriented edge of G₀ and a region for every vertex", () => {
-    for (const model of [...gallery(0, 4), ...gallery(1, 2), ...gallery(2, 3)]) {
-      const { fs, chart } = chartFor(model);
+    for (const { model, naming } of [...gallery(0, 4), ...gallery(1, 2), ...gallery(2, 3)]) {
+      const { fs, chart } = chartFor(model, initialFibredSurface(model, naming));
       expect(chart.ports.size).toBe(2 * fs.spine0.edgeCount);
       expect(chart.regions.size).toBe(fs.spine0.vertexCount);
     }

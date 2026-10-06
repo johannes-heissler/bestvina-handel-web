@@ -5,7 +5,28 @@
  *
  * @module
  */
-import { topology, type Point2, type PolygonGeometry, type SurfaceModel } from "./models";
+import { topology, type Point2, type PolygonGeometry, type SpineNames, type SurfaceModel } from "./models";
+
+/** A model of the gallery, with the names and orientations of the edges of G₀ it starts with. */
+export interface GalleryEntry {
+  readonly model: SurfaceModel;
+  readonly naming?: SpineNames;
+}
+
+/**
+ * The twice-punctured torus of the examples (the half twist and the random mapping class): the polygon a c b C A B
+ * with b reversed, the C# layout with a split side. The generators of its mapping class group are written in these
+ * names.
+ */
+export const TWICE_PUNCTURED_TORUS: Required<GalleryEntry> = {
+  model: polygon(
+    "Split side (examples)",
+    "The setup of the twice-punctured torus examples: the polygon a c b C A B with b reversed (the C# layout).",
+    "a c b C A B".split(" "),
+    false,
+  ),
+  naming: { reversed: ["b"] },
+};
 
 /** Side labels in order of use. */
 const LABELS = "abcdefghijkmnopqrstuvwxyz".split("");
@@ -62,8 +83,11 @@ function splitSides(genus: number, extra: number, perSide: (side: number) => num
   return word;
 }
 
-/** The models for a surface of genus g with p punctures (p = 0: closed), each checked to have that topology. */
-export function gallery(genus: number, punctures: number): SurfaceModel[] {
+/**
+ * The models for a surface of genus g with p punctures (p = 0: closed), each checked to have that topology. Models
+ * with the same geometry and the same spine up to renaming and reorienting its edges are shown once (the first).
+ */
+export function gallery(genus: number, punctures: number): GalleryEntry[] {
   if (genus < 0 || punctures < 0) throw new Error("Genus and punctures can't be negative");
   if (2 - 2 * genus - Math.max(punctures, 1) >= 0)
     throw new Error("The algorithm needs χ < 0 (after puncturing a closed surface once)");
@@ -143,6 +167,7 @@ export function gallery(genus: number, punctures: number): SurfaceModel[] {
           false,
         ),
       );
+    if (genus === 1 && extra === 1) models.push(TWICE_PUNCTURED_TORUS.model); // the split sides below repeat it
     if (extra > 0) {
       const spread = Math.ceil(extra / (2 * genus));
       models.push(
@@ -174,10 +199,42 @@ export function gallery(genus: number, punctures: number): SurfaceModel[] {
     }
     if (extra === 0) models.push(...flatModels(genus, closed));
   }
-  return models.filter((m) => {
-    const t = topology(m);
-    return t.genus === genus && t.punctures === punctures;
+  const seen = new Set<string>();
+  const named = [TWICE_PUNCTURED_TORUS];
+  const entries = models.map((model): GalleryEntry => named.find((e) => e.model === model) ?? { model });
+  return entries.filter(({ model }) => {
+    const t = topology(model);
+    const key = modelKey(model);
+    if (t.genus !== genus || t.punctures !== punctures || seen.has(key)) return false;
+    seen.add(key);
+    return true;
   });
+}
+
+/** What makes two models different: the geometry, and for a polygon its word up to rotation and renaming the sides. */
+function modelKey(model: SurfaceModel): string {
+  if (model.kind !== "polygon") return JSON.stringify(model);
+  return JSON.stringify([model.geometry, model.closed, canonicalWord(model.word)]);
+}
+
+/**
+ * The smallest of the words obtained by rotating the word and renaming its sides in order of appearance, each side
+ * oriented so that it appears first in lower case (so it doesn't matter how the sides are named and oriented).
+ */
+export function canonicalWord(word: readonly string[]): string {
+  const rotations = word.map((_, r) => {
+    const names = new Map<string, { name: string; flip: boolean }>();
+    return [...word.slice(r), ...word.slice(0, r)]
+      .map((side) => {
+        const label = side.toLowerCase();
+        const isLower = side === label;
+        if (!names.has(label)) names.set(label, { name: LABELS[names.size] as string, flip: !isLower });
+        const { name, flip } = names.get(label) as { name: string; flip: boolean };
+        return isLower !== flip ? name : upper(name);
+      })
+      .join(" ");
+  });
+  return rotations.reduce((a, b) => (b < a ? b : a));
 }
 
 /** Flat (Euclidean) models with a single vertex class: the square torus, the L, the regular octagon. */

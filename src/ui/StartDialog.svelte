@@ -1,7 +1,7 @@
 <!-- Choosing what to study: an example, a surface from the gallery, a ribbon graph, or a saved session. -->
 <script lang="ts">
   import { Dialog } from "bits-ui";
-  import { gallery } from "../examples/gallery";
+  import { gallery, type GalleryEntry } from "../examples/gallery";
   import type { SurfaceModel } from "../examples/models";
   import { PRESETS } from "../examples/presets";
   import type { SessionFile } from "../session/session";
@@ -40,7 +40,7 @@
     return count(file.tree as { children?: readonly unknown[] });
   }
 
-  const models = $derived.by((): SurfaceModel[] => {
+  const models = $derived.by((): GalleryEntry[] => {
     try {
       return gallery(genus, punctures);
     } catch {
@@ -53,8 +53,8 @@
   });
 
   function startSurface() {
-    const model = models[chosen];
-    if (model) app.start({ kind: "model", model, options: { peripheral }, map });
+    const entry = models[chosen];
+    if (entry) app.start({ kind: "model", model: entry.model, options: { ...entry.naming, peripheral }, map });
   }
   function startRibbon() {
     const boundaryWords = words
@@ -122,7 +122,7 @@
           <p class="note">The algorithm needs a surface with negative Euler characteristic.</p>
         {:else}
           <div class="gallery">
-            {#each models as model, i (`${genus}-${punctures}-${i}`)}
+            {#each models as { model }, i (`${genus}-${punctures}-${i}`)}
               <button class="card" class:active={chosen === i} onclick={() => (chosen = i)} title={model.description}>
                 <Thumbnail {model} cacheKey={`${genus}-${punctures}-${i}-${model.name}`} />
                 <span>{model.name}</span>

@@ -83,3 +83,37 @@ export function namedMapsAndInverses(set: GeneratingSet): { map: string; name: s
 export function mapsAndInverses(set: GeneratingSet): string[] {
   return namedMapsAndInverses(set).map((m) => m.map);
 }
+
+/**
+ * The same generators written for a spine whose edges `reversed` point the other way (e.g. "b -> A b" becomes
+ * "b -> a b" when a is reversed). The mapping classes and their names don't change: a Dehn twist doesn't depend on
+ * the orientation of its curve.
+ */
+export function withReversedEdges(set: GeneratingSet, reversed: readonly string[]): GeneratingSet {
+  const flip = (name: string) =>
+    reversed.includes(name.toLowerCase())
+      ? name === name.toLowerCase()
+        ? name.toUpperCase()
+        : name.toLowerCase()
+      : name;
+  const invert = (word: string[]) =>
+    word.toReversed().map((x) => (x === x.toLowerCase() ? x.toUpperCase() : x.toLowerCase()));
+  const rewrite = (map: string) =>
+    map
+      .split(",")
+      .map((entry) => {
+        const [edge, image] = entry.split("->").map((side) => side.trim().split(/\s+/).map(flip)) as [
+          string[],
+          string[],
+        ];
+        const [name] = edge as [string];
+        return name === name.toLowerCase()
+          ? `${name} -> ${image.join(" ")}`
+          : `${name.toLowerCase()} -> ${invert(image).join(" ")}`;
+      })
+      .join(", ");
+  return {
+    description: set.description,
+    generators: set.generators.map((g) => ({ ...g, map: rewrite(g.map), inverse: rewrite(g.inverse) })),
+  };
+}

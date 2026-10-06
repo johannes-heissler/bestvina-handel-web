@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { updateMap } from "../fibred/map-editing";
-import { GENUS_2_GENERATORS, TORUS_2_GENERATORS } from "./generators";
+import { GENUS_2_GENERATORS, TORUS_2_GENERATORS, withReversedEdges } from "./generators";
 import { initialFibredSurface } from "./models";
 import { buildPreset, presetNamed, PRESETS, randomTorus2 } from "./presets";
 
@@ -8,6 +8,10 @@ describe("the generating sets", () => {
   for (const [presetName, set] of [
     ["Random mapping class in genus 2", GENUS_2_GENERATORS],
     ["Random mapping class of the twice-punctured torus", TORUS_2_GENERATORS],
+    [
+      "Pseudo-Anosov map of the twice-punctured torus",
+      presetNamed("Pseudo-Anosov map of the twice-punctured torus")!.generators!,
+    ],
   ] as const)
     describe(presetName, () => {
       const preset = presetNamed(presetName)!;
@@ -26,6 +30,16 @@ describe("the generating sets", () => {
           }
         });
     });
+
+  it("are rewritten for reversed edges, with the left side in the forward orientation", () => {
+    const reversed = withReversedEdges(TORUS_2_GENERATORS, ["a"]).generators;
+    expect(reversed.map((g) => g.map)).toEqual([
+      "a -> b C B A C",
+      "b -> a b",
+      "b -> b C",
+      "a -> B a, c -> c b",
+    ]);
+  });
 
   it("the random presets draw from them, and the half twist can still be started by name", () => {
     expect(PRESETS.map((p) => p.name)).toContain("Random mapping class of the twice-punctured torus");

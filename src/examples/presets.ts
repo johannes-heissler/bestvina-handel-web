@@ -13,7 +13,9 @@ import {
   mapsAndInverses,
   namedMapsAndInverses,
   TORUS_2_GENERATORS,
+  withReversedEdges,
 } from "./generators";
+import { TWICE_PUNCTURED_TORUS } from "./gallery";
 import { type FibredSurfaceOptions, initialFibredSurface, type SurfaceModel } from "./models";
 
 export interface Preset {
@@ -80,8 +82,8 @@ export function randomGenus2(seed: number, count = 10): Preset {
 
 /** The twice-punctured torus of the half twist (the polygon a c b C A B with a split side, b reversed). */
 const twicePuncturedTorus = (): Pick<Preset, "model" | "options"> => ({
-  model: polygon("a c b C A B"),
-  options: { reversed: ["b"] },
+  model: TWICE_PUNCTURED_TORUS.model,
+  options: TWICE_PUNCTURED_TORUS.naming,
 });
 
 /** A random composition of `count` of the {@link TORUS_2_GENERATORS} and their inverses, reproducible from `seed`. */
@@ -129,6 +131,30 @@ function mulberry32(seed: number): () => number {
   };
 }
 
+/**
+ * h followed by Dehn twists on the twice-punctured torus, with a and c reversed as well, so that both folds start with
+ * a (not A): a small train track (the entries of the transition matrix add up to 7).
+ */
+function halfTwistComposition(): Preset {
+  const reversed = [...(TWICE_PUNCTURED_TORUS.naming.reversed ?? []), "a", "c"];
+  const generators = withReversedEdges(TORUS_2_GENERATORS, ["a", "c"]);
+  const maps = namedMapsAndInverses(generators);
+  const word = ["h", "D_a⁻¹", "D_a⁻¹", "D_b⁻¹", "D_a⁻¹"]; // applied in this order
+  return {
+    name: "Pseudo-Anosov map of the twice-punctured torus",
+    description:
+      "D_a⁻¹ ∘ D_b⁻¹ ∘ D_a⁻¹ ∘ D_a⁻¹ ∘ h, exchanging the punctures (a, b and c reversed): two folds, λ = φ² ≈ 2.618.",
+    model: TWICE_PUNCTURED_TORUS.model,
+    options: { reversed },
+    maps: word.map((name) => ({
+      text: (maps.find((m) => m.name === name) as { map: string }).map,
+      mode: "postcompose" as const,
+      name,
+    })),
+    generators,
+  };
+}
+
 const pointPushModel = polygon("a b A B c d C D");
 
 export const PRESETS: readonly Preset[] = [
@@ -139,6 +165,7 @@ export const PRESETS: readonly Preset[] = [
     maps: replace("a -> a b, b -> b a b", "Anosov map"),
   },
   randomTorus2(1),
+  halfTwistComposition(),
   {
     name: "Reducible map",
     description:
