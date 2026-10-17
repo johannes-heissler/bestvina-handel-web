@@ -23,7 +23,7 @@ import { invertName, isForwardName, nameKey } from "../graph/names";
 import type { Edge, OrientedEdge, RibbonGraph, Vertex } from "../graph/ribbon-graph";
 import { FibredSurface } from "../fibred/fibred-surface";
 import { IDENTITY_NAME } from "../fibred/map-editing";
-import { EDGE_COLORS } from "../fibred/names-and-colors";
+import { EDGE_COLORS, leastUsedColor } from "../fibred/names-and-colors";
 import { cellDecomposition } from "../geometry/cells";
 import { regularPolygon } from "../geometry/hyperbolic";
 import { normalize, normalizeLike } from "../geometry/normalize";
@@ -404,6 +404,9 @@ export function initialFibredSurface(model: SurfaceModel, options: FibredSurface
         e.forward,
         tree.has(e) ? EdgePath.EMPTY : EdgePath.of(byName.get(e.forward.name) as OrientedEdge),
       );
+    // The edges outside the tree keep the colours of the sides they map to; the tree edges get the least used ones.
+    for (const e of graph.edges) if (!tree.has(e)) e.color = (byName.get(e.forward.name) as OrientedEdge).color;
+    for (const e of tree) e.color = leastUsedColor(EDGE_COLORS, graph.edges.map((x) => x.color));
   }
   const fs = new FibredSurface({ graph, g: CombinatorialMap.identity(graph), mu });
   fs.mapName = IDENTITY_NAME;

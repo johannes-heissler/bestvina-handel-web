@@ -168,6 +168,17 @@ describe("presets", () => {
     expect(buildPreset(preset).checkIntegrity()).toEqual([]);
   });
 
+  it("colours the strips of a preset given by its own graph, those mapping to a side like the side", () => {
+    const fs = buildPreset(presetNamed("Closed genus 2")!);
+    const key = (e: { color: { r: number; g: number; b: number } }) => `${e.color.r},${e.color.g},${e.color.b}`;
+    expect(fs.graph.edges.map(key)).not.toContain("0,0,0");
+    expect(new Set(fs.graph.edges.map(key)).size).toBe(fs.graph.edges.length);
+    for (const e of fs.graph.edges) {
+      const side = fs.spine0.edges.find((x) => x.name === e.name);
+      if (side !== undefined) expect(key(e)).toBe(key(side));
+    }
+  });
+
   it("reproduces the growth rates of the examples", () => {
     const byName = (name: string) => buildPreset(PRESETS.find((p) => p.name === name)!);
     expect(growth(byName("Anosov map of the torus"))).toBeCloseTo(((1 + Math.sqrt(5)) / 2) ** 2, 9);
