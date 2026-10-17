@@ -17,32 +17,33 @@ in `docs/`.
 
 ✅ approved · 🔍 ported, decisions awaiting review · ✍️ note awaiting review
 
-| #   | Module                                                                              | C# files                                                                         | Note | Port           | Tests |
-| --- | ----------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- | ---- | -------------- | ----- |
-| 0   | Scaffold                                                                            | –                                                                                | –    | ✅             | ✅    |
-| 1   | [Helpers](01-helpers.md)                                                            | `Helpers/*`                                                                      | ✅   | ✅             | ✅    |
-| 2   | [Math value types](02-math.md)                                                      | `Matrix3x3`, `VectorHelpers`, Unity types                                        | 🔍   | ✅             | ✅    |
-| 5   | [Ribbon graph](05-graph.md)                                                         | QuikGraph, `GraphHelpers`, cyclic order in `Strip`                               | 🔍   | ✅             | ✅    |
-| 6   | [Edge paths and combinatorial maps](06-edge-paths-and-maps.md)                      | `EdgePath`, `Strip.EdgePath`, `TransitionMatrix`, …                              | ✅   | ✅             | ✅    |
-| 7   | [`FibredSurface` core and suggestions](07-fibred-surface-core.md)                   | `FibredSurface.cs`, names, periphery, suggestion system                          | 🔍   | ✅             | ✅    |
-| 8   | [Transition matrix, growth, weights](08-perron-frobenius.md)                        | `FibredSurfaceTransitionMatrixAndWeights.cs`                                     | 🔍   | ✅             | ✅    |
-| 9   | [Valence-1 and valence-2 junctions](09-valence-one-and-two.md)                      | `FibredSurfaceValence1and2Junctions.cs`                                          | 🔍   | ✅             | ✅    |
-| 10  | [Pulling tight, moving junctions](10-pull-tight-and-isotopy.md)                     | `FibredSurfacePullingTight.cs`, `FibredSurfaceMovingVertices.cs`                 | 🔍   | ✅             | ✅    |
-| 11  | [Collapsing invariant subforests](11-collapse-subforests.md)                        | `FibredSurfaceCollapseSubforests.cs`                                             | 🔍   | ✅             | ✅    |
-| 12  | [Subdivision and folding](12-subdivision-and-folding.md)                            | `FibredSurfaceFoldingInitialSegments.cs`, `MovementForFolding`, `EdgePoint.cs`   | 🔍   | ✅             | ✅    |
-| 13  | [Inefficiencies, algorithm without interaction](13-inefficiencies-and-algorithm.md) | `Inefficiency.cs`, `…EssentialInefficiencies.cs`, `…PeripheralInefficiencies.cs` | 🔍   | ✅             | ✅    |
-| 14  | [The train track τ](14-train-track.md)                                              | `FibredSurfaceTrainTracks.cs` (new design)                                       | 🔍   | ✅             | ✅    |
-| 15  | [Closed surfaces](15-closed-surfaces.md)                                            | thesis § Closed surfaces and cutting (not in C#)                                 | 🔍   | ✅ both routes | ✅    |
-| 16  | [Finite order and reducibility](16-finite-order-and-reducibility.md)                | `FibredSurfaceReduction.cs`, `FiniteOrderSuggestion`                             | 🔍   | ✅             | ✅    |
-| 17  | [Absorbing into the periphery](17-absorbing-into-periphery.md)                      | `FibredSurfaceAbsorbingIntoPeriphery.cs`                                         | 🔍   | ✅             | ✅    |
-| 18  | [The suggestion system and the autopilot](18-suggestions.md)                        | `FibredSurfaceAlgorithmSuggestionSystem.cs`                                      | 🔍   | ✅             | ✅    |
-| 19  | [Model surfaces, gallery, presets, map editing](19-models-and-examples.md)          | `SurfaceGenerator.cs` (combinatorial part), `MainMenu` presets                   | 🔍   | ✅             | ✅    |
-| 20  | [Geometry, embedding, 2D views](20-embedding-and-2d-views.md)                       | `GeometricObjects_*` (replaced)                                                  | 🔍   | ✅             | ✅    |
-| 21  | [UI, saving, deployment](21-ui-saving-deployment.md)                                | `UIElements/*`, `Kamera/*` (rewritten)                                           | 🔍   | ✅             | ✅    |
-| 22  | [Interior punctures, filled points, cutting in the polygon](22-interior-punctures.md)       | thesis § Closed surfaces (not in C#)                                             | ✍️   | phases 1–3     | ✅    |
-| 23+ | Point pushes, 3D                                                                    | `PointPushes.cs`, `GeometricObjects_Visualization/*`                             |      |                |       |
-| 3   | Curves, points, geodesics                                                           | `GeometricObjects_Abstract/*`                                                    |      |                |       |
-| 4   | Surfaces, homeomorphisms                                                            | `GeometricObjects_Abstract/*`                                                    |      |                |       |
-| …   | Embedding layer, suggestion system, examples, rendering, UI                         |                                                                                  |      |                |       |
+| #   | Module                                                                                | C# files                                                                         | Note | Port           | Tests |
+| --- | ------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- | ---- | -------------- | ----- |
+| 0   | Scaffold                                                                              | –                                                                                | –    | ✅             | ✅    |
+| 1   | [Helpers](01-helpers.md)                                                              | `Helpers/*`                                                                      | ✅   | ✅             | ✅    |
+| 2   | [Math value types](02-math.md)                                                        | `Matrix3x3`, `VectorHelpers`, Unity types                                        | 🔍   | ✅             | ✅    |
+| 5   | [Ribbon graph](05-graph.md)                                                           | QuikGraph, `GraphHelpers`, cyclic order in `Strip`                               | 🔍   | ✅             | ✅    |
+| 6   | [Edge paths and combinatorial maps](06-edge-paths-and-maps.md)                        | `EdgePath`, `Strip.EdgePath`, `TransitionMatrix`, …                              | ✅   | ✅             | ✅    |
+| 7   | [`FibredSurface` core and suggestions](07-fibred-surface-core.md)                     | `FibredSurface.cs`, names, periphery, suggestion system                          | 🔍   | ✅             | ✅    |
+| 8   | [Transition matrix, growth, weights](08-perron-frobenius.md)                          | `FibredSurfaceTransitionMatrixAndWeights.cs`                                     | 🔍   | ✅             | ✅    |
+| 9   | [Valence-1 and valence-2 junctions](09-valence-one-and-two.md)                        | `FibredSurfaceValence1and2Junctions.cs`                                          | 🔍   | ✅             | ✅    |
+| 10  | [Pulling tight, moving junctions](10-pull-tight-and-isotopy.md)                       | `FibredSurfacePullingTight.cs`, `FibredSurfaceMovingVertices.cs`                 | 🔍   | ✅             | ✅    |
+| 11  | [Collapsing invariant subforests](11-collapse-subforests.md)                          | `FibredSurfaceCollapseSubforests.cs`                                             | 🔍   | ✅             | ✅    |
+| 12  | [Subdivision and folding](12-subdivision-and-folding.md)                              | `FibredSurfaceFoldingInitialSegments.cs`, `MovementForFolding`, `EdgePoint.cs`   | 🔍   | ✅             | ✅    |
+| 13  | [Inefficiencies, algorithm without interaction](13-inefficiencies-and-algorithm.md)   | `Inefficiency.cs`, `…EssentialInefficiencies.cs`, `…PeripheralInefficiencies.cs` | 🔍   | ✅             | ✅    |
+| 14  | [The train track τ](14-train-track.md)                                                | `FibredSurfaceTrainTracks.cs` (new design)                                       | 🔍   | ✅             | ✅    |
+| 15  | [Closed surfaces](15-closed-surfaces.md)                                              | thesis § Closed surfaces and cutting (not in C#)                                 | 🔍   | ✅ both routes | ✅    |
+| 16  | [Finite order and reducibility](16-finite-order-and-reducibility.md)                  | `FibredSurfaceReduction.cs`, `FiniteOrderSuggestion`                             | 🔍   | ✅             | ✅    |
+| 17  | [Absorbing into the periphery](17-absorbing-into-periphery.md)                        | `FibredSurfaceAbsorbingIntoPeriphery.cs`                                         | 🔍   | ✅             | ✅    |
+| 18  | [The suggestion system and the autopilot](18-suggestions.md)                          | `FibredSurfaceAlgorithmSuggestionSystem.cs`                                      | 🔍   | ✅             | ✅    |
+| 19  | [Model surfaces, gallery, presets, map editing](19-models-and-examples.md)            | `SurfaceGenerator.cs` (combinatorial part), `MainMenu` presets                   | 🔍   | ✅             | ✅    |
+| 20  | [Geometry, embedding, 2D views](20-embedding-and-2d-views.md)                         | `GeometricObjects_*` (replaced)                                                  | 🔍   | ✅             | ✅    |
+| 21  | [UI, saving, deployment](21-ui-saving-deployment.md)                                  | `UIElements/*`, `Kamera/*` (rewritten)                                           | 🔍   | ✅             | ✅    |
+| 22  | [Interior punctures, filled points, cutting in the polygon](22-interior-punctures.md) | thesis § Closed surfaces (not in C#)                                             | ✍️   | phases 1–3     | ✅    |
+| 23  | [Showing a state in another model](23-switching-models.md)                            | – (new)                                                                          | ✍️   |                |       |
+| 24+ | Point pushes, 3D                                                                      | `PointPushes.cs`, `GeometricObjects_Visualization/*`                             |      |                |       |
+| 3   | Curves, points, geodesics                                                             | `GeometricObjects_Abstract/*`                                                    |      |                |       |
+| 4   | Surfaces, homeomorphisms                                                              | `GeometricObjects_Abstract/*`                                                    |      |                |       |
+| …   | Embedding layer, suggestion system, examples, rendering, UI                           |                                                                                  |      |                |       |
 
 Modules 3 and 4 (geometry) come after the combinatorial core; see [05-graph.md](05-graph.md#change-of-the-module-order).
