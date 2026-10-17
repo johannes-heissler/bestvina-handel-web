@@ -101,7 +101,9 @@ some junction: the **gate graph** there (the gates as vertices, the infinitesima
 τ is disconnected there, and f is reducible (`moves/split-junctions.ts`).
 
 - **Detection** (`disconnectedJunctions`): union–find on the switches of τ, joined by the infinitesimal branches (and,
-  to be safe, by every turn taken by an image of g).
+  to be safe, by every turn taken by an image of g). Nothing is detected while a strip is pretrivial: Dg is undefined
+  there, so g needn't respect the components (it then mapped strips of the chosen piece outside it); those strips lie
+  in invariant forests, which are collapsed first.
 - **The move "split junctions"**: every such junction becomes one junction per component (each keeps the cyclic order
   of its strip ends; the infinitesimal branches of an embedded τ don't cross, so the junction disk can be cut between
   the components). g stays a graph map without any lifting: every turn of an image lies in one component, and a

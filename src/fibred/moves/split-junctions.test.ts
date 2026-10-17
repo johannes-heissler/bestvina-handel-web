@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { buildPreset, PRESETS } from "../../examples/presets";
 import { applyMove } from "../move";
-import { autopilot, nextSuggestion } from "../suggestions";
+import { autopilot, DEFAULT_AUTOMATIC, nextSuggestion } from "../suggestions";
 import { disconnectedJunctions, splitJunctions } from "./split-junctions";
 
 const swappedHandles = () =>
@@ -41,5 +41,24 @@ describe("splitting junctions along a disconnected train track", () => {
     expect(split?.discouraged).toBe(true);
     const after = applyMove(surface.copy(), split!.move);
     expect(after.checkIntegrity()).toEqual([]);
+  });
+
+  it("is not offered while some strip is pretrivial (before the invariant forests are collapsed)", () => {
+    // Stopping at every collapse: once a strip is pretrivial, g doesn't respect the components of the gate graphs.
+    const automatic = new Set(DEFAULT_AUTOMATIC);
+    automatic.delete("collapse invariant subforest");
+    let fs = buildPreset(PRESETS.find((p) => p.name === "Bestvina–Handel example 6.1")!);
+    let pretrivialSeen = false;
+    for (let step = 0; step < 10; step++) {
+      const { surface, stoppedAt } = autopilot(fs, { automatic });
+      if (stoppedAt.kind !== "collapse invariant subforest") break;
+      if (surface.graph.edges.some((e) => surface.g.image(e.forward).length === 0)) {
+        pretrivialSeen = true;
+        expect(disconnectedJunctions(surface).size).toBe(0);
+        expect(stoppedAt.options.map((o) => o.move.kind)).not.toContain("split junctions");
+      }
+      fs = applyMove(surface, stoppedAt.options[0]!.move);
+    }
+    expect(pretrivialSeen).toBe(true);
   });
 });

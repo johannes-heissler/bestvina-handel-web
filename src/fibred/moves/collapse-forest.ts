@@ -162,7 +162,6 @@ export function collapseSubforest(
 ): void {
   if (!fs.graph.isForest(forest)) throw new Error(`The edges ${[...forest].join(", ")} don't form a forest`);
 
-  const centerOf = new Map<Vertex, Vertex>();
   for (const component of fs.graph.components(forest)) {
     const center = chooseCenter(candidateCenters(fs, component.vertices));
     if (!component.vertices.has(center)) throw new Error(`${center} is not in the component`);
@@ -223,23 +222,21 @@ export function collapseSubforest(
       fs.mu.setImage(e, fs.mu.imageOfPath(path).concat(fs.mu.image(e)).reduced());
       if (e.source !== center) fs.graph.reattach(e, center);
     }
-    for (const v of component.vertices) centerOf.set(v, center);
-    for (const e of component.edges) fs.graph.removeEdge(e); // the strips are removed from g, μ, P below
+    for (const e of component.edges) fs.graph.removeEdge(e);
     fs.graph.setStar(center, star);
-  }
 
-  // h on the target side: forest strips disappear, junctions in a tree go to its centre.
-  fs.g.substituteInImages((edge) => (forest.has(edge) ? EdgePath.EMPTY : undefined));
-  for (const v of fs.graph.vertices) {
-    const image = fs.g.vertexImage(v);
-    fs.g.setVertexImage(v, centerOf.get(image) ?? image);
+    // h on the target side: the tree strips disappear, its junctions go to the centre. This is done per component,
+    // so that the surface is consistent again before the next component is narrated (a preview copies it then).
+    fs.g.substituteInImages((edge) => (component.edges.has(edge) ? EdgePath.EMPTY : undefined));
+    for (const v of fs.graph.vertices)
+      if (component.vertices.has(fs.g.vertexImage(v))) fs.g.setVertexImage(v, center);
+    for (const e of component.edges) {
+      fs.g.forgetEdge(e);
+      fs.mu.forgetEdge(e);
+      fs.peripheral.delete(e);
+    }
+    for (const v of component.vertices) if (v !== center) fs.removeJunction(v);
   }
-  for (const e of forest) {
-    fs.g.forgetEdge(e);
-    fs.mu.forgetEdge(e);
-    fs.peripheral.delete(e);
-  }
-  for (const [v, center] of centerOf) if (v !== center) fs.removeJunction(v);
 }
 
 /** For each junction x of the tree, the path [center → x] inside the tree (empty for the centre). */
