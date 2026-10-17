@@ -27,6 +27,7 @@ import {
   removeInefficiencyStep,
   removePeripheralInefficiency,
 } from "./moves/inefficiency";
+import { tightenMarking } from "./moves/isotopy";
 import { moveJunctionImage, pullTight } from "./moves/pull-tight";
 import { reduce } from "./moves/reduce";
 import { splitJunctions } from "./moves/split-junctions";
@@ -168,6 +169,9 @@ export function applyMove(fs: FibredSurface, move: Move, hooks: MoveHooks = {}):
     if (intro.length > 0) narrate(intro);
     const before = snapshot(fs);
     const result = applyMoveQuietly(fs, move, hooks);
+    // Moves that contract or split strips can leave a junction whose strips all leave across the same side of G₀;
+    // isotope it across (G and g stay the same), so that the embedding can be drawn.
+    tightenMarking(result);
     if (!NARRATES_ITSELF.has(move.kind))
       about(result, () => {
         for (const line of changes(before, snapshot(result))) narrate(line);

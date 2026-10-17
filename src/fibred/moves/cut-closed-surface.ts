@@ -16,6 +16,7 @@ import type { TextPart } from "../suggestions";
 import { imageProng, type Prong, prongs } from "../singular-leaves";
 import type { TrainTrack } from "../train-track";
 import { collapseSubforest } from "./collapse-forest";
+import { tightenMarking } from "./isotopy";
 
 /**
  * The boundary word of p in the cut track: the one that contains a real branch and runs along no slit (the sides
@@ -329,7 +330,7 @@ export function cutClosedSurface(tt: TrainTrack, option: CutOption, remarking?: 
       }
       return undefined;
     };
-  /** A state to show: a copy with the polygons outside Q contracted. */
+  /** A state to show: a copy with the polygons outside Q contracted, and μ pulled tight (see {@link tightenMarking}). */
   const shown = (
     graph: RibbonGraph,
     g: CombinatorialMap,
@@ -343,6 +344,7 @@ export function cutClosedSurface(tt: TrainTrack, option: CutOption, remarking?: 
       (e) => correspondence.edgeMap.get(e) as Edge,
     );
     collapseUncut(copy, new Set(uncut), (s) => junctionOf(back.get(s) as Vertex), inQ);
+    tightenMarking(copy);
     return copy;
   };
   const wholeBranch = (b: Edge): BranchPart => ({ branch: b, from: 0, to: 1 });
@@ -446,12 +448,15 @@ function superscript(n: number): string {
 }
 
 /**
- * The surface with μ into the final model, checked; if that fails, μ is reset (the surface is then drawn as its own
- * ribbon graph).
+ * The surface with μ into the final model, checked, and pulled tight at the junctions (see {@link tightenMarking}); if
+ * that fails, μ is reset (the surface is then drawn as its own ribbon graph).
  */
 export function finishRemarking(surface: FibredSurface, remarking: Remarking): FibredSurface {
   const finished = remarking.finish(surface);
-  if (finished !== undefined) return finished;
+  if (finished !== undefined) {
+    tightenMarking(finished);
+    return finished;
+  }
   surface.reportInconsistency(
     "The new punctures couldn't be drawn in the original model; the surface is drawn as its own ribbon graph.",
   );

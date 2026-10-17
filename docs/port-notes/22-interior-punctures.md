@@ -263,12 +263,19 @@ its own model, without interpolating (`drawTimeline`).
   could be pulled across a side. The views (and the remarking) then draw `withTightMarking(fs)`, a copy of μ isotoped
   until it is tight there. Before, such states silently weren't drawn (this also happened after the old cut).
 - `tightenAtJunctions` crashed on a cluster without strips across a side; fixed.
+- **μ is pulled tight at the junctions after every move** (`tightenMarking` in `fibred/moves/isotopy.ts`, moved there
+  from `embedding/image.ts`; it is combinatorial): while all strips leaving a cluster of junctions start across the same
+  side of G₀, the cluster is isotoped across it. G and g don't change. The cut needs it in every state: a slit splits a
+  switch into parts that keep the switch's place, and a part can be left with only strips crossing one chord (in the
+  closed genus-2 example, the corner v2c with a: s₂ a, b, Ε2: s₁, ε12: s₂ splits into v2e {a₁: s₂ a, ε12: s₂} and
+  v2f). Such a junction was drawn on the chord, with its strips crossing. Collapsing an invariant forest left loose
+  junctions too. The shown states of the cut and the shortcut are tightened as well.
 
 ### Deviations from § 3
 
 - The positions of Q are **not stored in the move**; they are recomputed from the default layout on replay
   (deterministic). Only μ (the picture) depends on them, not g.
-- No extra tightening of μ after `finish` (step 7) beyond what the views do.
+- Step 7 tightens only at the junctions (no shortening of μ beyond that).
 
 ### Known limitations
 

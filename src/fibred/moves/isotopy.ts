@@ -66,3 +66,42 @@ export function slideAlong(fs: FibredSurface, v: Vertex, t: OrientedEdge, what: 
   if (gamma.isEmpty) return;
   moveJunction(fs, v, gamma, what);
 }
+
+/**
+ * Isotopes the junctions until μ is tight at them: while all strips leaving a cluster of junctions (joined by strips
+ * with trivial μ) start across the same side, the cluster moves across it. The strand order needs this: strands
+ * that only part at a junction which could be pulled across the side have no order there. Each step shortens μ, so
+ * this ends.
+ */
+export function tightenMarking(fs: FibredSurface): void {
+  for (let moved = true; moved;) {
+    moved = false;
+    for (const cluster of clusters(fs)) {
+      const leaving = cluster.flatMap((v) => fs.graph.star(v)).filter((x) => !fs.mu.image(x).isEmpty);
+      if (leaving.length === 0) continue; // (the cluster is everything, or only joined by trivial strips)
+      const side = fs.mu.image(leaving[0] as OrientedEdge).first;
+      if (side === undefined || leaving.some((x) => fs.mu.image(x).first !== side)) continue;
+      for (const v of cluster) isotopeJunction(fs, v, EdgePath.of(side));
+      moved = true;
+    }
+  }
+}
+
+/** The junctions, grouped into the components of the strips with trivial μ. */
+function clusters(fs: FibredSurface): Vertex[][] {
+  const seen = new Set<Vertex>();
+  const result: Vertex[][] = [];
+  for (const start of fs.graph.vertices) {
+    if (seen.has(start)) continue;
+    const cluster = [start];
+    seen.add(start);
+    for (let i = 0; i < cluster.length; i++)
+      for (const x of fs.graph.star(cluster[i] as Vertex))
+        if (fs.mu.image(x).isEmpty && !seen.has(x.target)) {
+          seen.add(x.target);
+          cluster.push(x.target);
+        }
+    result.push(cluster);
+  }
+  return result;
+}

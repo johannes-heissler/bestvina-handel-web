@@ -11,6 +11,7 @@ import { FibredSurface } from "../fibred-surface";
 import { keepingStates, narrate } from "../narration";
 import type { Remarking } from "../remarking";
 import { fillingText, finishRemarking, junctionPartName } from "./cut-closed-surface";
+import { tightenMarking } from "./isotopy";
 import { trainTrack, type TrainTrack } from "../train-track";
 
 /** A junction with an infinitesimal polygon (a singularity of angle ≥ 3π) and its period under g. */
@@ -92,7 +93,7 @@ export function replacePunctureBySingularity(
       ` and p, so with p filled in it is homotopic to ${(x.isForward ? forwardImage : forwardImage.inverse).toString() || "a point"} (the rest of p's boundary, backwards). It is replaced by that in all images and deleted; the faces of p and q merge.`,
       ...(remarking === undefined ? [] : [" ", fillingText(remarking)]),
     ],
-    { before: keep ? surface.copy() : undefined },
+    { before: keep ? shown(surface) : undefined },
   );
   const filled = fillPuncture(surface, epsilon, { keepMarking: remarking !== undefined });
   return remarking === undefined ? filled : finishRemarking(filled, remarking);
@@ -258,4 +259,11 @@ export function fillPuncture(
   const result = new FibredSurface({ graph: fs.graph, g: fs.g, ...(options.keepMarking && { mu: fs.mu }) });
   result.onError = fs.onError;
   return result;
+}
+
+/** A copy of the state to show, with μ pulled tight (see {@link tightenMarking}). */
+function shown(surface: FibredSurface): FibredSurface {
+  const copy = surface.copy();
+  tightenMarking(copy);
+  return copy;
 }

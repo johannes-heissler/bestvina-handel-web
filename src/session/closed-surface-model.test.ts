@@ -36,6 +36,19 @@ function drawable(state: FibredSurface, model: SurfaceModel) {
     for (const piece of pieces) for (const p of piece) expect(Number.isFinite(p.re + p.im)).toBe(true);
 }
 
+/**
+ * The junctions at which μ isn't tight: all strips leaving it start across the same side of G₀ (the drawing would put
+ * the junction on that side, with the strips crossing each other).
+ */
+function looseJunctions(state: FibredSurface): string[] {
+  return state.graph.vertices
+    .filter((v) => {
+      const firsts = state.graph.star(v).map((e) => state.mu.image(e).first);
+      return firsts.length > 0 && firsts[0] !== undefined && firsts.every((x) => x === firsts[0]);
+    })
+    .map((v) => v.name);
+}
+
 describe("closed-surface moves in the original polygon", () => {
   const { session, moves } = atClosedSurfaceMove();
   const before = session.current;
@@ -56,6 +69,8 @@ describe("closed-surface moves in the original polygon", () => {
       }
       // Every state of the narration can be drawn, and the cut shows several of them.
       for (const step of preview.steps) drawable(step.after, before.model);
+      // … with μ tight at every junction (the slits split switches, whose parts may all lie across one chord).
+      for (const step of preview.steps) expect(looseJunctions(step.after)).toEqual([]);
       if (move.kind === "cut along a singular leaf") expect(preview.steps.length).toBeGreaterThan(5);
       // Only the junctions of Q are blown up (port note 22, § 6): the first state is G with the polygons of Q, as in the
       // shortcut; the other junctions stay junctions.
