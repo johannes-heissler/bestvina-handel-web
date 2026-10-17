@@ -7,3 +7,4 @@ coverage/
 !.vscode/extensions.json
 test-results/
 playwright-report/
+.claude/worktrees/

@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { FibredSurface } from "../fibred-surface";
+import { applyMove } from "../move";
+import { narrated } from "../narration";
 import {
   candidateCenters,
   collapseSubforest,
@@ -79,5 +81,36 @@ describe("collapseSubforest", () => {
   it("rejects edges that are not a forest", () => {
     const fs = subdivided("x -> x y b, y -> , b -> b x y b");
     expect(() => collapseSubforest(fs, new Set([edge(fs, "b")]))).toThrow(/don't form a forest/);
+  });
+});
+
+describe("collapsing a forest with several components", () => {
+  // The genus-2 rose with a = x y z and c = u w t subdivided, so that y and w are disjoint trees with g(y), g(w)
+  // points.
+  const twiceSubdivided = () =>
+    FibredSurface.fromText(
+      [["x", "y", "z", "b", "Z", "Y", "X", "B", "u", "w", "t", "d", "T", "W", "U", "D"]],
+      "x -> x y, y -> , u -> u w, w -> , b -> b x y z",
+    );
+
+  it("collapses both trees", () => {
+    const fs = twiceSubdivided();
+    expect(fs.checkIntegrity()).toEqual([]);
+    expect(fs.graph.components([edge(fs, "y"), edge(fs, "w")])).toHaveLength(2);
+    collapseSubforest(fs, new Set([edge(fs, "y"), edge(fs, "w")]));
+    expect(fs.graph.vertexCount).toBe(3);
+    expect(images(fs)).toBe("z:z, x:x, b:b x z, t:t, u:u, d:d");
+    expect(images(fs, "mu")).toBe("z:y z, x:x, b:b, t:w t, u:u, d:d");
+    expect(fs.checkIntegrity()).toEqual([]);
+  });
+
+  it("is consistent before each narrated step, so that a preview can copy it there", () => {
+    const fs = twiceSubdivided();
+    const { narrated: steps } = narrated(
+      () => applyMove(fs, { kind: "collapse invariant subforest", strips: ["y", "w"] }),
+      { states: true },
+    );
+    expect(steps.length).toBeGreaterThan(2);
+    for (const step of steps) expect(step.before?.checkIntegrity()).toEqual([]);
   });
 });
