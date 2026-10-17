@@ -23,9 +23,13 @@ import { componentOrbits, replaceByPower, restrictTo } from "./reducibility";
 /**
  * For each junction whose gate graph is disconnected: its components, each as the list of its strip ends in the cyclic
  * order of the star. Empty if τ can't be built or every gate graph is connected.
+ *
+ * Also empty while some strip is pretrivial (g maps it to a point): splitting needs Dg on every strip end to carry
+ * the components along, and the pretrivial strips form invariant forests, which the algorithm collapses first.
  */
 export function disconnectedJunctions(fs: FibredSurface): Map<Vertex, OrientedEdge[][]> {
   const result = new Map<Vertex, OrientedEdge[][]>();
+  if (fs.graph.edges.some((e) => fs.g.image(e.forward).length === 0)) return result;
   let tt: ReturnType<typeof trainTrack>;
   try {
     tt = trainTrack(fs);
@@ -79,14 +83,15 @@ export interface SplitPiece {
  * (the boundary words of the new graph, as words in G₀, without the peripheral ones), lets `choose` pick a piece and
  * restricts to it with the first-return map.
  *
- * @throws Error if no gate graph is disconnected.
+ * @throws Error if no gate graph is disconnected, or some strip is pretrivial.
  */
 export function splitJunctions(
   fs: FibredSurface,
   choose: (pieces: readonly SplitPiece[]) => SplitPiece = (pieces) => pieces[0] as SplitPiece,
 ): void {
   const split = disconnectedJunctions(fs);
-  if (split.size === 0) throw new Error("Every gate graph is connected: there is nothing to split");
+  if (split.size === 0)
+    throw new Error("There is nothing to split: every gate graph is connected, or some strip is pretrivial");
   const { graph, g, mu } = fs;
 
   // The first letter of each strip end's image, before anything changes: it decides the component of the image.
