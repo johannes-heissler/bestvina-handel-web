@@ -27,7 +27,8 @@ Several agents may work on this repository at the same time. Before changing any
 - Every module gets a review note in `docs/port-notes/` **before** it is ported. Port only after the author
   approved the note, and follow its decisions. Update the status table in `docs/port-notes/README.md`.
 - Readability beats a literal translation. Simplify where the note says so; don't add features.
-- Everything in English.
+- Everything in English: code, docs, commit messages, and also your replies and reasoning, even when the author
+  writes or dictates in German.
 
 ## Code rules
 
