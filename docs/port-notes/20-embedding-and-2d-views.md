@@ -372,3 +372,24 @@ w(e)^c divided by the largest total weight of a side, then shrunk by one common 
 for c = 0, exactly in the ratios of the Perron–Frobenius widths for c = 1, and in their order in between (apart from
 the minimum of 0.8 pixels, which can make very thin strips equal). The tooltip of the slider explains this, and the
 slider shows its value.
+
+## Update: the width equation (graphics option)
+
+The option "Width equation" (train track and f(τ) views; `RenderOptions.widthEquation`) draws τ so that the switch
+equations can be read off, as in the thesis figure (`HalfTrSFromTrack.py`):
+
+- the junction disks are 3 times as large (still bounded by 0.3 of the distance to the nearest junction, strip or side)
+  and drawn fainter (fill and outline), and the dots of the switches are left out;
+- each gate gets a **tie**, the chord of the disk as long as the gate is wide (the sum of the widths of its strands, for
+  the widths drawn). Its strands lie side by side on it, in the order of the gate, and leave it straight, so they don't
+  overlap and their ends form one straight line;
+- the infinitesimal branches are bands with the widths from `trainTrack(fs).widths` (the transition matrix of g_τ on τ;
+  nothing new was needed there). At each switch they lie side by side on the same tie, in the order that keeps them
+  apart (the target further counterclockwise further left), and share it in proportion to their widths. They leave
+  the tie perpendicularly and run as cubic Béziers to the tie of the other switch. If the two ends differ in width
+  (the widths drawn are not exactly proportional to w(e), i.e. c < 1) the band tapers; for c = 1 the equation holds
+  exactly and the bands have constant width;
+- the gates of a junction must fit side by side, so the common shrink factor of the widths also bounds each gate by
+  its share of the circle (0.6 · 2R · sin(0.9π / number of gates), at most 2R).
+
+Without λ > 1 there are no widths on τ, and the branches of a switch share its tie equally. Tested in `svg.test.ts`.

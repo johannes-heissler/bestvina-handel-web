@@ -140,6 +140,29 @@ describe("SVG", () => {
       after.forEach((x, i) => expect(x).toBeCloseTo(2 * (before[i] as number), 1));
     }
   });
+
+  it("draws the infinitesimal branches to scale with the width equation", () => {
+    const surface = autopilot(buildPreset(preset)).surface;
+    const { chart } = chartFor(preset.model, surface);
+    const result = layout(surface, chart, { widthExponent: 1 });
+    const tt = trainTrack(surface);
+    const branches = [...tt.kind.values()].filter((k) => k === "infinitesimal").length;
+    const bands = (svg: string) => svg.match(/fill="#5980d4"/g)?.length ?? 0;
+    const plain = renderSvg(surface, result, { view: "trainTrack" });
+    const equation = renderSvg(surface, result, { view: "trainTrack", widthEquation: true });
+    expect(bands(plain.svg)).toBe(0);
+    expect(branches).toBeGreaterThan(0);
+    expect(bands(equation.svg)).toBe(branches);
+    expect(equation.svg).not.toContain("NaN");
+    // The junction disks are larger (and fainter) than usual.
+    const radii = (svg: string) => [...svg.matchAll(/<circle [^>]*r="([\d.]+)"[^>]*stroke="#1a693a"/g)].map((m) => Number(m[1]));
+    expect(Math.max(...radii(equation.svg))).toBeGreaterThan(Math.max(...radii(plain.svg)));
+    expect(equation.svg).toContain('fill-opacity="0.15"');
+    // Only the train track has a width equation.
+    expect(renderSvg(surface, result, { view: "standard", widthEquation: true }).svg).toBe(
+      renderSvg(surface, result, { view: "standard" }).svg,
+    );
+  });
 });
 
 function pointPushModel(): SurfaceModel {

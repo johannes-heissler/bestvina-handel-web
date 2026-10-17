@@ -14,6 +14,8 @@ import type { Motion } from "../fibred/narration";
 import { Complex } from "../math/complex";
 import type { Edge, Vertex } from "../graph/ribbon-graph";
 import type { FibredSurface } from "../fibred/fibred-surface";
+import { perronFrobenius } from "../fibred/perron-frobenius";
+import { imageSurface } from "../embedding/image";
 import { type Rendered, renderSvg, type RenderOptions } from "../render/svg";
 
 const charts = new WeakMap<RibbonGraph, Map<string, Chart>>();
@@ -88,6 +90,9 @@ export function drawTimeline(
   position: number,
   options: DrawOptions = {},
 ): Rendered {
+  // f(τ) of the state nearest to the position (the image isn't animated).
+  if (options.view === "image")
+    return draw(model, states[Math.min(Math.round(position), states.length - 1)] as FibredSurface, options);
   try {
     const chart = chartFor(model, states[0] as FibredSurface, options.sideFraction);
     // The junctions moved so far (until the fold merges them): they don't shrink the rest of the picture, neither while
@@ -187,11 +192,7 @@ export function drawTimeline(
     // (At a whole position, a state that can't be laid out after a crossing keeps the junction where it was left.)
     return drawTimeline(model, states, motions, t < 0.5 ? k : k + 1, options);
   } catch (e) {
-    return {
-      svg: "",
-      echo: () => [],
-      notes: [`This state can't be drawn: ${e instanceof Error ? e.message : String(e)}`],
-    };
+    return failed(e);
   }
 }
 
@@ -381,26 +382,61 @@ function interpolated(
 /** The SVG of a surface in a model; errors become a note instead of an exception. */
 export function draw(model: SurfaceModel, surface: FibredSurface, options: DrawOptions = {}): Rendered {
   try {
-    const chart = chartFor(model, surface, options.sideFraction);
-    const layoutOptions: LayoutOptions = {
-      widthExponent: options.widthExponent ?? 0,
-      smoothing: options.straightening ?? 0,
-    };
-    const id = modelId(model);
-    return renders.get(surface, JSON.stringify([id, options]), () =>
-      renderSvg(
-        surface,
-        layouts.get(surface, JSON.stringify([id, options.sideFraction, layoutOptions]), () =>
-          layout(surface, chart, layoutOptions),
-        ),
-        options,
-      ),
-    );
+    return options.view === "image" ? drawImage(model, surface, options) : render(model, surface, options);
   } catch (e) {
-    return {
-      svg: "",
-      echo: () => [],
-      notes: [`This state can't be drawn: ${e instanceof Error ? e.message : String(e)}`],
-    };
+    return failed(e);
   }
+}
+
+/** The SVG of a surface (cached per surface and options; the widths, if given, must follow from those). */
+function render(
+  model: SurfaceModel,
+  surface: FibredSurface,
+  options: DrawOptions,
+  widths?: ReadonlyMap<Edge, number>,
+): Rendered {
+  const chart = chartFor(model, surface, options.sideFraction);
+  const layoutOptions: LayoutOptions = {
+    widthExponent: options.widthExponent ?? 0,
+    smoothing: options.straightening ?? 0,
+  };
+  const id = modelId(model);
+  return renders.get(surface, JSON.stringify([id, options]), () =>
+    renderSvg(
+      surface,
+      layouts.get(surface, JSON.stringify([id, options.sideFraction, layoutOptions]), () =>
+        layout(surface, chart, layoutOptions),
+      ),
+      widths ? { ...options, widths } : options,
+    ),
+  );
+}
+
+/**
+ * f(τ): G embedded by μ ∘ g (see `imageSurface`), drawn like τ, with each strip as wide as in τ divided by the growth λ
+ * (f maps the transverse measure of τ to 1/λ times itself). Without a growth above 1, the strips are as wide as in τ.
+ * The highlight of a fold belongs to τ and is left out.
+ */
+function drawImage(model: SurfaceModel, surface: FibredSurface, options: DrawOptions): Rendered {
+  const { highlight: _, ...rest } = options;
+  const tau = render(model, surface, { ...rest, view: "trainTrack" });
+  let growth = 1;
+  try {
+    growth = perronFrobenius(surface, { essentialOnly: false }).growth;
+  } catch {
+    // (no transition matrix to speak of: keep the widths of τ)
+  }
+  const factor = growth > 1 ? 1 / growth : 1;
+  const widths = new Map([...tau.widths].map(([e, w]) => [e, w * factor]));
+  return render(model, imageSurface(surface), rest, widths);
+}
+
+/** An empty drawing with a note why the state can't be drawn. */
+function failed(e: unknown): Rendered {
+  return {
+    svg: "",
+    echo: () => [],
+    widths: new Map(),
+    notes: [`This state can't be drawn: ${e instanceof Error ? e.message : String(e)}`],
+  };
 }

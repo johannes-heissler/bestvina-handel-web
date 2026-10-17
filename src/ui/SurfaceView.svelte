@@ -36,6 +36,8 @@
   /** Highlight the selected fold, and the turns of its inefficiency that the later steps fold. */
   let showFold = $state(true);
   let showTurns = $state(true);
+  /** The train track with its switch equations visible (larger junctions, infinitesimal branches to scale). */
+  let widthEquation = $state(false);
   let showOptions = $state(false);
 
   const node = $derived.by(() => {
@@ -61,6 +63,7 @@
       deckDepth,
       widthExponent,
       widthScale,
+      widthEquation,
       straightening,
       ...(polygon && { sideFraction }),
       labels,
@@ -234,6 +237,12 @@
       <label title="A factor for the widths of the strips, the sides and the infinitesimal branches (above 1, the strands of a gate may get wider than the disk of its junction)"
         >Widths × <input type="range" min="0.25" max="2" step="0.05" bind:value={widthScale} /> {widthScale.toFixed(2)}</label
       >
+      {#if view === "trainTrack" || view === "image"}
+        <label
+          title="Draw the junctions larger and fainter, the infinitesimal branches as wide as the transition matrix of the graph map on τ makes them, and the strands and infinitesimal branches of each switch side by side, ending on one straight line: its length is the width of the switch, so the equation 'sum of the widths on one side = sum on the other' can be read off. Exact for the width exponent c = 1."
+          ><input type="checkbox" bind:checked={widthEquation} /> Width equation</label
+        >
+      {/if}
       <label
         title="Rounds of moving the crossings with the glued sides so that the strips run straight (geodesically) through them, keeping their order and staying on the side (0: evenly spaced crossings)"
         >Straightening <input type="range" min="0" max="30" step="1" bind:value={straightening} /> {straightening}</label

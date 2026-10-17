@@ -3,7 +3,7 @@ import { layout } from "../embedding/layout";
 import { perronFrobenius } from "../fibred/perron-frobenius";
 import { Session } from "../session/session";
 import { decodeSession } from "../session/share";
-import { chartFor } from "./drawing";
+import { chartFor, draw } from "./drawing";
 
 // Strips with Perron–Frobenius widths from 1.47 (d₁) to 24.8 (c); z and d₁ each cross a side alone.
 const LINK =
@@ -29,5 +29,20 @@ describe("the strip widths drawn to scale", () => {
     const byWidth = [...edges].sort((e, f) => widths.get(e)! - widths.get(f)!);
     for (let i = 1; i < byWidth.length; i++)
       expect(between.get(byWidth[i]!)!).toBeGreaterThanOrEqual(between.get(byWidth[i - 1]!)!);
+  });
+});
+
+describe("the image f(τ)", () => {
+  it("draws each strip as wide as in τ divided by λ", async () => {
+    const { session } = Session.fromFile((await decodeSession(LINK))!);
+    const { surface, model } = session.current;
+    const growth = perronFrobenius(surface, { essentialOnly: false }).growth;
+    const options = { widthExponent: 1, size: 800 } as const;
+    const tau = draw(model, surface, { ...options, view: "trainTrack" });
+    const image = draw(model, surface, { ...options, view: "image" });
+    expect(image.notes).toEqual([]);
+    expect(image.svg).not.toBe("");
+    expect(growth).toBeGreaterThan(1);
+    for (const e of surface.graph.edges) expect(image.widths.get(e)!).toBeCloseTo(tau.widths.get(e)! / growth, 9);
   });
 });

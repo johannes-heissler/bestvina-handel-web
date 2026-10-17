@@ -16,15 +16,11 @@
 <details class="panel" bind:open>
   <summary><h2>Transition matrix, widths, lengths</h2></summary>
   {#if info}
-    <p class="hint">
-      Column e counts the strips in g(e). λ = {fmt(info.data.growth)}; the widths w satisfy M w = λ w, the lengths ℓ
-      satisfy ℓ M = λ ℓ.
-    </p>
     <div class="table-scroll">
       <table class="matrix">
         <thead>
           <tr>
-            <th></th>
+            <th>λ={fmt(info.data.growth)}</th>
             {#each info.data.strips as e (e.id)}<th style:color={info.colors.get(e.name)}>{e.name}</th>{/each}
             <th class="weight">width</th>
           </tr>
@@ -45,5 +41,11 @@
         </tbody>
       </table>
     </div>
+    
+    <p class="hint">
+       The growth rate λ is the largest eigenvalue of the transition matrix M, whose columns count the strips in g(e) without orientation. Lengths and widths are left and right eigenvectors:
+       <br>
+       M w = λ w, ℓ M = λ ℓ.
+    </p>
   {/if}
 </details>

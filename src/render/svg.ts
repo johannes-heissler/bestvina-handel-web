@@ -73,6 +73,14 @@ export interface RenderOptions {
    * the ports and the junctions; e.g. the widths of τ divided by λ for f(τ) (see {@link Rendered.widths}).
    */
   readonly widths?: ReadonlyMap<Edge, number>;
+  /**
+   * Draw the train track so that its switch equations can be read off (trainTrack and image views): larger junction
+   * disks, drawn fainter; the infinitesimal branches as wide as the transition matrix of g_τ makes them; and at each
+   * switch the strands and the infinitesimal branches side by side, ending on one straight line (the tie of the
+   * switch), whose length is the width of the gate. The equation holds exactly in the picture if the widths are
+   * proportional to w(e), i.e. for the width exponent 1.
+   */
+  readonly widthEquation?: boolean;
 }
 
 export type SideStyle = "solid" | "dashed" | "dotted";
@@ -99,10 +107,15 @@ const JUNCTION_COLOR = "#1a693a";
 /** The highlight of the fold that is selected, and of the turns folded after it. */
 const FOLD_COLOR = "#ff8c00";
 const TURN_COLOR = "#00a0a0";
+/** The infinitesimal branches when they are drawn to scale. */
+const INFINITESIMAL_COLOR = "#5980d4";
+/** The size of the junction disks when the width equation is shown, relative to the usual size. */
+const EQUATION_JUNCTION_FACTOR = 3;
 
 export function renderSvg(fs: FibredSurface, layout: Layout, options: RenderOptions = {}): Rendered {
   const size = options.size ?? 640;
   const view = options.view === "image" ? "trainTrack" : (options.view ?? "trainTrack");
+  const equation = options.widthEquation === true && view === "trainTrack";
   const model = options.model ?? "poincare";
   const smoothing = options.smoothing ?? "spline";
   const chart = layout.chart;
@@ -131,14 +144,15 @@ export function renderSvg(fs: FibredSurface, layout: Layout, options: RenderOpti
 
   // Junction disks and the switches of the gates.
   const junctionPixels = Math.max(5, size / 110);
-  const junctionRadius = junctionPixels / scale; // in display units
+  const junctionRadius = (junctionPixels * (equation ? EQUATION_JUNCTION_FACTOR : 1)) / scale; // in display units
   /**
    * The gates at a junction: the switch of each strip end, the infinitesimal branches, and for a single gate its linear
    * order (if g decides it; see gate-order.ts).
    */
   let gatesOf: (v: Vertex) => {
     switchOf: Map<OrientedEdge, Vertex>;
-    infinitesimal: [Vertex, Vertex][];
+    /** The switches an infinitesimal branch joins, and its width (undefined if λ ≤ 1). */
+    infinitesimal: [Vertex, Vertex, number | undefined][];
     singleOrder?: readonly OrientedEdge[];
   };
   try {
@@ -148,7 +162,7 @@ export function renderSvg(fs: FibredSurface, layout: Layout, options: RenderOpti
       switchOf: new Map(fs.graph.star(v).map((x) => [x, tt.switchOf.get(x) as Vertex])),
       infinitesimal: tt.graph.edges
         .filter((b) => tt.kind.get(b) === "infinitesimal" && tt.junctionOf.get(b.source) === v)
-        .map((b) => [b.source, b.target] as [Vertex, Vertex]),
+        .map((b) => [b.source, b.target, tt.widths?.get(b)] as [Vertex, Vertex, number | undefined]),
     });
   } catch {
     gatesOf = (v) => ({ switchOf: new Map(fs.graph.star(v).map((x) => [x, v])), infinitesimal: [] });
@@ -232,7 +246,10 @@ export function renderSvg(fs: FibredSurface, layout: Layout, options: RenderOpti
         s,
         (gateWidths.get(s) ?? 0) + ((basePixels(x.edge) / scale) * centreMetric) / metric(at, Complex.ONE),
       );
-    for (const width of gateWidths.values()) shrink = Math.min(shrink, (2 * radiusOf(v)) / width);
+    // (With the width equation, the ties of the gates are chords of the disk, which must not overlap: each gate gets its
+    // share of the circle.)
+    const share = equation ? 0.6 * Math.sin(Math.min(Math.PI / 2, (0.9 * Math.PI) / gateWidths.size)) : 1;
+    for (const width of gateWidths.values()) shrink = Math.min(shrink, (2 * radiusOf(v) * share) / width);
   }
   /** The width of the strip e in pixels at the centre, before the width factor. */
   const pixelsOf = (e: Edge) => options.widths?.get(e) ?? basePixels(e) * shrink;
@@ -496,8 +513,9 @@ export function renderSvg(fs: FibredSurface, layout: Layout, options: RenderOpti
     radiusOf: (v: Vertex) => number,
     toScreen: (z: Complex) => Complex,
     transform: ((z: Complex) => Complex) | undefined,
-  ): Map<Vertex, Map<Vertex, Complex>> => {
+  ): { switchPoints: Map<Vertex, Map<Vertex, Complex>>; ties: Map<Vertex, Tie> } => {
     const switchPoints = new Map<Vertex, Map<Vertex, Complex>>();
+    const ties = new Map<Vertex, Tie>();
     const ends = new Map<OrientedEdge, StripEnd>();
     for (const v of fs.graph.vertices) {
       const center = junctionAt(v);
@@ -598,15 +616,33 @@ export function renderSvg(fs: FibredSurface, layout: Layout, options: RenderOpti
         // The same order as for the gate's direction (a single gate in its linear order, not from where the star starts).
         const lanes = lanesOf.get(s) as OrientedEdge[];
         list.sort((p, q) => lanes.indexOf(p) - lanes.indexOf(q));
+        // With the width equation, the strands lie side by side on the tie of the gate, a chord of the disk as long as the
+        // gate is wide, and leave it straight (so they don't overlap, and their ends form one straight line).
+        const widths = equation
+          ? list.map((x) => widthAt(x.edge, center, Complex.ONE) / (scale || 1))
+          : list.map(() => gap);
+        const total = widths.reduce((a, b) => a + b, 0);
+        const depth = equation
+          ? Math.sqrt(Math.max(radius * radius - (total * total) / 4, (0.2 * radius) ** 2))
+          : radius;
+        const reach = equation ? Math.max(1.2 * radius, depth + 0.15 * radius) : 1.2 * radius;
+        const tie = junctionInChart.add(out.scale(depth));
+        if (equation) {
+          ties.set(s, { center: junctionInChart, out, left, depth, width: total });
+          points.set(s, toScreen(tie));
+        }
+        let covered = -total / 2;
         list.forEach((x, j) => {
-          const shift = left.scale((j - (list.length - 1) / 2) * gap);
-          const radialEnd = junctionInChart.add(out.scale(radius * 1.2 + length)).add(shift);
+          const offset = equation ? covered + (widths[j] as number) / 2 : (j - (list.length - 1) / 2) * gap;
+          covered += widths[j] as number;
+          const shift = left.scale(offset);
+          const radialEnd = junctionInChart.add(out.scale(reach + length)).add(shift);
           ends.set(x, {
             x,
             center,
             junctionRadius,
-            switchPoint: points.get(s) as Complex,
-            radialStart: junctionInChart.add(out.scale(radius * 1.2)).add(shift),
+            switchPoint: equation ? toScreen(tie.add(shift)) : (points.get(s) as Complex),
+            radialStart: junctionInChart.add(out.scale(reach)).add(shift),
             radialEnd,
             out,
             nominal: Math.max(length * 1.4, 16 * pixel),
@@ -770,7 +806,76 @@ export function renderSvg(fs: FibredSurface, layout: Layout, options: RenderOpti
       }
       line.splice(0, line.length, ...(atStart ? result : result.toReversed()));
     }
-    return switchPoints;
+    return { switchPoints, ties };
+  };
+
+  /**
+   * The infinitesimal branches of the junction v as filled bands (the width equation): at each switch, side by side on
+   * its tie, in the order that keeps them apart, and as wide as their widths make them, shares of the gate's width (so
+   * the ends form the tie). A branch whose two ends differ in width (the equation doesn't hold exactly) tapers.
+   */
+  const infinitesimalBands = (
+    v: Vertex,
+    ties: ReadonlyMap<Vertex, Tie>,
+    toScreen: (z: Complex) => Complex,
+  ): string[] => {
+    const branches = gatesOf(v).infinitesimal.filter(([a, b]) => ties.has(a) && ties.has(b));
+    // (Without widths, the branches of a switch share its tie equally.)
+    const known = branches.every(([, , w]) => w !== undefined && w > 0);
+    const share = ([, , w]: (typeof branches)[number]) => (known ? (w as number) : 1);
+    const lanes = new Map<string, { offset: number; width: number }>(); // by branch index and switch
+    for (const [s, tie] of ties) {
+      const mine = branches.flatMap((b, i) =>
+        b[0] === s || b[1] === s ? [{ b, i, other: b[0] === s ? b[1] : b[0] }] : [],
+      );
+      const sum = mine.reduce((a, m) => a + share(m.b), 0);
+      // The target further counterclockwise (looking outwards from the centre) is further left, at a larger offset.
+      const turn = (t: Vertex) => {
+        const d = (((ties.get(t) as Tie).out.arg() - tie.out.arg()) % (2 * Math.PI)) + 2 * Math.PI;
+        return d % (2 * Math.PI);
+      };
+      mine.sort((p, q) => turn(q.other) - turn(p.other));
+      let covered = -tie.width / 2;
+      for (const m of mine) {
+        const width = (tie.width * share(m.b)) / sum;
+        lanes.set(`${m.i}|${s.id}`, { offset: covered + width / 2, width });
+        covered += width;
+      }
+    }
+    return branches.map(([a, b], i) => {
+      const [ta, tb] = [ties.get(a) as Tie, ties.get(b) as Tie];
+      const [la, lb] = [lanes.get(`${i}|${a.id}`), lanes.get(`${i}|${b.id}`)];
+      if (!la || !lb) return "";
+      const [p0, p3] = [
+        ta.center.add(ta.out.scale(ta.depth)).add(ta.left.scale(la.offset)),
+        tb.center.add(tb.out.scale(tb.depth)).add(tb.left.scale(lb.offset)),
+      ];
+      // It leaves each tie perpendicularly, into the disk.
+      const h = 0.5 * p0.sub(p3).abs();
+      const [p1, p2] = [p0.sub(ta.out.scale(h)), p3.sub(tb.out.scale(h))];
+      const sides: [Complex[], Complex[]] = [[], []];
+      const steps = 24;
+      for (let k = 0; k <= steps; k++) {
+        const t = k / steps;
+        const u = 1 - t;
+        const at = p0
+          .scale(u ** 3)
+          .add(p1.scale(3 * u * u * t))
+          .add(p2.scale(3 * u * t * t))
+          .add(p3.scale(t ** 3));
+        const along = p1
+          .sub(p0)
+          .scale(3 * u * u)
+          .add(p2.sub(p1).scale(6 * u * t))
+          .add(p3.sub(p2).scale(3 * t * t));
+        const normal = new Complex(-along.im, along.re).scale(1 / (along.abs() || 1));
+        const half = ((1 - t) * la.width + t * lb.width) / 2;
+        sides[0].push(at.add(normal.scale(half)));
+        sides[1].push(at.sub(normal.scale(half)));
+      }
+      const outline = [...sides[0], ...sides[1].toReversed()].map((z) => px(toScreen(z)));
+      return `<path d="M${outline.join("L")}Z" fill="${INFINITESIMAL_COLOR}"/>`;
+    });
   };
 
   /** SVG content around a junction's centre, mapped like its disk (see `junctionShape`). */
@@ -907,21 +1012,19 @@ export function renderSvg(fs: FibredSurface, layout: Layout, options: RenderOpti
       } else group.push(decoration(d, toScreen, px, scale, labels));
     }
 
+    const toScreenHere = (z: Complex) => toDisplay(transform ? transform(z) : z);
     const lines = new Map<Edge, Complex[][]>(fs.graph.edges.map((e) => [e, stripLines(e, transform)]));
     const junctionAt = (v: Vertex) =>
       toDisplay(
         transform ? transform(layout.junctions.get(v) as Complex) : (layout.junctions.get(v) as Complex),
       );
-    const switchPoints =
+    const { switchPoints, ties } =
       view === "standard"
-        ? new Map(fs.graph.vertices.map((v) => [v, new Map<Vertex, Complex>()]))
-        : attachToSwitches(
-            lines,
-            junctionAt,
-            (v) => radiusOf(v, transform),
-            (z) => toDisplay(transform ? transform(z) : z),
-            transform,
-          );
+        ? {
+            switchPoints: new Map(fs.graph.vertices.map((v) => [v, new Map<Vertex, Complex>()])),
+            ties: new Map<Vertex, Tie>(),
+          }
+        : attachToSwitches(lines, junctionAt, (v) => radiusOf(v, transform), toScreenHere, transform);
     // Round the corners of the drawn curves (where they enter bands, cross sides that aren't straightened, …).
     const cornerRadius = { none: 0, rounded: 6, spline: 14 }[smoothing] / scale;
     if (cornerRadius > 0)
@@ -991,10 +1094,11 @@ export function renderSvg(fs: FibredSurface, layout: Layout, options: RenderOpti
       group.push(
         shaped(
           center,
-          `<circle cx="${px(center).split(",")[0]}" cy="${px(center).split(",")[1]}" r="${fmt(radius)}" fill="${transparent ? "#ffffff" : "#fafafa"}" fill-opacity="${transparent ? 0.35 : 1}" stroke="${JUNCTION_COLOR}" stroke-width="${fmt(k)}" vector-effect="non-scaling-stroke"/>`,
+          `<circle cx="${px(center).split(",")[0]}" cy="${px(center).split(",")[1]}" r="${fmt(radius)}" fill="${transparent ? "#ffffff" : "#fafafa"}" fill-opacity="${transparent ? (equation ? 0.15 : 0.35) : 1}" stroke="${JUNCTION_COLOR}" stroke-opacity="${equation ? 0.35 : 1}" stroke-width="${fmt(k)}" vector-effect="non-scaling-stroke"/>`,
         ),
       );
-      if (transparent)
+      if (equation) group.push(...infinitesimalBands(v, ties, toScreenHere));
+      else if (transparent)
         for (const [a, b] of gatesOf(v).infinitesimal) {
           const [p, q] = [points.get(a), points.get(b)];
           if (p && q)
@@ -1002,10 +1106,11 @@ export function renderSvg(fs: FibredSurface, layout: Layout, options: RenderOpti
               `<path d="M${px(p)}Q${px(center)} ${px(q)}" stroke="#555" stroke-width="${fmt(k * widthScale)}" fill="none"/>`,
             );
         }
-      for (const p of points.values())
-        group.push(
-          `<circle cx="${px(p).split(",")[0]}" cy="${px(p).split(",")[1]}" r="${fmt(1.6 * k)}" fill="#333"/>`,
-        );
+      if (!equation)
+        for (const p of points.values())
+          group.push(
+            `<circle cx="${px(p).split(",")[0]}" cy="${px(p).split(",")[1]}" r="${fmt(1.6 * k)}" fill="#333"/>`,
+          );
       if (labels) {
         const offset = radiusOf(v, transform) * 1.3;
         const at = center.add(new Complex(offset, offset));
@@ -1378,6 +1483,18 @@ function arrowAt(line: readonly Complex[], size: number): Complex[] | undefined 
     walked += segment;
   }
   return undefined;
+}
+
+/**
+ * The tie of a switch (chart units): the straight line across the gate on which its strands and its infinitesimal
+ * branches end, perpendicular to `out` at the distance `depth` from the junction, `width` long and centred there.
+ */
+interface Tie {
+  readonly center: Complex;
+  readonly out: Complex;
+  readonly left: Complex;
+  readonly depth: number;
+  readonly width: number;
 }
 
 /** A strip end at a junction, as it leaves its switch (display) and its lane (chart). */
