@@ -21,7 +21,10 @@ Background: the author's thesis, § "Keeping track of the embedding" and § "Rec
 
 ### Scope decisions
 
-- **No punctures inside the polygon.** The flat torus with interior punctures is dropped.
+- ~~**No punctures inside the polygon.**~~ Revised on 2026-10-17 ([port note 22](../port-notes/22-interior-punctures.md)):
+  a polygon model is a cell decomposition whose 0-cells are the punctures; interior punctures cut the polygon into
+  convex cells along chords glued by the identity, and G₀ is the dual graph. A filled-in vertex removes one dual edge
+  (a wall). This also brings back the flat torus with interior punctures.
 - G₀ is stored explicitly (not implied by the polygon), so it could later differ from the dual graph,
   e.g. by adding lassos. Nothing below relies on G₀ being a rose, except the geometric layout (§ 3).
 - **Peripheral lassos:** the loop around a cusp crosses a side, so its μ is non-trivial. The stem that

@@ -4,6 +4,7 @@
  *
  * @module
  */
+import { freeName as freeStripName } from "../../graph/names";
 import type { OrientedEdge } from "../../graph/ribbon-graph";
 import { sharedPrefix, sharedPrefixLength } from "../../util/iter";
 import { EdgePoint } from "../edge-point";
@@ -423,10 +424,10 @@ export function foldCandidates(fs: FibredSurface): FoldCandidate[] {
 
 /** `name`, or with more "₁" appended if it is taken. */
 function freeName(fs: FibredSurface, name: string): string {
-  const used = new Set(fs.graph.edges.map((x) => x.name.toLowerCase()));
-  let candidate = name;
-  while (used.has(candidate.toLowerCase())) candidate += "₁";
-  return candidate;
+  return freeStripName(
+    fs.graph.edges.map((e) => e.name),
+    name,
+  );
 }
 
 /** Strip names as structured text: "a, b and c". */

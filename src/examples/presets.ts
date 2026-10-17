@@ -237,14 +237,10 @@ export const PRESETS: readonly Preset[] = [
     name: "Closed genus 2",
     description:
       "A pseudo-Anosov map of the closed genus-2 surface, given on the surface punctured once; τ has one cusp at the puncture, so the closed-surface move is needed. Example by the author.",
-    model: {
-      kind: "ribbon",
-      name: "Ribbon graph",
-      description:
-        "The fibred surface of the ribbon graph with boundary word c x B y k a z Y K Z d C X D A b.",
-      boundaryWords: ["c x B y k a z Y K Z d C X D A b".split(" ")],
-      closed: true,
-    },
+    // The graph with boundary word c x B y k a z Y K Z d C X D A b, drawn in the octagon that contracting its spanning
+    // tree c, d, b, z gives (port note 22), so that the closed-surface moves can be followed in the polygon.
+    model: polygon("X y K a x A Y k", true),
+    options: { graph: ["c x B y k a z Y K Z d C X D A b".split(" ")] },
     maps: replace(
       "b -> K Y b X C B y Z d x c, z -> Z d C X D, x -> B y Z d, d -> Y b X C, c -> x c x, k -> z Y, y -> a, a -> K",
       "closed genus-2 map",

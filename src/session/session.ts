@@ -21,6 +21,8 @@ import {
 } from "../fibred/suggestions";
 import { perronFrobenius } from "../fibred/perron-frobenius";
 import { type Motion, narrated } from "../fibred/narration";
+import type { RemarkingProvider } from "../fibred/remarking";
+import { modelOfSpine, remarkClosedSurface } from "../embedding/remark";
 import { type FibredSurfaceOptions, initialFibredSurface, type SurfaceModel } from "../examples/models";
 import { buildPreset, presetNamed } from "../examples/presets";
 
@@ -109,6 +111,14 @@ export class Session {
     return new Session(start, surface, model);
   }
 
+  /** Keeps the model of  through the closed-surface moves (port note 22). */
+  private remarker(node: HistoryNode): RemarkingProvider {
+    return (fs, tt, orbit) => {
+      const model = modelOfSpine(fs.spine0) ?? (fs.spine0 === node.surface.spine0 ? node.model : undefined);
+      return model === undefined ? undefined : remarkClosedSurface(model, fs, tt, orbit);
+    };
+  }
+
   /** The suggestion at the current state. */
   suggestion(): Suggestion {
     return nextSuggestion(this.current.surface, { followUp: this.current.followUp, disabled: this.disabled });
@@ -128,7 +138,10 @@ export class Session {
     copy.onError = () => {};
     const hint: { followUp?: FollowUp } = {};
     const { result, steps } = narrated(() =>
-      applyMove(copy, move, { followUp: (point) => (hint.followUp = point) }),
+      applyMove(copy, move, {
+        followUp: (point) => (hint.followUp = point),
+        remark: this.remarker(this.current),
+      }),
     );
     const problems = result.checkIntegrity();
     if (problems.length > 0) throw new Error(problems.join("\n"));
@@ -145,6 +158,7 @@ export class Session {
     let node = this.current;
     const { stoppedAt } = autopilot(copy, {
       disabled: this.disabled,
+      remark: this.remarker(this.current),
       ...options,
       ...(this.current.followUp && { followUp: this.current.followUp }),
       onStep: (move, surface, steps) => {
@@ -178,7 +192,11 @@ export class Session {
       copy.onError = () => {};
       const hint: { followUp?: FollowUp } = {};
       const { result, narrated: told } = narrated(
-        () => applyMove(copy, move, { followUp: (point) => (hint.followUp = point) }),
+        () =>
+          applyMove(copy, move, {
+            followUp: (point) => (hint.followUp = point),
+            remark: this.remarker(node),
+          }),
         { states: true },
       );
       const problems = result.checkIntegrity();
@@ -195,6 +213,7 @@ export class Session {
         start.onError = () => {};
         autopilot(start, {
           automatic,
+          remark: this.remarker(node),
           disabled: this.disabled,
           maxSteps: 50,
           ...(hint.followUp && { followUp: hint.followUp }),
@@ -322,7 +341,10 @@ export class Session {
     followUp?: FollowUp,
     steps?: readonly Text[],
   ): HistoryNode {
-    const model = surface.spine0 === parent.surface.spine0 ? parent.model : ribbonModelOf(surface);
+    const model =
+      surface.spine0 === parent.surface.spine0
+        ? parent.model
+        : (modelOfSpine(surface.spine0) ?? ribbonModelOf(surface));
     const node: HistoryNode = {
       id: this.nextId++,
       parent,

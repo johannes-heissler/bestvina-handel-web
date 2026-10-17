@@ -141,7 +141,12 @@ describe("gallery", () => {
 
   it("offers the twice-punctured torus of the examples, which the split sides would only repeat", () => {
     const models = gallery(1, 2);
-    expect(models.map((m) => m.model.name)).toEqual(["Standard polygon", "Split side (examples)"]);
+    expect(models.map((m) => m.model.name)).toEqual([
+      "Standard polygon",
+      "Split side (examples)",
+      "Punctures inside",
+      "All punctures inside",
+    ]);
     const examples = presetNamed("Half twist")!;
     expect(models[1]!.model).toBe(examples.model);
     expect(models[1]!.naming).toEqual(examples.options);

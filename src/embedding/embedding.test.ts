@@ -5,6 +5,8 @@ import { buildPreset, PRESETS } from "../examples/presets";
 import { autopilot } from "../fibred/suggestions";
 import { chartOf, type Port } from "./chart";
 import { layout } from "./layout";
+import { keepingModel, modelOfSpine } from "./remark";
+import { withTightMarking } from "./image";
 
 const pointOn = (port: Port, u: number) => port.right.add(port.left.sub(port.right).scale((u + 1) / 2));
 const chartFor = (model: SurfaceModel, fs = initialFibredSurface(model)) =>
@@ -16,6 +18,7 @@ describe("charts", () => {
       const { chart } = chartFor(model, initialFibredSurface(model, naming));
       const deck = chart.deck!;
       for (const [x, port] of chart.ports) {
+        if (!deck.generators.has(x)) continue; // a chord between cells (see interior-punctures.test.ts)
         const partner = chart.ports.get(x.reversed)!;
         for (const u of [-0.7, 0, 0.4]) {
           const p = pointOn(partner, u);
@@ -42,12 +45,24 @@ describe("layout", () => {
   it.each(PRESETS.map((p) => [p.name, p] as const))(
     "lays out %s after the algorithm",
     (_, preset) => {
-      const surface = autopilot(buildPreset(preset), { maxSteps: 200 }).surface;
-      const { chart } = chartFor(preset.model, surface);
-      const result = layout(surface, chart, { widthExponent: 0.5 });
+      // (With the closed-surface moves drawn in the preset's polygon, as the session does.)
+      const surface = autopilot(buildPreset(preset), {
+        maxSteps: 200,
+        remark: keepingModel(preset.model),
+      }).surface;
+      const { chart } = chartFor(modelOfSpine(surface.spine0) ?? preset.model, surface);
+      let result;
+      let drawn = surface;
+      try {
+        result = layout(surface, chart, { widthExponent: 0.5 });
+      } catch {
+        // As the views do: strands that part only at a junction that could be pulled across a side have no order.
+        drawn = withTightMarking(surface);
+        result = layout(drawn, chart, { widthExponent: 0.5 });
+      }
       for (const e of surface.graph.edges) {
         const pieces = result.strips.get(e)!;
-        const gluings = surface.mu
+        const gluings = drawn.mu
           .image(e.forward)
           .letters.filter((x) => chart.bands.get(x.edge)?.kind === "glue").length;
         expect(pieces.length).toBe(gluings + 1);

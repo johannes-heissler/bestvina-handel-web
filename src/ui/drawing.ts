@@ -15,7 +15,8 @@ import { Complex } from "../math/complex";
 import type { Edge, Vertex } from "../graph/ribbon-graph";
 import type { FibredSurface } from "../fibred/fibred-surface";
 import { perronFrobenius } from "../fibred/perron-frobenius";
-import { imageSurface } from "../embedding/image";
+import { imageSurface, withTightMarking } from "../embedding/image";
+import { modelOfSpine } from "../embedding/remark";
 import { type Rendered, renderSvg, type RenderOptions } from "../render/svg";
 
 const charts = new WeakMap<RibbonGraph, Map<string, Chart>>();
@@ -59,7 +60,6 @@ class PerSurface<T> {
     return value;
   }
 }
-const layouts = new PerSurface<Layout>(6);
 const renders = new PerSurface<Rendered>(12);
 
 /** A key for a model object (models are compared by identity, like the charts). */
@@ -93,6 +93,12 @@ export function drawTimeline(
   // f(τ) of the state nearest to the position (the image isn't animated).
   if (options.view === "image")
     return draw(model, states[Math.min(Math.round(position), states.length - 1)] as FibredSurface, options);
+  // A move that changes G₀ (the closed-surface moves): each state in its own model (port note 22), the earlier one
+  // until halfway, without interpolating.
+  if (states.some((state) => state.spine0 !== (states[0] as FibredSurface).spine0)) {
+    const state = states[Math.min(Math.round(position), states.length - 1)] as FibredSurface;
+    return draw(modelOfSpine(state.spine0) ?? model, state, options);
+  }
   try {
     const chart = chartFor(model, states[0] as FibredSurface, options.sideFraction);
     // The junctions moved so far (until the fold merges them): they don't shrink the rest of the picture, neither while
@@ -211,6 +217,8 @@ function layoutFor(
     surface,
     JSON.stringify([modelId(model), options.sideFraction, layoutOptions]),
     () => {
+      // (No tightening here, unlike \`render\`: the intermediate states of an isotopy are not tight on purpose, and
+      // the animation relies on their μ; an earlier state is shown instead.)
       try {
         return { layout: layout(surface, chart, layoutOptions) };
       } catch {
@@ -261,9 +269,9 @@ function journey(
     });
   // The journey keeps away from the junctions at the ends of the strip: it joins the track a bit after its start and
   // leaves it a bit before its end (else the junction runs over them, and their disks and strips shrink).
-  const tracks = pieces.map(offsetLine).map((track, n, all) =>
-    trimmed(track, n === 0 ? KEEP_AWAY : 0, n === all.length - 1 ? KEEP_AWAY : 0),
-  );
+  const tracks = pieces
+    .map(offsetLine)
+    .map((track, n, all) => trimmed(track, n === 0 ? KEEP_AWAY : 0, n === all.length - 1 ? KEEP_AWAY : 0));
   // Where the junction starts: its place before the isotopy.
   const u = start.graph.vertices.find((x) => x.name === v.name);
   const from = (u && startLayout?.junctions.get(u)) ?? (tracks[0]?.[0] as Complex);
@@ -401,16 +409,24 @@ function render(
     smoothing: options.straightening ?? 0,
   };
   const id = modelId(model);
-  return renders.get(surface, JSON.stringify([id, options]), () =>
-    renderSvg(
+  return renders.get(surface, JSON.stringify([id, options]), () => {
+    const { drawn, laidOut } = drawable.get(
       surface,
-      layouts.get(surface, JSON.stringify([id, options.sideFraction, layoutOptions]), () =>
-        layout(surface, chart, layoutOptions),
-      ),
-      widths ? { ...options, widths } : options,
-    ),
-  );
+      JSON.stringify([id, options.sideFraction, layoutOptions]),
+      () => {
+        try {
+          return { drawn: surface, laidOut: layout(surface, chart, layoutOptions) };
+        } catch {
+          // Strands that part only at a junction that could be pulled across a side have no order: tighten μ there.
+          const tight = withTightMarking(surface);
+          return { drawn: tight, laidOut: layout(tight, chart, layoutOptions) };
+        }
+      },
+    );
+    return renderSvg(drawn, laidOut, widths ? { ...options, widths } : options);
+  });
 }
+const drawable = new PerSurface<{ drawn: FibredSurface; laidOut: Layout }>(6);
 
 /**
  * f(τ): G embedded by μ ∘ g (see `imageSurface`), drawn like τ, with each strip as wide as in τ divided by the growth λ
@@ -418,7 +434,8 @@ function render(
  * The highlight of a fold belongs to τ and is left out.
  */
 function drawImage(model: SurfaceModel, surface: FibredSurface, options: DrawOptions): Rendered {
-  const { highlight: _, ...rest } = options;
+  const rest: DrawOptions = { ...options };
+  delete (rest as { highlight?: unknown }).highlight;
   const tau = render(model, surface, { ...rest, view: "trainTrack" });
   let growth = 1;
   try {

@@ -15,6 +15,7 @@
  *
  * @module
  */
+import { nameKey } from "../../graph/names";
 import { EdgePath } from "../../graph/edge-path";
 import type { Edge, OrientedEdge, Vertex } from "../../graph/ribbon-graph";
 import type { FibredSurface } from "../fibred-surface";
@@ -345,7 +346,7 @@ function splitAlong(fs: FibredSurface, K: ReadonlySet<Edge>): void {
 /** A name for the copy of `e` on one side, `e_r` or `e_l`, or the next free name if that is taken. */
 function copyName(fs: FibredSurface, e: Edge, side: "r" | "l"): string {
   const name = `${e.name}_${side}`;
-  return fs.graph.edges.some((f) => f.name.toLowerCase() === name.toLowerCase()) ? fs.nextEdgeName() : name;
+  return fs.graph.edges.some((f) => nameKey(f.name) === nameKey(name)) ? fs.nextEdgeName() : name;
 }
 
 /** Which letters of the cyclic word `W` survive its cyclic reduction (the survivors of each factor are consecutive). */

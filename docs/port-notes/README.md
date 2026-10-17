@@ -39,7 +39,8 @@ in `docs/`.
 | 19  | [Model surfaces, gallery, presets, map editing](19-models-and-examples.md)          | `SurfaceGenerator.cs` (combinatorial part), `MainMenu` presets                   | 🔍   | ✅             | ✅    |
 | 20  | [Geometry, embedding, 2D views](20-embedding-and-2d-views.md)                       | `GeometricObjects_*` (replaced)                                                  | 🔍   | ✅             | ✅    |
 | 21  | [UI, saving, deployment](21-ui-saving-deployment.md)                                | `UIElements/*`, `Kamera/*` (rewritten)                                           | 🔍   | ✅             | ✅    |
-| 22+ | Point pushes, 3D                                                                    | `PointPushes.cs`, `GeometricObjects_Visualization/*`                             |      |                |       |
+| 22  | [Interior punctures, filled points, cutting in the polygon](22-interior-punctures.md)       | thesis § Closed surfaces (not in C#)                                             | ✍️   | phases 1–3     | ✅    |
+| 23+ | Point pushes, 3D                                                                    | `PointPushes.cs`, `GeometricObjects_Visualization/*`                             |      |                |       |
 | 3   | Curves, points, geodesics                                                           | `GeometricObjects_Abstract/*`                                                    |      |                |       |
 | 4   | Surfaces, homeomorphisms                                                            | `GeometricObjects_Abstract/*`                                                    |      |                |       |
 | …   | Embedding layer, suggestion system, examples, rendering, UI                         |                                                                                  |      |                |       |

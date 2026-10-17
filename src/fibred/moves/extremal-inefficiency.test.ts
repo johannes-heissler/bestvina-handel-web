@@ -30,7 +30,7 @@ describe("gatewise extremal junctions of valence 2", () => {
     expect(preview.error).toBeUndefined();
     const texts = preview.steps.map((s) => plainText(s.text));
     expect(texts[0]).toContain("g(b₁ b) = b | a X B B₁ Z");
-    expect(texts.join("\n")).toContain("the initial segment is called b₁₁"); // b₁ is taken
+    expect(texts.join("\n")).toContain("the initial segment is called b_1_1"); // b₁ (= b_1) is taken
     expect(texts.at(-1)).toContain("backtracking (order 0)");
     session.commit(preview);
     expect(session.suggestion().kind).toBe("pull tight");

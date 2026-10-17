@@ -8,6 +8,9 @@ import { CombinatorialMap } from "../../graph/combinatorial-map";
 import { EdgePath } from "../../graph/edge-path";
 import { type Edge, type OrientedEdge, RibbonGraph, type Vertex } from "../../graph/ribbon-graph";
 import { FibredSurface } from "../fibred-surface";
+import { keepingStates, narrate } from "../narration";
+import type { Remarking } from "../remarking";
+import { fillingText, finishRemarking, junctionPartName } from "./cut-closed-surface";
 import { trainTrack, type TrainTrack } from "../train-track";
 
 /** A junction with an infinitesimal polygon (a singularity of angle ≥ 3π) and its period under g. */
@@ -59,17 +62,80 @@ export function polygonSingularities(fs: FibredSurface, tt: TrainTrack = trainTr
  * since the surface is now punctured differently. Continuing the algorithm finds the efficient representative on
  * Σ ∖ Q (see port note 15 for what that implies for the growth).
  */
-export function replacePunctureBySingularity(fs: FibredSurface, q: Singularity): FibredSurface {
-  const blownUp = blowUpOrbit(fs, q);
+export function replacePunctureBySingularity(
+  fs: FibredSurface,
+  q: Singularity,
+  remarking?: Remarking,
+  tt: TrainTrack = trainTrack(fs),
+): FibredSurface {
+  const blownUp = blowUpOrbit(fs, q, tt);
   const epsilon = blownUp.polygons.get(q.junction)?.[0];
   if (epsilon === undefined) throw new Error(`${q.junction} has no infinitesimal polygon`);
-  return fillPuncture(blownUp.surface, epsilon);
+  const keep = remarking !== undefined && keepingStates();
+  const surface =
+    remarking === undefined
+      ? blownUp.surface
+      : new FibredSurface({
+          graph: blownUp.surface.graph,
+          g: blownUp.surface.g,
+          mu: markBlownUp(blownUp, remarking),
+          peripheral: blownUp.surface.peripheral,
+        });
+  surface.onError = fs.onError;
+  const { x, forwardImage } = fillingWord(surface, epsilon);
+  narrate(
+    [
+      "Fill in p: the branch ",
+      { strip: epsilon.name },
+      " lies between the polygon of ",
+      { junction: q.junction.name },
+      ` and p, so with p filled in it is homotopic to ${(x.isForward ? forwardImage : forwardImage.inverse).toString() || "a point"} (the rest of p's boundary, backwards). It is replaced by that in all images and deleted; the faces of p and q merge.`,
+      ...(remarking === undefined ? [] : [" ", fillingText(remarking)]),
+    ],
+    { before: keep ? surface.copy() : undefined },
+  );
+  const filled = fillPuncture(surface, epsilon, { keepMarking: remarking !== undefined });
+  return remarking === undefined ? filled : finishRemarking(filled, remarking);
+}
+
+/**
+ * μ of the blown-up graph: a strip runs along its real branch of τ, from its junction (outside Q, through the inside of
+ * the junction to its switch) or from its switch (at Q); a polygon branch is its branch of τ.
+ */
+function markBlownUp(blownUp: BlownUp, remarking: Remarking): CombinatorialMap {
+  const { tt, origin } = blownUp;
+  const graph = blownUp.surface.graph;
+  const mu = new CombinatorialMap(graph, remarking.spine);
+  for (const v of graph.vertices) {
+    const old = origin.vertices.get(v) as Vertex;
+    mu.setVertexImage(v, tt.junctionOf.has(old) ? remarking.switchCell(old) : remarking.junctionCell(old));
+  }
+  for (const e of graph.edges) {
+    const old = origin.edges.get(e) as Edge;
+    const branch = tt.realBranch.get(old);
+    if (branch === undefined) {
+      mu.setImage(e.forward, remarking.part(old, 0, 1).reduced());
+      continue;
+    }
+    const atQ = (x: OrientedEdge) => tt.junctionOf.has(origin.vertices.get(x.source) as Vertex);
+    const start = atQ(e.forward) ? EdgePath.EMPTY : remarking.toSwitch(old.forward);
+    const end = atQ(e.backward) ? EdgePath.EMPTY : remarking.toSwitch(old.backward).inverse;
+    mu.setImage(e.forward, start.concat(remarking.part(branch, 0, 1), end).reduced());
+  }
+  return mu;
 }
 
 /** The result of {@link blowUpOrbit}. */
 export interface BlownUp {
   /** G₀ with g₀; its periphery consists of the polygons of Q. */
   readonly surface: FibredSurface;
+  /** The train track τ of the surface that was blown up. */
+  readonly tt: TrainTrack;
+  /** What each vertex (a junction of G, or a switch of τ at Q) and edge (a strip of G, or a branch of τ) comes from. */
+  readonly origin: {
+    readonly vertices: ReadonlyMap<Vertex, Vertex>;
+    readonly edges: ReadonlyMap<Edge, Edge>;
+  };
   /** For each junction of Q, the strips of G₀ that form its polygon. */
   readonly polygons: ReadonlyMap<Vertex, readonly Edge[]>;
 }
@@ -82,8 +148,7 @@ export interface BlownUp {
  *
  * @throws Error if a junction outside Q is mapped into Q (not supported yet).
  */
-export function blowUpOrbit(fs: FibredSurface, q: Singularity): BlownUp {
-  const tt = trainTrack(fs);
+export function blowUpOrbit(fs: FibredSurface, q: Singularity, tt: TrainTrack = trainTrack(fs)): BlownUp {
   const inQ = new Set(q.orbit);
   for (const v of fs.graph.vertices)
     if (!inQ.has(v) && inQ.has(fs.g.vertexImage(v)))
@@ -94,8 +159,11 @@ export function blowUpOrbit(fs: FibredSurface, q: Singularity): BlownUp {
   const graph = new RibbonGraph();
   const vertexOf = new Map<Vertex, Vertex>(); // junction outside Q, or switch at Q → vertex of G₀
   for (const v of fs.graph.vertices) if (!inQ.has(v)) vertexOf.set(v, graph.addVertex(v.name, v.color));
-  for (const s of tt.graph.vertices)
-    if (inQ.has(tt.junctionOf.get(s) as Vertex)) vertexOf.set(s, graph.addVertex(s.name, s.color));
+  const used = new Set(graph.vertices.map((v) => v.name));
+  for (const s of tt.graph.vertices) {
+    const junction = tt.junctionOf.get(s) as Vertex;
+    if (inQ.has(junction)) vertexOf.set(s, graph.addVertex(junctionPartName(junction, true, used), s.color));
+  }
   const endVertex = (e: OrientedEdge) =>
     vertexOf.get(inQ.has(e.source) ? (tt.switchOf.get(e) as Vertex) : e.source) as Vertex;
 
@@ -147,7 +215,25 @@ export function blowUpOrbit(fs: FibredSurface, q: Singularity): BlownUp {
 
   const surface = new FibredSurface({ graph, g: g0, peripheral: [...polygons.values()].flat() });
   surface.onError = fs.onError;
-  return { surface, polygons };
+  const invert = <K, V>(map: Map<K, V>) => new Map([...map].map(([k, v]) => [v, k] as const));
+  return { surface, polygons, tt, origin: { vertices: invert(vertexOf), edges: invert(edgeOf) } };
+}
+
+/**
+ * The boundary word x β of p's face through ε (x = ε in some orientation), and what ε (forward) is homotopic to once p
+ * is filled in: β⁻¹ for x = ε, β for x = ε̄.
+ */
+export function fillingWord(fs: FibredSurface, epsilon: Edge): { x: OrientedEdge; forwardImage: EdgePath } {
+  const puncture = fs.graph
+    .boundaryWords()
+    .find(
+      (w) => w.letters.some((x) => x.edge === epsilon) && w.letters.some((x) => !fs.peripheral.has(x.edge)),
+    );
+  if (puncture === undefined) throw new Error(`${epsilon} doesn't lie on the boundary of the puncture`);
+  const k = puncture.letters.findIndex((x) => x.edge === epsilon);
+  const x = puncture.at(k) as OrientedEdge;
+  const beta = puncture.slice(k + 1).concat(puncture.slice(0, k)); // the boundary word is x β
+  return { x, forwardImage: x.isForward ? beta.inverse : beta }; // x ≃ β⁻¹
 }
 
 /**
@@ -158,22 +244,18 @@ export function blowUpOrbit(fs: FibredSurface, q: Singularity): BlownUp {
  *
  * Returns a new fibred surface on the same graph (without ε), without periphery and with μ reset.
  */
-export function fillPuncture(fs: FibredSurface, epsilon: Edge): FibredSurface {
-  const puncture = fs.graph
-    .boundaryWords()
-    .find(
-      (w) => w.letters.some((x) => x.edge === epsilon) && w.letters.some((x) => !fs.peripheral.has(x.edge)),
-    );
-  if (puncture === undefined) throw new Error(`${epsilon} doesn't lie on the boundary of the puncture`);
-  const k = puncture.letters.findIndex((x) => x.edge === epsilon);
-  const x = puncture.at(k) as OrientedEdge;
-  const beta = puncture.slice(k + 1).concat(puncture.slice(0, k)); // the boundary word is x β
-  const forwardImage = x.isForward ? beta.inverse : beta; // x ≃ β⁻¹
+export function fillPuncture(
+  fs: FibredSurface,
+  epsilon: Edge,
+  options: { keepMarking?: boolean } = {},
+): FibredSurface {
+  const { forwardImage } = fillingWord(fs, epsilon);
   fs.g.substituteInImages((e) => (e === epsilon ? forwardImage : undefined));
   fs.graph.removeEdge(epsilon);
   fs.g.forgetEdge(epsilon);
+  if (options.keepMarking) fs.mu.forgetEdge(epsilon);
 
-  const result = new FibredSurface({ graph: fs.graph, g: fs.g });
+  const result = new FibredSurface({ graph: fs.graph, g: fs.g, ...(options.keepMarking && { mu: fs.mu }) });
   result.onError = fs.onError;
   return result;
 }

@@ -9,6 +9,7 @@
  *
  * @module
  */
+import { nameKey } from "../graph/names";
 import type { Color } from "../math/color";
 import { CombinatorialMap } from "../graph/combinatorial-map";
 import { EdgePath } from "../graph/edge-path";
@@ -269,7 +270,7 @@ export class FibredSurface {
           `The loop ${e} is mapped to a vertex, i.e. a non-forest is mapped into a forest. This can't happen for a homotopy equivalence.`,
         );
 
-    const duplicateEdge = firstDuplicate(this.graph.edges, (e) => e.name.toLowerCase());
+    const duplicateEdge = firstDuplicate(this.graph.edges, (e) => nameKey(e.name));
     if (duplicateEdge !== undefined) problems.push(`The edge name ${duplicateEdge.name} is used twice`);
     const duplicateVertex = firstDuplicate(this.graph.vertices, (v) => v.name);
     if (duplicateVertex !== undefined) problems.push(`The vertex name ${duplicateVertex.name} is used twice`);

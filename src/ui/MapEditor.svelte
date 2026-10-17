@@ -4,6 +4,7 @@
   insert, and renaming or reversing strips.
 -->
 <script lang="ts">
+  import { displayName } from "../graph/names";
   import { presetNamed } from "../examples/presets";
   import { type MapUpdateMode, updateMap } from "../fibred/map-editing";
   import type { Text } from "../fibred/suggestions";
@@ -167,7 +168,7 @@
     <h3>Rename or reverse a strip</h3>
     <div class="buttons">
       <select bind:value={strip} aria-label="Strip">
-        {#each surface?.graph.edges ?? [] as e (e.id)}<option value={e.name}>{e.name}</option>{/each}
+        {#each surface?.graph.edges ?? [] as e (e.id)}<option value={e.name}>{displayName(e.name)}</option>{/each}
       </select>
       <input bind:value={newName} placeholder="new name (uppercase: reversed)" size="18" />
       <button onclick={rename}>Rename</button>

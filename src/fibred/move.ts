@@ -5,6 +5,7 @@
  *
  * @module
  */
+import { canonicalName } from "../graph/names";
 import { EdgePath } from "../graph/edge-path";
 import { nameTable, parseEdgePath } from "../graph/path-parser";
 import type { Edge, OrientedEdge, Vertex } from "../graph/ribbon-graph";
@@ -15,7 +16,8 @@ import { type MapUpdateMode, renameJunction, renameStrip, updateMap } from "./ma
 import type { FibredSurface } from "./fibred-surface";
 import { collapseSubforest } from "./moves/collapse-forest";
 import { absorbIntoPeriphery } from "./moves/absorb-periphery";
-import { cutClosedSurface, cutOptions, prongsOfOrbit } from "./moves/cut-closed-surface";
+import { cutClosedSurface, cutOptions, cutOrbit, prongsOfOrbit } from "./moves/cut-closed-surface";
+import type { RemarkingProvider } from "./remarking";
 import { polygonSingularities, replacePunctureBySingularity } from "./moves/fill-puncture";
 import type { FoldOption } from "./moves/fold";
 import {
@@ -152,6 +154,8 @@ export interface FollowUp {
 /** What a move tells about itself, for suggesting the natural next step. */
 export interface MoveHooks {
   readonly followUp?: (followUp: FollowUp) => void;
+  /** For the closed-surface moves: keeps the original model by placing the new punctures in it (port note 22). */
+  readonly remark?: RemarkingProvider;
 }
 
 /**
@@ -181,6 +185,8 @@ const NARRATES_ITSELF = new Set<MoveKind>([
   "fold peripheral inefficiency",
   "remove inefficiency",
   "pull tight",
+  "cut along a singular leaf",
+  "replace puncture by singularity",
 ]);
 
 /** What a move does, in one sentence (before it is applied). */
@@ -259,15 +265,15 @@ function introduction(fs: FibredSurface, move: Move): Text {
       ];
     case "cut along a singular leaf":
       return [
-        "Cut along a singular leaf from ",
+        "Cut along a leaf from the singularity of ",
         { junction: move.junction },
-        ": the puncture is replaced by the orbit of this singularity, which gives a new train track for the same map on the surface with these punctures instead.",
+        ": τ has only one cusp at p, so p can't simply be filled in. Instead the surface is punctured at this singularity (×; with its orbit under f): its junction is blown up into its infinitesimal polygon, with the new puncture inside.",
       ];
     case "replace puncture by singularity":
       return [
-        "Shortcut: fill in the puncture and puncture the surface at the orbit of the singularity ",
+        "Shortcut: puncture the surface at the singularity of ",
         { junction: move.junction },
-        " instead.",
+        " (×; with its orbit under f) instead of p. Its junction is blown up into its infinitesimal polygon, with the new puncture inside.",
       ];
     case "edit map":
       return ["Replace g by the map entered."];
@@ -464,7 +470,12 @@ function applyMoveQuietly(fs: FibredSurface, move: Move, hooks: MoveHooks = {}):
           : cutOptions(tt, prongsOfOrbit(tt, junction(fs, move.junction)))[0];
       if (option?.prong === undefined)
         throw new Error(`No cut found for the singularity at ${move.junction}`);
-      const { surface } = cutClosedSurface(tt, { prong: option.prong, realBranches: option.realBranches });
+      const remarking = hooks.remark?.(fs, tt, cutOrbit(tt, option.prong));
+      const { surface } = cutClosedSurface(
+        tt,
+        { prong: option.prong, realBranches: option.realBranches },
+        remarking,
+      );
       return keepFlags(fs, surface);
     }
     case "edit map":
@@ -482,7 +493,9 @@ function applyMoveQuietly(fs: FibredSurface, move: Move, hooks: MoveHooks = {}):
     case "replace puncture by singularity": {
       const q = polygonSingularities(fs).find((s) => s.junction.name === move.junction);
       if (q === undefined) throw new Error(`${move.junction} is not a singularity`);
-      return keepFlags(fs, replacePunctureBySingularity(fs, q));
+      const tt = trainTrack(fs);
+      const remarking = hooks.remark?.(fs, tt, q.orbit);
+      return keepFlags(fs, replacePunctureBySingularity(fs, q, remarking, tt));
     }
   }
 }
@@ -512,14 +525,14 @@ function keepFlags(from: FibredSurface, to: FibredSurface): FibredSurface {
 
 /** The oriented strip with this name ("a" or its inverse "A"). */
 export function strip(fs: FibredSurface, name: string): OrientedEdge {
-  const e = nameTable(fs.graph).edges.get(name);
+  const e = nameTable(fs.graph).edges.get(canonicalName(name));
   if (e === undefined) throw new Error(`There is no strip ${name}`);
   return e;
 }
 
 /** The junction with this name. */
 export function junction(fs: FibredSurface, name: string): Vertex {
-  const v = fs.graph.vertices.find((x) => x.name === name);
+  const v = fs.graph.vertices.find((x) => canonicalName(x.name) === canonicalName(name));
   if (v === undefined) throw new Error(`There is no junction ${name}`);
   return v;
 }

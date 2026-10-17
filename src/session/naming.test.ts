@@ -18,8 +18,8 @@ describe("the names that folds give", () => {
     session.disabled = new Set(["move vertices"]); // (these tests are about folds and the bookkeeping steps)
     const fold = session.suggestion().options.find((o) => o.move.kind === "fold")!;
     const texts = session.preview(fold.move).steps.map((s) => plainText(s.text));
-    expect(texts.some((t) => /the rest keeps the name \w+, the initial segment is called \w+₁/.test(t))).toBe(
-      true,
-    );
+    expect(
+      texts.some((t) => /the rest keeps the name \w+, the initial segment is called \w+_1/.test(t)),
+    ).toBe(true);
   });
 });

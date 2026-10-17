@@ -4,6 +4,7 @@
   pre-periphery (collapsible). The last two only when there are any.
 -->
 <script lang="ts">
+  import { displayName } from "../graph/names";
   import type { Text } from "../fibred/suggestions";
   import { boundaryInfo, peripheryInfo } from "../session/analysis";
   import { app } from "./state.svelte";
@@ -45,7 +46,7 @@
                 class={`turn ${t.kind}`}
                 style:grid-column={2 * j + 2}
                 style:grid-row="2"
-                title={`${t.from.name} → ${t.to.name}: ${kindTitle[t.kind]}, interior angle ${angle(t.infinitesimal)}`}>{t.infinitesimal}</span
+                title={`${displayName(t.from.name)} → ${displayName(t.to.name)}: ${kindTitle[t.kind]}, interior angle ${angle(t.infinitesimal)}`}>{t.infinitesimal}</span
               >
             {/if}
           {/each}

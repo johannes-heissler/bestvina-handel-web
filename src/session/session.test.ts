@@ -58,12 +58,12 @@ describe("Session", () => {
     expect(await decodeSession("#nothing")).toBeUndefined();
   });
 
-  it("switches to the ribbon model of the new spine after a closed-surface move", () => {
+  it("keeps the polygon after a closed-surface move (port note 22)", () => {
     const session = Session.create({ kind: "preset", preset: "Closed genus 2" });
     session.disabled = new Set(["move vertices"]); // (these tests are about folds and the bookkeeping steps)
     const cut = session.suggestion().options[0]!.move;
     const node = session.apply(cut);
-    expect(node.model.kind).toBe("ribbon");
+    expect(node.model.kind).toBe("polygon");
   }, 60_000);
 });
 

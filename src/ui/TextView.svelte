@@ -1,7 +1,7 @@
 <!-- Structured text: strip names in their colours (hovering one highlights it in the views), junction names in dark green, as mathematical symbols. -->
 <script lang="ts">
   import type { FibredSurface } from "../fibred/fibred-surface";
-  import { invertName, isForwardName } from "../graph/names";
+  import { displayName, invertName, isForwardName } from "../graph/names";
   import type { Text } from "../fibred/suggestions";
   import { stripColors } from "./colors";
   import { app } from "./state.svelte";
@@ -23,10 +23,10 @@
   });
 </script>
 
-{#each text as part, i (i)}{#if typeof part === "string"}{part}{:else if "strip" in part}<span
+{#each text as part, i (i)}{#if typeof part === "string"}{displayName(part)}{:else if "strip" in part}<span
       class="strip-name"
       style:color={colors.get(part.strip)}
       onmouseenter={() => (app.hovered = isForwardName(part.strip) ? part.strip : invertName(part.strip))}
       onmouseleave={() => (app.hovered = undefined)}
-      role="note">{part.strip}</span
-    >{:else}<span class="junction-name">{part.junction}</span>{/if}{/each}
+      role="note">{displayName(part.strip)}</span
+    >{:else}<span class="junction-name">{displayName(part.junction)}</span>{/if}{/each}

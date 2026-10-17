@@ -5,7 +5,15 @@
  *
  * @module
  */
-import { topology, type Point2, type PolygonGeometry, type SpineNames, type SurfaceModel } from "./models";
+import {
+  polygonCorners,
+  topology,
+  type Point2,
+  type PolygonGeometry,
+  type PolygonModel,
+  type SpineNames,
+  type SurfaceModel,
+} from "./models";
 
 /** A model of the gallery, with the names and orientations of the edges of G₀ it starts with. */
 export interface GalleryEntry {
@@ -58,8 +66,38 @@ function polygon(
   word: string[],
   closed: boolean,
   geometry: PolygonGeometry = closed ? { kind: "compact" } : { kind: "ideal" },
+  points?: readonly Point2[],
 ): SurfaceModel {
-  return { kind: "polygon", name, description, word, geometry, closed };
+  return { kind: "polygon", name, description, word, geometry, closed, ...(points && { points }) };
+}
+
+/**
+ * k points inside a polygon, in its chart coordinates: the centre for one, else a small circle around it (turned a
+ * little, so that no point lies on a diagonal of a regular polygon).
+ */
+function interiorPoints(model: PolygonModel, k: number): Point2[] {
+  const { vertices } = polygonCorners(model);
+  const inradius = Math.min(...vertices.map((v) => v.abs())) * Math.cos(Math.PI / vertices.length);
+  // The flat vertices are normalized into the chart; place the points in the given coordinates.
+  const flat = model.geometry.kind === "flat" ? model.geometry.vertices : undefined;
+  const xs = flat?.map(([x]) => x) ?? [0];
+  const ys = flat?.map(([, y]) => y) ?? [0];
+  const center: Point2 = [(Math.min(...xs) + Math.max(...xs)) / 2, (Math.min(...ys) + Math.max(...ys)) / 2];
+  const r =
+    flat === undefined
+      ? 0.4 * inradius
+      : 0.2 * Math.min(Math.max(...xs) - Math.min(...xs), Math.max(...ys) - Math.min(...ys));
+  if (k === 1) return [center];
+  return Array.from({ length: k }, (_, i): Point2 => {
+    const phi = (2 * Math.PI * i) / k + 0.3;
+    return [center[0] + r * Math.cos(phi), center[1] + r * Math.sin(phi)];
+  });
+}
+
+/** The polygon with these punctures inside (port note 22). */
+function withPoints(model: SurfaceModel, k: number, name: string, description: string): SurfaceModel {
+  if (model.kind !== "polygon") throw new Error("Only polygons have interior points");
+  return { ...model, name, description, points: interiorPoints(model, k) };
 }
 
 /**
@@ -198,6 +236,31 @@ export function gallery(genus: number, punctures: number): GalleryEntry[] {
       );
     }
     if (extra === 0) models.push(...flatModels(genus, closed));
+    // Punctures inside the polygon (port note 22): the extra ones in the ideal standard polygon, or all of them in the
+    // closed polygon, whose vertex is then filled in.
+    if (extra > 0)
+      models.push(
+        withPoints(
+          polygon("", "", std, false),
+          extra,
+          "Punctures inside",
+          `The ideal ${4 * genus}-gon a b A B ⋯ (its vertex is one puncture) with the ${extra} other punctures inside, cut into convex cells.`,
+        ),
+      );
+    if (punctures > 0) {
+      const closedModel =
+        genus === 1
+          ? (flatModels(1, true)[0] as SurfaceModel)
+          : polygon("", "", std, true, { kind: "compact" });
+      models.push(
+        withPoints(
+          closedModel,
+          punctures,
+          "All punctures inside",
+          `The closed ${genus === 1 ? "square torus" : `${4 * genus}-gon`} with its vertex filled in and the ${punctures === 1 ? "puncture" : `${punctures} punctures`} inside.`,
+        ),
+      );
+    }
   }
   const seen = new Set<string>();
   const named = [TWICE_PUNCTURED_TORUS];
@@ -214,7 +277,7 @@ export function gallery(genus: number, punctures: number): GalleryEntry[] {
 /** What makes two models different: the geometry, and for a polygon its word up to rotation and renaming the sides. */
 function modelKey(model: SurfaceModel): string {
   if (model.kind !== "polygon") return JSON.stringify(model);
-  return JSON.stringify([model.geometry, model.closed, canonicalWord(model.word)]);
+  return JSON.stringify([model.geometry, model.closed, canonicalWord(model.word), model.points ?? []]);
 }
 
 /**

@@ -8,7 +8,8 @@
  * - **polygon**: a polygon whose sides are glued in pairs, given by its word (the side labels read counterclockwise;
  *   "a" and "A" are glued with opposite orientations). All vertex classes are punctures (ideal vertices), or, for a
  *   closed surface, the one vertex class is an artificial puncture. G₀ is the dual rose: one loop per side pair,
- *   whose star is the word itself.
+ *   whose star is the word itself. With punctures inside the polygon, the polygon is cut along chords into convex
+ *   cells, and G₀ is the dual graph of the cells (port note 22).
  * - **plane**: the plane with punctures (plus the one at ∞), without sides. G₀ is a graph of lassos around the points.
  * - **ribbon**: the fibred surface of a ribbon graph given by its boundary words, drawn glued from rectangles. G₀ is
  *   that ribbon graph.
@@ -18,11 +19,15 @@
 import { CombinatorialMap } from "../graph/combinatorial-map";
 import { EdgePath } from "../graph/edge-path";
 import { fromBoundaryWords, fromStars } from "../graph/from-boundary-words";
-import { invertName, isForwardName } from "../graph/names";
+import { invertName, isForwardName, nameKey } from "../graph/names";
 import type { Edge, OrientedEdge, RibbonGraph, Vertex } from "../graph/ribbon-graph";
 import { FibredSurface } from "../fibred/fibred-surface";
 import { IDENTITY_NAME } from "../fibred/map-editing";
 import { EDGE_COLORS } from "../fibred/names-and-colors";
+import { cellDecomposition } from "../geometry/cells";
+import { regularPolygon } from "../geometry/hyperbolic";
+import { normalize, normalizeLike } from "../geometry/normalize";
+import { Complex } from "../math/complex";
 
 export type Point2 = readonly [number, number];
 
@@ -46,8 +51,16 @@ export interface PolygonModel extends ModelBase {
   /** The side labels, counterclockwise; each label occurs once in lower and once in upper case. */
   readonly word: readonly string[];
   readonly geometry: PolygonGeometry;
-  /** The surface is closed: the single vertex class is a marked point, not a puncture. */
+  /**
+   * The single vertex class is not a puncture: without interior points it is an artificial puncture (the surface is
+   * closed), with interior points it is filled in (the surface is Σ minus the points).
+   */
   readonly closed: boolean;
+  /**
+   * Punctures inside the polygon, in chart coordinates: Klein coordinates for hyperbolic polygons (the regular polygon
+   * is centred at 0), the coordinates of the vertices for flat ones.
+   */
+  readonly points?: readonly Point2[];
 }
 
 export interface PlaneModel extends ModelBase {
@@ -82,20 +95,96 @@ export interface SpineNames {
   readonly reversed?: readonly string[];
 }
 
+/** A cell of a polygon model: a vertex of G₀ (port note 22). */
+export interface SpineCell {
+  readonly vertex: Vertex;
+  /** Its corners counterclockwise: indices into the polygon's vertices, followed by its interior points. */
+  readonly corners: readonly number[];
+  /**
+   * For each side, from corners[i] to corners[i + 1]: the oriented edge of G₀ that leaves the cell through it, or
+   * undefined for the wall that a filled-in vertex removed.
+   */
+  readonly exits: readonly (OrientedEdge | undefined)[];
+}
+
 /** G₀ with the correspondence to the parts of the model. */
 export interface Spine {
   readonly graph: RibbonGraph;
-  /** For a polygon: for each side (counterclockwise), the oriented edge of G₀ that leaves the centre through it. */
+  /** For a polygon: for each side (counterclockwise), the oriented edge of G₀ that leaves its cell through it. */
   readonly sides?: readonly OrientedEdge[];
+  /** For a polygon: its cells, in the order of the vertices of G₀. */
+  readonly cells?: readonly SpineCell[];
   /** For the plane: for each point, the loop of G₀ around it, oriented counterclockwise. */
   readonly lassos?: readonly OrientedEdge[];
+}
+
+/** The corners of a polygon model in its chart, and its interior points (in the same coordinates). */
+export function polygonCorners(model: PolygonModel): { vertices: Complex[]; points: Complex[] } {
+  const points = (model.points ?? []).map(([x, y]) => new Complex(x, y));
+  if (model.geometry.kind !== "flat")
+    return { vertices: regularPolygon(model.word.length, model.geometry.kind), points };
+  const given = model.geometry.vertices;
+  return {
+    vertices: normalize(given.map(([x, y]) => new Complex(x, y))),
+    points: points.map((p) => normalizeLike(given, p, 0.9)),
+  };
+}
+
+/** The cells of a polygon model, with the names of the edges of G₀ leaving each cell through each of its sides. */
+interface PolygonCells {
+  readonly cells: readonly (readonly number[])[];
+  /** Before renaming: the side label for a polygon side, a chord name (lowercase leaving the earlier cell) for a chord. */
+  readonly names: readonly (readonly string[])[];
+  /** The forward name of the chord that a filled-in vertex removes (port note 22). */
+  readonly wall: string | undefined;
+}
+
+function polygonCells(model: PolygonModel): PolygonCells {
+  if ((model.points ?? []).length === 0)
+    return { cells: [model.word.map((_, i) => i)], names: [[...model.word]], wall: undefined };
+  const { vertices, points } = polygonCorners(model);
+  const n = vertices.length;
+  const { cells } = cellDecomposition(vertices, points);
+  const used = new Set(model.word.map((x) => x.toLowerCase()));
+  const chordNames = new Map<string, string>(); // "a-b" (smaller corner first) → forward name
+  // Chords are named s_1, s_2, … (shown as s₁, s₂; not with letters, which the strips of G use).
+  const chordName = () => {
+    let k = 1;
+    while (used.has(`s_${k}`)) k++;
+    return `s_${k}`;
+  };
+  const names = cells.map((cell) =>
+    cell.map((a, i) => {
+      const b = cell[(i + 1) % cell.length] as number;
+      if (a < n && b === (a + 1) % n) return model.word[a] as string;
+      const key = a < b ? `${a}-${b}` : `${b}-${a}`;
+      const known = chordNames.get(key);
+      if (known !== undefined) return invertName(known);
+      const name = chordName();
+      used.add(name);
+      chordNames.set(key, name);
+      return name;
+    }),
+  );
+  if (!model.closed) return { cells, names, wall: undefined };
+  // The first chord from the vertex class to an interior point.
+  const wall = cells
+    .flatMap((cell, k) => cell.map((a, i) => ({ a, b: cell[(i + 1) % cell.length] as number, k, i })))
+    .find(({ a, b }) => a < n !== b < n);
+  if (wall === undefined) throw new Error("No chord joins the vertex to an interior point");
+  return { cells, names, wall: (names[wall.k] as string[])[wall.i]?.toLowerCase() };
+}
+
+/** Whether the exit with this name is the wall. */
+function isWall(cells: PolygonCells, name: string): boolean {
+  return cells.wall !== undefined && name.toLowerCase() === cells.wall;
 }
 
 /** The oriented edge names at each vertex of G₀ (before renaming). */
 function stars(model: SurfaceModel): string[][] | undefined {
   switch (model.kind) {
     case "polygon":
-      return [[...model.word]];
+      return polygonCells(model).names.map((names) => [...names]);
     case "plane": {
       const n = model.points.length;
       const loop = (i: number) => lassoName(i);
@@ -128,6 +217,19 @@ export function spineOf(model: SurfaceModel, naming: SpineNames = {}): Spine {
   const byName = new Map(graph.orientedEdges.map((e) => [e.name, e]));
   const sides =
     model.kind === "polygon" ? model.word.map((name) => byName.get(name) as OrientedEdge) : undefined;
+  let cells: SpineCell[] | undefined;
+  if (model.kind === "polygon") {
+    const decomposition = polygonCells(model);
+    cells = decomposition.cells.map((corners, k) => ({
+      vertex: graph.vertices[k] as Vertex,
+      corners,
+      exits: (decomposition.names[k] as string[]).map((name) =>
+        isWall(decomposition, name) ? undefined : (byName.get(name) as OrientedEdge),
+      ),
+    }));
+    if (decomposition.wall !== undefined)
+      graph.removeEdge((byName.get(decomposition.wall) as OrientedEdge).edge);
+  }
   const lassos =
     model.kind === "plane"
       ? // With the star "… a A …", the inside of the petal is the boundary word "A", on the right of Ā: a runs
@@ -148,16 +250,38 @@ export function spineOf(model: SurfaceModel, naming: SpineNames = {}): Spine {
   graph.edges.forEach((e, i) => (e.color = EDGE_COLORS[i % EDGE_COLORS.length] as typeof e.color));
   const names = graph.edges.map((e) => e.name.toLowerCase());
   if (new Set(names).size !== names.length) throw new Error("Two edges of G₀ have the same name");
-  return { graph, ...(sides && { sides }), ...(lassos && { lassos }) };
+  return { graph, ...(sides && { sides }), ...(cells && { cells }), ...(lassos && { lassos }) };
 }
 
 /**
  * The {@link Spine} of a model on an existing G₀ (e.g. `fs.spine0`), recovered from its structure, so that it stays
- * right after renaming or reversing edges: for a polygon, the star of its vertex lists the sides counterclockwise; for
- * the plane, each lasso is the first of its two ends in the star of its base point.
+ * right after renaming or reversing edges: for a polygon, the star of each cell's vertex lists the exits through its
+ * sides counterclockwise (skipping the wall); for the plane, each lasso is the first of its two ends in the star of its
+ * base point.
  */
 export function spineOfGraph(model: SurfaceModel, graph: RibbonGraph): Spine {
-  if (model.kind === "polygon") return { graph, sides: graph.star(graph.vertices[0] as Vertex) };
+  if (model.kind === "polygon") {
+    const decomposition = polygonCells(model);
+    const n = model.word.length;
+    const cells = decomposition.cells.map((corners, k): SpineCell => {
+      const vertex = graph.vertices[k] as Vertex;
+      const star = [...graph.star(vertex)];
+      const exits = (decomposition.names[k] as string[]).map((name) =>
+        isWall(decomposition, name) ? undefined : star.shift(),
+      );
+      return { vertex, corners, exits };
+    });
+    const sides = model.word.map((_, side) => {
+      for (const cell of cells) {
+        const i = cell.corners.findIndex(
+          (a, j) => a === side && cell.corners[(j + 1) % cell.corners.length] === (side + 1) % n,
+        );
+        if (i >= 0) return cell.exits[i] as OrientedEdge;
+      }
+      throw new Error(`No cell has the side ${side}`);
+    });
+    return { graph, sides, cells };
+  }
   if (model.kind === "plane") {
     const lassos: OrientedEdge[] = [];
     for (const v of graph.vertices) {
@@ -180,15 +304,21 @@ export function topologyOf(graph: RibbonGraph): { genus: number; punctures: numb
   return { genus: (2 - chi - punctures) / 2, punctures };
 }
 
-/** Genus and punctures of the surface a model describes (a closed polygon has no puncture). */
+/** Genus and punctures of the surface a model describes (a closed polygon without interior points has none). */
 export function topology(model: SurfaceModel): { genus: number; punctures: number } {
   const { genus, punctures } = topologyOf(spineOf(model).graph);
   return isClosedModel(model) ? { genus, punctures: 0 } : { genus, punctures };
 }
 
-/** Whether the model describes a closed surface (its one puncture is artificial). */
+/**
+ * Whether the model describes a closed surface (its one puncture is artificial). A closed polygon with interior points
+ * is not: its vertex is filled in, and the points are genuine punctures.
+ */
 export function isClosedModel(model: SurfaceModel): boolean {
-  return (model.kind === "polygon" && model.closed) || (model.kind === "ribbon" && model.closed === true);
+  return (
+    (model.kind === "polygon" && model.closed && (model.points ?? []).length === 0) ||
+    (model.kind === "ribbon" && model.closed === true)
+  );
 }
 
 // ─── The initial fibred surface ─────────────────────────────────────────────────────────────
@@ -201,6 +331,43 @@ export interface FibredSurfaceOptions extends SpineNames {
   readonly peripheral?: number | readonly number[];
   /** Strips of G₀ that are already peripheral circles (for ribbon models given with their periphery). */
   readonly peripheralStrips?: readonly string[];
+  /**
+   * For a polygon: start with this graph G (by its boundary words) instead of a copy of G₀. Contracting a spanning tree
+   * of G must give the rose of the polygon, i.e. {@link contractedWord} of G is the polygon's word up to rotation; μ
+   * maps the tree to the vertex and the other edges to the sides of the same names.
+   */
+  readonly graph?: readonly (readonly string[])[];
+}
+
+/**
+ * The ribbon graph contracted along a breadth-first spanning tree: a rose, given by its star (the word of a polygon whose
+ * sides are glued as the edges of the rose), and the tree.
+ */
+export function contractedWord(graph: RibbonGraph): { word: string[]; tree: Set<Edge> } {
+  const root = graph.vertices[0] as Vertex;
+  const tree = new Set<Edge>();
+  const seen = new Set([root]);
+  for (let queue = [root]; queue.length > 0;) {
+    const v = queue.shift() as Vertex;
+    for (const x of graph.star(v))
+      if (!seen.has(x.target)) {
+        seen.add(x.target);
+        tree.add(x.edge);
+        queue.push(x.target);
+      }
+  }
+  // Walk around the tree: along tree edges to their other end, past the other edges (they leave the contracted vertex).
+  const start = graph.star(root)[0] as OrientedEdge;
+  const word: string[] = [];
+  let x = start;
+  do {
+    if (tree.has(x.edge)) x = graph.next(x.reversed);
+    else {
+      word.push(x.name);
+      x = graph.next(x);
+    }
+  } while (x !== start);
+  return { word, tree };
 }
 
 /**
@@ -210,11 +377,34 @@ export interface FibredSurfaceOptions extends SpineNames {
 export function initialFibredSurface(model: SurfaceModel, options: FibredSurfaceOptions = {}): FibredSurface {
   const spine = spineOf(model, options);
   const g0 = spine.graph;
-  const copy = g0.copy();
-  const graph = copy.graph;
-  const mu = new CombinatorialMap(graph, g0);
-  for (const [v, w] of copy.vertexMap) mu.setVertexImage(w, v);
-  for (const e of g0.edges) mu.setImage(copy.orient(e.forward), EdgePath.of(e.forward));
+  let graph: RibbonGraph;
+  let mu: CombinatorialMap;
+  if (options.graph === undefined) {
+    const copy = g0.copy();
+    graph = copy.graph;
+    mu = new CombinatorialMap(graph, g0);
+    for (const [v, w] of copy.vertexMap) mu.setVertexImage(w, v);
+    for (const e of g0.edges) mu.setImage(copy.orient(e.forward), EdgePath.of(e.forward));
+  } else {
+    graph = fromBoundaryWords(options.graph);
+    const { word, tree } = contractedWord(graph);
+    if (
+      g0.vertexCount !== 1 ||
+      !EdgePath.from(g0.star(g0.vertices[0] as Vertex)).isRotationOf(
+        EdgePath.from(word.map((name) => g0.orientedEdges.find((x) => x.name === name) as OrientedEdge)),
+      )
+    )
+      throw new Error(`Contracting a spanning tree of the graph gives the rose ${word.join(" ")}, not G₀`);
+    mu = new CombinatorialMap(graph, g0);
+    const [w] = g0.vertices as [Vertex];
+    for (const v of graph.vertices) mu.setVertexImage(v, w);
+    const byName = new Map(g0.orientedEdges.map((x) => [x.name, x]));
+    for (const e of graph.edges)
+      mu.setImage(
+        e.forward,
+        tree.has(e) ? EdgePath.EMPTY : EdgePath.of(byName.get(e.forward.name) as OrientedEdge),
+      );
+  }
   const fs = new FibredSurface({ graph, g: CombinatorialMap.identity(graph), mu });
   fs.mapName = IDENTITY_NAME;
   fs.isClosed = isClosedModel(model);
@@ -296,5 +486,5 @@ function isStem(fs: FibredSurface, e: Edge): boolean {
 }
 
 function freeName(fs: FibredSurface, name: string): string {
-  return fs.graph.edges.some((e) => e.name.toLowerCase() === name.toLowerCase()) ? fs.nextEdgeName() : name;
+  return fs.graph.edges.some((e) => nameKey(e.name) === nameKey(name)) ? fs.nextEdgeName() : name;
 }

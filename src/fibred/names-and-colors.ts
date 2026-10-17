@@ -20,12 +20,14 @@ export const EDGE_NAMES: readonly string[] = [
 /**
  * Names for new peripheral strips: Greek letters, first those whose capitals (the inverses) don't look like Latin
  * capitals (Γ Δ Θ Ξ Π Φ Ψ Ω, then Σ and Λ, which also denote the cyclic order and the growth), then the others;
- * never μ (the inverse marking), nor υ (Υ looks like Y). Then with subscripts.
+ * never μ (the inverse marking), nor υ (Υ looks like Y). Then with indices (γ_1, shown as γ₁).
  */
 export const PERIPHERAL_EDGE_NAMES: readonly string[] = (() => {
   const letters = [..."γδθξπφψωσλ", ..."αβεζηικνορτχ"];
-  const subscripts = [..."₁₂₃₄₅₆₇₈₉"];
-  return [...letters, ...subscripts.flatMap((s) => letters.map((x) => x + s))];
+  return [
+    ...letters,
+    ...Array.from({ length: 9 }, (_, k) => k + 1).flatMap((k) => letters.map((x) => `${x}_${k}`)),
+  ];
 })();
 
 /** Names for new vertices, in order of preference. */

@@ -269,7 +269,7 @@ export function cut(tt: TrainTrack, slits: readonly Slit[]): CutTrack {
       const inside = arc.ends.filter(
         (x) => x.low >= lo - TOLERANCE * width && x.high <= hi + TOLERANCE * width,
       );
-      const v = graph.addVertex(bounds.length > 2 ? `${arc.name}.${j}` : arc.name);
+      const v = graph.addVertex(bounds.length > 2 ? `${arc.name}_${j}` : arc.name);
       starOf.set(v, inside);
       for (const x of inside) {
         const entry = switchOfEnd.get(x.piece) ?? {};
@@ -279,6 +279,14 @@ export function cut(tt: TrainTrack, slits: readonly Slit[]): CutTrack {
       }
     }
   }
+
+  /** The number of a piece among those of its branch: along the branch first, then across it from the bottom. */
+  const pieceNumber = (piece: PieceDraft) => {
+    let k = 0;
+    for (let sub = 0; sub < piece.subBranch; sub++)
+      k += (pieceDrafts.get(key(piece.branch, sub)) as PieceDraft[]).length;
+    return k + (pieceDrafts.get(key(piece.branch, piece.subBranch)) as PieceDraft[]).indexOf(piece) + 1;
+  };
 
   // 4. Edges, stars.
   const kind = new Map<Edge, BranchKind>();
@@ -290,10 +298,9 @@ export function cut(tt: TrainTrack, slits: readonly Slit[]): CutTrack {
     const many =
       subBranchCount(piece.branch) > 1 ||
       (pieceDrafts.get(key(piece.branch, piece.subBranch)) as PieceDraft[]).length > 1;
-    const index = (pieceDrafts.get(key(piece.branch, piece.subBranch)) as PieceDraft[]).indexOf(piece);
-    const name = many
-      ? `${piece.branch.name}${subBranchCount(piece.branch) > 1 ? `_${piece.subBranch}` : ""}${index > 0 ? `'`.repeat(index) : ""}`
-      : piece.branch.name;
+    // The pieces of a branch are numbered b_1, b_2, … (shown as b₁, b₂): along the branch first, then across it from
+    // the bottom.
+    const name = many ? `${piece.branch.name}_${pieceNumber(piece)}` : piece.branch.name;
     const edge = graph.addEdge(start, end, {
       name: /\p{L}/u.test(name) ? name : `x${name}`,
       color: piece.branch.color,

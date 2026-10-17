@@ -33,16 +33,31 @@ export function imageSurface(fs: FibredSurface): FibredSurface {
 }
 
 /**
+ * The surface with the same graph, g and periphery, and a copy of μ isotoped until it is tight at the junctions (see
+ * {@link tightenAtJunctions}): for drawing a state whose μ the strand order can't order as it is.
+ */
+export function withTightMarking(fs: FibredSurface): FibredSurface {
+  const mu = new CombinatorialMap(fs.graph, fs.spine0);
+  for (const v of fs.graph.vertices) mu.setVertexImage(v, fs.mu.vertexImage(v));
+  for (const e of fs.graph.edges) mu.setImage(e.forward, fs.mu.image(e.forward));
+  const result = new FibredSurface({ graph: fs.graph, g: fs.g, mu, peripheral: fs.peripheral });
+  result.reductionCurves.push(...fs.reductionCurves);
+  tightenAtJunctions(result);
+  return result;
+}
+
+/**
  * Isotopes the junctions until μ is tight at them: while all strips leaving a cluster of junctions (joined by strips
  * with trivial μ) start across the same side, the cluster moves across it. The strand order needs this: strands
  * that only part at a junction which could be pulled across the side have no order there. Each step shortens μ, so
  * this ends.
  */
 function tightenAtJunctions(fs: FibredSurface): void {
-  for (let moved = true; moved; ) {
+  for (let moved = true; moved;) {
     moved = false;
     for (const cluster of clusters(fs)) {
       const leaving = cluster.flatMap((v) => fs.graph.star(v)).filter((x) => !fs.mu.image(x).isEmpty);
+      if (leaving.length === 0) continue; // (the cluster is everything, or only joined by trivial strips)
       const side = fs.mu.image(leaving[0] as OrientedEdge).first;
       if (side === undefined || leaving.some((x) => fs.mu.image(x).first !== side)) continue;
       for (const v of cluster) isotopeJunction(fs, v, EdgePath.of(side));

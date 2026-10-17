@@ -178,18 +178,14 @@
     playing = false;
   });
   $effect(() => {
-    // Show the state at the position in the views: after step k at k, and between two states in between (not for
-    // moves that replace the surface's spine).
+    // Show the state at the position in the views: after step k at k, and between two states in between (for moves
+    // that replace the surface's spine, each state in its own model, see drawTimeline).
     const before = preview?.before;
     if (position === undefined || !before) {
       app.shown = undefined;
       return;
     }
     const states = [before, ...moments.map((m) => m.surface)];
-    if (states.some((state) => state.spine0 !== before.spine0)) {
-      app.shown = undefined;
-      return;
-    }
     app.shown = { states, motions: moments.map((m) => m.motion), position };
     return () => (app.shown = undefined);
   });

@@ -1,0 +1,71 @@
+import { describe, expect, it } from "vitest";
+import { chartOf } from "../embedding/chart";
+import { layout } from "../embedding/layout";
+import { modelOfSpine } from "../embedding/remark";
+import { withTightMarking } from "../embedding/image";
+import { spineOfGraph, type SurfaceModel } from "../examples/models";
+import type { FibredSurface } from "../fibred/fibred-surface";
+import type { Move } from "../fibred/move";
+import { Session } from "./session";
+
+/** The closed genus-2 example, run until the algorithm asks for the closed-surface move. */
+function atClosedSurfaceMove(): { session: Session; moves: Move[] } {
+  const session = Session.create({ kind: "preset", preset: "Closed genus 2" });
+  for (let i = 0; i < 10; i++) {
+    const moves = session
+      .suggestion()
+      .options.map((o) => o.move)
+      .filter((m) => m.kind === "cut along a singular leaf" || m.kind === "replace puncture by singularity");
+    if (moves.length > 0) return { session, moves };
+    session.runAutopilot({ maxSteps: 200 });
+  }
+  throw new Error("The closed-surface move wasn't suggested");
+}
+
+/** Lays out a state in its model, as the views do (the model of a new G₀ from the registry). */
+function drawable(state: FibredSurface, model: SurfaceModel) {
+  const m = modelOfSpine(state.spine0) ?? model;
+  const chart = chartOf(m, {}, spineOfGraph(m, state.spine0));
+  let result;
+  try {
+    result = layout(state, chart);
+  } catch {
+    result = layout(withTightMarking(state), chart); // as the views do
+  }
+  for (const pieces of result.strips.values())
+    for (const piece of pieces) for (const p of piece) expect(Number.isFinite(p.re + p.im)).toBe(true);
+}
+
+describe("closed-surface moves in the original polygon", () => {
+  const { session, moves } = atClosedSurfaceMove();
+  const before = session.current;
+
+  it.each(moves.map((m) => [JSON.stringify(m), m] as const))(
+    "keeps the model: %s",
+    (_, move) => {
+      const preview = session.preview(move);
+      expect(preview.error).toBeUndefined();
+      const result = preview.surface!;
+      expect(result.checkIntegrity()).toEqual([]);
+      const singlePoint = modelOfSpine(result.spine0) === undefined;
+      if (singlePoint)
+        expect(result.spine0).toBe(before.surface.spine0); // q moved to p's place: G₀ unchanged
+      else {
+        const model = modelOfSpine(result.spine0)!;
+        expect(model.kind === "polygon" && model.closed && (model.points ?? []).length > 1).toBe(true);
+      }
+      // Every state of the narration can be drawn, and the cut shows several of them.
+      for (const step of preview.steps) drawable(step.after, before.model);
+      if (move.kind === "cut along a singular leaf") expect(preview.steps.length).toBeGreaterThan(5);
+      // Only the junctions of Q are blown up (port note 22, § 6): the first state is G with the polygons of Q, as in the
+      // shortcut; the other junctions stay junctions.
+      const blownUp = preview.steps[0]!.after;
+      const junction = (move as { junction: string }).junction;
+      const shortcut = session.preview({ kind: "replace puncture by singularity", junction });
+      expect(blownUp.graph.edgeCount).toBe(shortcut.steps[0]!.after.graph.edgeCount);
+      expect(blownUp.graph.vertexCount).toBe(shortcut.steps[0]!.after.graph.vertexCount);
+      expect(blownUp.graph.edgeCount).toBeGreaterThan(before.surface.graph.edgeCount);
+    },
+    120_000,
+  );
+});

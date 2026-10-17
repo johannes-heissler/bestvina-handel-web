@@ -15,12 +15,15 @@
 import type { Edge, OrientedEdge, Vertex } from "../graph/ribbon-graph";
 import { Complex } from "../math/complex";
 import type { Color } from "../math/color";
-import { type DiskIsometry, regularPolygon, sidePairing } from "../geometry/hyperbolic";
+import { type DiskIsometry, sidePairing } from "../geometry/hyperbolic";
+import { normalize, normalizeLike } from "../geometry/normalize";
 import {
+  polygonCorners,
   spineOf,
   type PlaneModel,
   type PolygonModel,
   type Spine,
+  type SpineCell,
   type SpineNames,
   type SurfaceModel,
 } from "../examples/models";
@@ -57,6 +60,10 @@ export type Decoration =
       readonly color: Color;
     }
   | { readonly kind: "puncture"; readonly at: Complex }
+  /** A filled-in point (the vertex of a closed polygon with interior punctures). */
+  | { readonly kind: "marked"; readonly at: Complex }
+  /** A chord between cells of a polygon (glued by the identity), or the wall of a filled-in vertex (no port). */
+  | { readonly kind: "chord"; readonly from: Complex; readonly to: Complex; readonly wall: boolean }
   | { readonly kind: "disk"; readonly center: Complex; readonly radius: number }
   /** A junction of a ribbon model: a convex region (a rounded polygon). */
   | { readonly kind: "region"; readonly boundary: readonly Complex[] }
@@ -126,30 +133,53 @@ export const SIDE_FRACTION = { ideal: 0.5, compact: 0.75, flat: 0.8 };
 function polygonChart(model: PolygonModel, spine: Spine, sideFraction?: number): Chart {
   const n = model.word.length;
   const hyperbolic = model.geometry.kind !== "flat";
-  const vertices =
-    model.geometry.kind === "flat"
-      ? normalize(model.geometry.vertices.map(([x, y]) => new Complex(x, y)))
-      : regularPolygon(n, model.geometry.kind);
-  const center = hyperbolic ? Complex.ZERO : centroid(vertices);
-  const [w0] = spine.graph.vertices as [Vertex];
+  const { vertices, points } = polygonCorners(model);
+  const corners = [...vertices, ...points];
   const sides = spine.sides as readonly OrientedEdge[];
+  const cells = spine.cells as readonly SpineCell[];
   const fraction = Math.min(0.99, Math.max(0.01, sideFraction ?? SIDE_FRACTION[model.geometry.kind]));
   const ports = new Map<OrientedEdge, Port>();
+  const regions = new Map<Vertex, Region>();
   const decorations: Decoration[] = [{ kind: "polygon", vertices, ideal: model.geometry.kind === "ideal" }];
-  sides.forEach((x, k) => {
-    const [p, q] = [vertices[k] as Complex, vertices[(k + 1) % n] as Complex];
-    const mid = p.add(q).scale(0.5);
-    const half = q.sub(p).scale(fraction / 2);
-    const tangent = q.sub(p).scale(1 / q.sub(p).abs());
-    // Counterclockwise along the side is "left" when looking outwards; the outward normal is the tangent turned right.
-    ports.set(x, {
-      right: mid.sub(half),
-      left: mid.add(half),
-      outward: new Complex(tangent.im, -tangent.re),
-      stub: 0,
+  const chords: Decoration[] = [];
+  for (const cell of cells) {
+    const boundary = cell.corners.map((i) => corners[i] as Complex);
+    // (Without interior points, the centre of a hyperbolic polygon is 0, as before.)
+    const center = hyperbolic && cells.length === 1 ? Complex.ZERO : centroid(boundary);
+    regions.set(cell.vertex, { boundary, center });
+    cell.exits.forEach((x, i) => {
+      const [a, b] = [cell.corners[i] as number, cell.corners[(i + 1) % cell.corners.length] as number];
+      const [p, q] = [corners[a] as Complex, corners[b] as Complex];
+      const onPolygon = a < n && b === (a + 1) % n;
+      if (x === undefined) {
+        if (a < b) chords.push({ kind: "chord", from: p, to: q, wall: true }); // (once, from one of its two cells)
+        return;
+      }
+      const mid = p.add(q).scale(0.5);
+      const half = q.sub(p).scale(fraction / 2);
+      const tangent = q.sub(p).scale(1 / q.sub(p).abs());
+      // Counterclockwise along the side is "left" when looking outwards; the outward normal is the tangent turned right.
+      ports.set(x, {
+        right: mid.sub(half),
+        left: mid.add(half),
+        outward: new Complex(tangent.im, -tangent.re),
+        stub: 0,
+      });
+      if (!onPolygon && x.isForward) chords.push({ kind: "chord", from: p, to: q, wall: false });
     });
-    decorations.push({ kind: "side", from: p, to: q, label: x.name, color: x.color });
-  });
+  }
+  sides.forEach((x, k) =>
+    decorations.push({
+      kind: "side",
+      from: vertices[k] as Complex,
+      to: vertices[(k + 1) % n] as Complex,
+      label: x.name,
+      color: x.color,
+    }),
+  );
+  decorations.push(...chords, ...points.map((at): Decoration => ({ kind: "puncture", at })));
+  if (model.closed && points.length > 0)
+    decorations.push(...vertices.map((at): Decoration => ({ kind: "marked", at })));
   const partner = (k: number) => sides.indexOf((sides[k] as OrientedEdge).reversed);
   const deck: Deck = hyperbolic
     ? {
@@ -169,7 +199,7 @@ function polygonChart(model: PolygonModel, spine: Spine, sideFraction?: number):
   return {
     geometry: hyperbolic ? "hyperbolic" : "euclidean",
     spine,
-    regions: new Map([[w0, { boundary: vertices, center }]]),
+    regions,
     ports,
     bands: new Map(spine.graph.edges.map((e) => [e, { kind: "glue" }] as const)),
     decorations,
@@ -467,26 +497,6 @@ function circle(c: Complex, r: number, n: number): Complex[] {
 
 function centroid(points: readonly Complex[]): Complex {
   return points.reduce((s, p) => s.add(p), Complex.ZERO).scale(1 / points.length);
-}
-
-/** Scales and centres points into the disk of radius `size`. */
-function normalize(points: readonly Complex[], size = 0.9): Complex[] {
-  return points.map((p) =>
-    normalizeLike(
-      points.map((q) => [q.re, q.im] as const),
-      p,
-      size,
-    ),
-  );
-}
-
-/** Applies to `p` the normalization that {@link normalize} applies to `points`. */
-function normalizeLike(points: readonly (readonly [number, number])[], p: Complex, size: number): Complex {
-  const xs = points.map(([x]) => x);
-  const ys = points.map(([, y]) => y);
-  const c = new Complex((Math.min(...xs) + Math.max(...xs)) / 2, (Math.min(...ys) + Math.max(...ys)) / 2);
-  const extent = Math.max(Math.max(...xs) - Math.min(...xs), Math.max(...ys) - Math.min(...ys), 1e-9);
-  return p.sub(c).scale((2 * size) / extent);
 }
 
 function minimalDistance(points: readonly Complex[]): number {

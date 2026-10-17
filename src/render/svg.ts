@@ -13,6 +13,7 @@
  *
  * @module
  */
+import { displayName } from "../graph/names";
 import type { Edge, OrientedEdge, Vertex } from "../graph/ribbon-graph";
 import { Complex } from "../math/complex";
 import type { Color } from "../math/color";
@@ -238,6 +239,9 @@ export function renderSvg(fs: FibredSurface, layout: Layout, options: RenderOpti
   let shrink = 1;
   for (const v of fs.graph.vertices) {
     if (moving.has(v)) continue; // (its strands may be wider than its disk for a moment)
+    // A junction of valence 2 is a point on a strip, with no fan of gates to fit; it may lie right next to another
+    // strip (the cut of a closed surface makes many of them), which would make every strip invisible.
+    if (fs.graph.valence(v) <= 2) continue;
     // The strands of a gate leave side by side, so their widths add up (as the widths of a train track do).
     const at = toDisplay(layout.junctions.get(v) as Complex);
     const gateWidths = new Map<Vertex, number>();
@@ -258,7 +262,10 @@ export function renderSvg(fs: FibredSurface, layout: Layout, options: RenderOpti
   /** The width of e in display units at the display point z, across the unit direction n (at least 0.4 pixels). */
   // (At most twice the width at the centre: in the half-plane, strips high up would get arbitrarily wide.)
   const widthAt = (e: Edge, z: Complex, n: Complex) =>
-    Math.min((2 * trueWidth(e)) / centreMetric, Math.max((0.4 * widthScale) / scale, trueWidth(e) / metric(z, n)));
+    Math.min(
+      (2 * trueWidth(e)) / centreMetric,
+      Math.max((0.4 * widthScale) / scale, trueWidth(e) / metric(z, n)),
+    );
   /** The region between the offsets from·w and to·w across a display polyline of e (w: the width of e there). */
   const band = (e: Edge, line: readonly Complex[], from: number, to: number): string =>
     bandPath(line, (z, n) => widthAt(e, z, n), from, to);
@@ -941,7 +948,9 @@ export function renderSvg(fs: FibredSurface, layout: Layout, options: RenderOpti
   ): string[] => {
     const shapes: string[] = [];
     // The turns first, so that the fold is on top where they share a strip.
-    const wedges = (options.highlight ?? []).toSorted((x, y) => Number(x.kind === "fold") - Number(y.kind === "fold"));
+    const wedges = (options.highlight ?? []).toSorted(
+      (x, y) => Number(x.kind === "fold") - Number(y.kind === "fold"),
+    );
     for (const wedge of wedges) {
       const ends = wedge.ends.map((name) => fs.graph.orientedEdges.find((x) => x.name === name));
       if (ends.length < 2 || ends.some((x) => x === undefined)) continue;
@@ -966,8 +975,7 @@ export function renderSvg(fs: FibredSurface, layout: Layout, options: RenderOpti
         const { line, atStart } = endAt(lines, x);
         const path = atStart ? line : line.toReversed();
         const total = path.slice(1).reduce((sum, p, i) => sum + p.sub(path[i] as Complex).abs(), 0);
-        const pixels =
-          fraction === undefined ? 26 : Math.min(48, Math.max(14, fraction * total * scale));
+        const pixels = fraction === undefined ? 26 : Math.min(48, Math.max(14, fraction * total * scale));
         return initialPart(path, Math.min(0.8 * total, (pixels * k) / scale));
       };
       const [a, b] = [prefix(first, firstFraction), prefix(last, lastFraction)];
@@ -999,6 +1007,13 @@ export function renderSvg(fs: FibredSurface, layout: Layout, options: RenderOpti
     for (const d of chart.decorations) {
       const toScreen = (z: Complex) => toDisplay(transform ? transform(z) : z);
       if (hyperbolic && d.kind === "polygon") group.push(geodesicPolygon(d.vertices, transform));
+      else if (hyperbolic && d.kind === "chord")
+        group.push(
+          chordPath(
+            geodesicSamples(d.from, d.to, transform).samples.map((x) => px(x.z)),
+            d.wall,
+          ),
+        );
       else if (d.kind === "side") {
         group.push(
           hyperbolic
@@ -1224,8 +1239,19 @@ export function turnSide(
     return order.indexOf(first) < order.indexOf(last) ? "counterclockwise" : "clockwise";
   }
   const [i, j] = [star.indexOf(first), star.indexOf(last)];
-  const between = Array.from({ length: (j - i - 1 + star.length) % star.length }, (_, k) => star[(i + 1 + k) % star.length]);
+  const between = Array.from(
+    { length: (j - i - 1 + star.length) % star.length },
+    (_, k) => star[(i + 1 + k) % star.length],
+  );
   return between.every((x) => gates.switchOf.get(x as OrientedEdge) === s) ? "counterclockwise" : "clockwise";
+}
+
+/** A chord between cells (thin, dashed), or a wall (solid grey), through these screen points. */
+function chordPath(points: readonly string[], wall: boolean): string {
+  const style = wall
+    ? `stroke="#999" stroke-width="1.6"`
+    : `stroke="#aaa" stroke-width="0.8" stroke-dasharray="4 3"`;
+  return `<path d="M${points.join("L")}" fill="none" ${style}/>`;
 }
 
 function decoration(
@@ -1246,9 +1272,19 @@ function decoration(
       return labels ? label(toDisplay(mid.add(outward)), d.label, css(d.color), px, 13, true) : "";
     }
     case "puncture": {
-      const [x, y] = px(toDisplay(d.at)).split(",");
-      return `<circle cx="${x}" cy="${y}" r="3.5" fill="#222"/>`;
+      const [x, y] = px(toDisplay(d.at)).split(",").map(Number) as [number, number];
+      const r = 4;
+      return `<path d="M${fmt(x - r)},${fmt(y - r)}L${fmt(x + r)},${fmt(y + r)}M${fmt(x - r)},${fmt(y + r)}L${fmt(x + r)},${fmt(y - r)}" stroke="#222" stroke-width="1.8" stroke-linecap="round"/>`;
     }
+    case "marked": {
+      const [x, y] = px(toDisplay(d.at)).split(",");
+      return `<circle cx="${x}" cy="${y}" r="3" fill="#fff" stroke="#222" stroke-width="1.2"/>`;
+    }
+    case "chord":
+      return chordPath(
+        densify([d.from, d.to], 0.02).map((z) => px(toDisplay(z))),
+        d.wall,
+      );
     case "disk": {
       const [x, y] = px(toDisplay(d.center)).split(",");
       return `<circle cx="${x}" cy="${y}" r="${fmt(d.radius * scale)}" fill="#f0f0ec" stroke="#bbb" stroke-width="0.8"/>`;
@@ -1288,7 +1324,7 @@ function label(
     return `<g transform="translate(${x} ${y}) matrix(${a} ${b} ${c} ${d} 0 0)">${label(Complex.ZERO, text, color, () => "0,0", fontSize, italic)}</g>`;
   }
   const size = fmt(fontSize * shape.scale);
-  return `<text x="${x}" y="${y}" fill="${color}" font-size="${size}" text-anchor="middle" dominant-baseline="middle" stroke="#ffffff" stroke-width="2.5" stroke-opacity="0.8" stroke-linejoin="round" paint-order="stroke"${italic ? ' font-style="italic"' : ""}>${escape(text)}</text>`;
+  return `<text x="${x}" y="${y}" fill="${color}" font-size="${size}" text-anchor="middle" dominant-baseline="middle" stroke="#ffffff" stroke-width="2.5" stroke-opacity="0.8" stroke-linejoin="round" paint-order="stroke"${italic ? ' font-style="italic"' : ""}>${escape(displayName(text))}</text>`;
 }
 
 // ─── Geometry helpers ───────────────────────────────────────────────────────────────────────

@@ -72,5 +72,5 @@ describe("closed surfaces: replacing the puncture by a singularity", () => {
         results.add(growth(next).toFixed(6));
       }
     expect([...results]).toEqual(["4.212077"]);
-  });
+  }, 30_000); // about 7 s when all test files run in parallel
 });

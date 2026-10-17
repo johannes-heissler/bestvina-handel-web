@@ -5,6 +5,7 @@
  *
  * @module
  */
+import type { RemarkingProvider } from "./remarking";
 import type { Edge, OrientedEdge, Vertex } from "../graph/ribbon-graph";
 import type { FibredSurface } from "./fibred-surface";
 import { applyMove, type FollowUp, type FoldRef, foldRef, type Move, type MoveKind, strip } from "./move";
@@ -31,6 +32,7 @@ import { narrated, quietly } from "./narration";
 import { invariantPunctureCircles, peripheryCandidates, peripheryProblems } from "./periphery";
 import { perronFrobenius } from "./perron-frobenius";
 import { prongs } from "./singular-leaves";
+import { type Slit, slitsForProng } from "./cut-along-leaf";
 import { trainTrack } from "./train-track";
 
 // ─── Text ────────────────────────────────────────────────────────────────────────────────────
@@ -912,15 +914,51 @@ export function variants(fs: FibredSurface, move: Move): MoveOption[] {
       if (q === undefined) return [];
       if (cutTooFine(tt, q))
         throw new Error("the preimages of the leaf are too short for the floating-point cut");
-      return cutOptions(tt, prongsOfOrbit(tt, q)).map((o) => ({
-        move: {
-          ...move,
-          prong: all.findIndex((p) => p.atSwitch === o.prong.atSwitch && p.above === o.prong.above),
-          realBranches: o.realBranches,
-        },
-        label: ["Cut through ", `${o.realBranches}`, " real branches"],
-        rating: o.realBranches,
-      }));
+      /** The real branches of a slit, the first `max` of them (as strip names). */
+      const branches = (path: readonly OrientedEdge[], max = Infinity): TextPart[] => {
+        const real = path.filter((x) => tt.kind.get(x.edge) === "real");
+        return [
+          ...real.slice(0, max).flatMap((x, i): TextPart[] => [...(i === 0 ? [] : [" "]), { strip: x.name }]),
+          ...(real.length > max ? [" …"] : []),
+        ];
+      };
+      const from = (path: readonly OrientedEdge[]): TextPart => ({
+        junction: (tt.junctionOf.get((path[0] as OrientedEdge).source) as Vertex).name,
+      });
+      return cutOptions(tt, prongsOfOrbit(tt, q)).map((o) => {
+        const [L, ...preimages] = slitsForProng(tt, o.prong, o.realBranches) as [Slit, ...Slit[]];
+        return {
+          move: {
+            ...move,
+            prong: all.findIndex((p) => p.atSwitch === o.prong.atSwitch && p.above === o.prong.above),
+            realBranches: o.realBranches,
+          },
+          label: [
+            "The leaf of length ",
+            `${o.realBranches}`,
+            " from ",
+            from(L.path),
+            ": ",
+            ...branches(L.path, 8),
+          ],
+          rating: o.realBranches,
+          ratingText: `${o.realBranches} branches`,
+          ...(preimages.length > 0 && {
+            details: [
+              "Cut together with its preimages ",
+              ...preimages.flatMap((slit, j): TextPart[] => [
+                j === 0 ? "" : "; ",
+                `f${j === 0 ? "⁻¹" : `⁻${"⁰¹²³⁴⁵⁶⁷⁸⁹"[j + 1]}`}(L) from `,
+                from(slit.path),
+                ": ",
+                ...branches(slit.path),
+                ...(slit.partialLength !== undefined ? [" (the last partly)"] : []),
+              ]),
+              ".",
+            ] as Text,
+          }),
+        };
+      });
     }
     default:
       return [];
@@ -1016,6 +1054,8 @@ export interface AutopilotOptions {
   readonly maxSteps?: number;
   /** Called after each move with the resulting surface, e.g. to add it to the history (copy it there). */
   readonly onStep?: (move: Move, surface: FibredSurface, steps: readonly Text[]) => void;
+  /** Keeps the model through the closed-surface moves (see `MoveHooks.remark`). */
+  readonly remark?: RemarkingProvider;
 }
 
 export interface AutopilotResult {
@@ -1051,7 +1091,12 @@ export function autopilot(fs: FibredSurface, options: AutopilotOptions = {}): Au
     // A fold starts a new follow-up (or ends it); the bookkeeping steps in between keep it.
     const folds = move.kind === "fold" || move.kind === "remove inefficiency";
     let next: FollowUp | undefined;
-    const done = narrated(() => applyMove(surface, move, { followUp: (point) => (next = point) }));
+    const done = narrated(() =>
+      applyMove(surface, move, {
+        followUp: (point) => (next = point),
+        ...(options.remark && { remark: options.remark }),
+      }),
+    );
     surface = done.result;
     if (folds) followUp = next;
     moves.push(move);

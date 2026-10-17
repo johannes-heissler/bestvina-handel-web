@@ -55,6 +55,11 @@ export function stateNow(): FibredSurface | undefined {
   return steps !== undefined && keepStates && subject !== undefined ? subject.copy() : undefined;
 }
 
+/** Whether the steps being collected keep their states (only then are intermediate states worth building). */
+export function keepingStates(): boolean {
+  return steps !== undefined && keepStates;
+}
+
 /** Runs `action`, which changes `fs` in place, with `fs` as the surface whose states the steps keep. */
 export function about<T>(fs: FibredSurface, action: () => T): T {
   const saved = subject;

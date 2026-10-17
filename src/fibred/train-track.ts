@@ -94,7 +94,7 @@ export function trainTrack(fs: FibredSurface): TrainTrack {
     for (const e of [...star.slice(k), ...star.slice(0, k)]) {
       const gate = gateOfEnd.get(e) as number;
       if (!switchOfGate.has(gate)) {
-        const s = tau.addVertex(`${v.name}.${switches.length}`, v.color);
+        const s = tau.addVertex(`${v.name}_${switches.length}`, v.color);
         switchOfGate.set(gate, s);
         junctionOf.set(s, v);
         switches.push(s);

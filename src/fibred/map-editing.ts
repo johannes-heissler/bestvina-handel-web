@@ -6,7 +6,7 @@
  */
 import { CombinatorialMap } from "../graph/combinatorial-map";
 import { EdgePath } from "../graph/edge-path";
-import { invertName, isForwardName } from "../graph/names";
+import { invertName, isForwardName, nameKey } from "../graph/names";
 import { parseMap } from "../graph/path-parser";
 import type { Edge, Vertex } from "../graph/ribbon-graph";
 import type { FibredSurface } from "./fibred-surface";
@@ -85,7 +85,7 @@ export function invertStrip(fs: FibredSurface, e: Edge): void {
  */
 export function renameStrip(fs: FibredSurface, e: Edge, name: string): void {
   const forwardName = isForwardName(name) ? name : invertName(name);
-  if (fs.graph.edges.some((f) => f !== e && f.name.toLowerCase() === forwardName.toLowerCase()))
+  if (fs.graph.edges.some((f) => f !== e && nameKey(f.name) === nameKey(forwardName)))
     throw new Error(`Another strip is already called ${forwardName}`);
   if (!isForwardName(name)) invertStrip(fs, e);
   e.name = forwardName;

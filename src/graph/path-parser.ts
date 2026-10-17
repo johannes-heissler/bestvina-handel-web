@@ -15,7 +15,7 @@
  * @module
  */
 import { EdgePath } from "./edge-path";
-import { invertName } from "./names";
+import { invertName, canonicalName } from "./names";
 import type { OrientedEdge, RibbonGraph } from "./ribbon-graph";
 
 /** An error in the input, with the position (index into the parsed text) where it was detected. */
@@ -69,7 +69,7 @@ export function nameTable(
   graph: RibbonGraph,
   definitions: ReadonlyMap<string, EdgePath> = new Map(),
 ): NameTable {
-  return { edges: new Map(graph.orientedEdges.map((e) => [e.name, e])), definitions };
+  return { edges: new Map(graph.orientedEdges.map((e) => [canonicalName(e.name), e])), definitions };
 }
 
 /**
@@ -83,7 +83,7 @@ export function parseEdgePath(text: string, names: NameTable): EdgePath {
   const peek = () => tokens[i];
 
   const lookUp = (name: string, position: number): EdgePath => {
-    const edge = names.edges.get(name);
+    const edge = names.edges.get(canonicalName(name));
     if (edge !== undefined) return EdgePath.of(edge);
     const definition = names.definitions.get(name);
     if (definition !== undefined) return definition;

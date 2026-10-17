@@ -384,11 +384,14 @@ function gluingMaps(
         });
         continue;
       }
-      // A polygon: the deck transformation (or its inverse) that maps the middle of the port of x̄ to that of x.
+      // A polygon: the deck transformation (or its inverse) that maps the middle of the port of x̄ to that of x, or the
+      // identity for a chord between two cells (port note 22).
       const deck = chart.deck;
       if (deck === undefined) continue;
-      const candidates: { apply: (z: Complex) => Complex; inverse: (z: Complex) => Complex }[] =
-        deck.kind === "translation"
+      const identity = { apply: (z: Complex) => z, inverse: (z: Complex) => z };
+      const candidates: { apply: (z: Complex) => Complex; inverse: (z: Complex) => Complex }[] = [
+        identity,
+        ...(deck.kind === "translation"
           ? [...deck.generators.values()].flatMap((t) => [
               { apply: (z: Complex) => z.add(t), inverse: (z: Complex) => z.sub(t) },
               { apply: (z: Complex) => z.sub(t), inverse: (z: Complex) => z.add(t) },
@@ -399,7 +402,8 @@ function gluingMaps(
                 { apply: (z: Complex) => g.applyKlein(z), inverse: (z: Complex) => h.applyKlein(z) },
                 { apply: (z: Complex) => h.applyKlein(z), inverse: (z: Complex) => g.applyKlein(z) },
               ];
-            });
+            })),
+      ];
       const error = (c: (typeof candidates)[number]) => c.apply(middle(over)).sub(middle(out)).abs();
       const best = candidates.reduce<(typeof candidates)[number] | undefined>(
         (bestSoFar, c) => (bestSoFar === undefined || error(c) < error(bestSoFar) ? c : bestSoFar),

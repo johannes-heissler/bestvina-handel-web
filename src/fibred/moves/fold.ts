@@ -4,6 +4,7 @@
  *
  * @module
  */
+import { freeName as freeStripName } from "../../graph/names";
 import { EdgePath } from "../../graph/edge-path";
 import type { Edge, OrientedEdge, Vertex } from "../../graph/ribbon-graph";
 import type { Color } from "../../math/color";
@@ -202,7 +203,7 @@ export function foldInitialSegments(
             "; the rest keeps the name ",
             { strip: e.edge.name },
             ", the initial segment is called ",
-            { strip: freeName(fs, `${e.edge.name}₁`) }, // (as it is named below)
+            { strip: freeName(fs, `${e.edge.name}_1`) }, // (as it is named below)
             " until it is folded.",
           ]),
     ]);
@@ -226,13 +227,13 @@ export function foldInitialSegments(
     const remainder = (segments.get(e) as OrientedEdge).edge === first ? second : first;
     remainders.set(e, remainder);
     // Names right away: the rest keeps the name and colour of the strip, the initial segment (folded next) gets
-    // the name with "₁".
+    // the name with "_1" (shown as ₁).
     if (!fs.legacyNames) {
       const { name: originalName, color: originalColor } = original.get(e) as { name: string; color: Color };
       const initial = remainder === first ? second : first;
       remainder.name = originalName;
       remainder.color = originalColor;
-      initial.name = freeName(fs, `${originalName}₁`);
+      initial.name = freeName(fs, `${originalName}_1`);
       initial.color = originalColor;
     }
     for (const [key, p] of splitPoints) splitPoints.set(key, transform(p));
@@ -319,10 +320,10 @@ export function foldInitialSegments(
 
 /** `name`, or with more "₁" appended if it is taken. */
 function freeName(fs: FibredSurface, name: string): string {
-  const used = new Set(fs.graph.edges.map((e) => e.name.toLowerCase()));
-  let candidate = name;
-  while (used.has(candidate.toLowerCase())) candidate += "₁";
-  return candidate;
+  return freeStripName(
+    fs.graph.edges.map((e) => e.name),
+    name,
+  );
 }
 
 /** Names of strips as structured text: "a, b and c". */
