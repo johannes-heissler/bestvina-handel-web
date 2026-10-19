@@ -7,7 +7,7 @@
 import { EdgePath } from "../../graph/edge-path";
 import type { OrientedEdge, Vertex } from "../../graph/ribbon-graph";
 import type { FibredSurface } from "../fibred-surface";
-import { narrate } from "../narration";
+import { explain, narrate } from "../narration";
 import type { Text } from "../suggestions";
 
 /**
@@ -30,9 +30,9 @@ export function isotopeJunction(fs: FibredSurface, v: Vertex, gamma: EdgePath): 
 }
 
 /**
- * Moves the junction v along γ one side at a time (an isotopy), narrating each crossing of a side: the first with
- * `what`, the others shortly. Each step records the side it crosses, for animating the isotopy (alongside the strip
- * end `along`, if given).
+ * Moves the junction v along γ one side at a time (an isotopy): `what` explains it in a note, and each crossing of a
+ * side is a step. Each step records the side it crosses, for animating the isotopy (alongside the strip end `along`,
+ * if given).
  */
 export function moveJunction(
   fs: FibredSurface,
@@ -41,17 +41,14 @@ export function moveJunction(
   what: Text,
   along?: OrientedEdge,
 ): void {
-  gamma.letters.forEach((side, k) => {
-    narrate(
-      k === 0
-        ? [...what, ` It crosses the side ${side.name} first.`]
-        : [`… then it crosses the side ${side.name}.`],
-      {
-        motion: { junction: v.name, side: side.name, ...(along && { along: along.name }) },
-      },
-    );
+  if (gamma.isEmpty) return;
+  explain(what);
+  for (const side of gamma.letters) {
+    narrate(["Move ", { junction: v.name }, ` across the side ${side.name}.`], {
+      motion: { junction: v.name, side: side.name, ...(along && { along: along.name }) },
+    });
     isotopeJunction(fs, v, EdgePath.of(side));
-  });
+  }
 }
 
 /**

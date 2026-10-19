@@ -16,7 +16,7 @@ import { argMax, argMin, rotate } from "../../util/iter";
 import { mod } from "../../util/number";
 import type { FibredSurface } from "../fibred-surface";
 import { collapseSubforest } from "./collapse-forest";
-import { narrate } from "../narration";
+import { explain, narrate } from "../narration";
 import type { TextPart } from "../suggestions";
 import { maximalInvariantSubgraphRetractingTo } from "./reducibility";
 
@@ -141,8 +141,9 @@ export function absorbIntoPeriphery(fs: FibredSurface): void {
     explainCircle(pl, dgQuotient, (s) =>
       signedLength(pl.circle, EdgePath.from(firstOutsideP(s).theta).reduced().letters),
     );
-  narrate([
-    "g maps the new circles by an automorphism following the gates (the gate junction of s goes to the gate junction of Dg(s)), and every piece of an image inside a circle becomes the path along the new circle between the gate junctions at its ends.",
+  narrate(["Replace the peripheral circles by new ones with one junction per gate."]);
+  explain([
+    "g maps the new circles along the gates; each piece of an image in P becomes the path along the new circle between its gates.",
   ]);
   // A circle that keeps one junction per old junction keeps its names and colours (and the orientations of its strips);
   // the others get new junctions and Greek names.
@@ -340,53 +341,48 @@ function explainCircle(
   const cyclic = pl.circle.outside.flat();
   const linear = pl.gates.flat();
   const circle = pl.circle.edges;
-  narrate([
-    "The peripheral circle ",
+  explain([
+    "Circle ",
     ...circle.flatMap((x, i): TextPart[] => [...(i === 0 ? [] : [" "]), { strip: x.name }]),
-    " (counterclockwise around its puncture): the strips leaving it are, in the cyclic order around it, ",
+    ": the strips leaving it (counterclockwise) are ",
     ...strips(cyclic),
-    ". Their directions in G/P (the first strip of the image outside P, skipping its initial piece in P): ",
+    "; in G/P, ",
     ...cyclic.flatMap((s, i): TextPart[] => [
-      ...(i === 0 ? [] : ["; "]),
+      ...(i === 0 ? [] : [", "]),
       "Dg(",
       { strip: s.name },
       ") = ",
       { strip: (dgQuotient.get(s) as OrientedEdge).name },
     ]),
-    ". The peripheral gates are the classes of strips whose Dg-iterates in G/P agree eventually: ",
-    ...pl.gates.flatMap((gate, i): TextPart[] => [...(i === 0 ? [] : [", "]), "{", ...strips(gate), "}"]),
-    ".",
+    pl.gates.length === 1 ? ", so there is one gate." : ", so the gates are ",
+    ...(pl.gates.length === 1
+      ? []
+      : [...pl.gates.flatMap((gate, i): TextPart[] => [...(i === 0 ? [] : [", "]), "{", ...strips(gate), "}"]), "."]),
   ]);
   const lengths = cyclic.map((s) => signedInitialLength(s));
   if (linear.length === 1) {
-    narrate([
-      "Only one strip leaves it, so the new circle has one junction, where that strip leaves the old circle.",
-    ]);
+    explain(["Only one strip leaves it: the new circle has one junction, where it leaves."]);
     return;
   }
-  narrate(
+  explain(
     pl.gates.length > 1
       ? [
-          "To lay the gates out along a new circle, the cyclic order is cut open between two gates, so each gate is an interval of the linear order ",
+          "Cut the cyclic order open between two gates: ",
           ...strips(linear),
-          ". The new circle gets one junction per gate, where the gate's first strip leaves the old circle, and every strip moves along the old circle to the junction of its gate.",
+          ". Each strip moves along the circle to the junction of its gate (where the gate's first strip leaves).",
         ]
       : [
-          "There is only one gate, so the cut is not between gates. It goes before the strip whose image starts with the longest counterclockwise path in P, measured by ℓ(s), the signed length of the initial piece of g(s) in P (counterclockwise +1 per strip, clockwise −1): ",
+          "Cut the cyclic order open before the strip with the largest ℓ, the signed length of the start of its image in P: ",
           ...cyclic.flatMap((s, i): TextPart[] => [
-            ...(i === 0 ? [] : ["; "]),
+            ...(i === 0 ? [] : [", "]),
             "ℓ(",
             { strip: s.name },
             `) = ${lengths[i]}`,
           ]),
-          ". Then the images of the strips start at the new junction without running around the circle (the thesis's remark on this case). The linear order is ",
+          ". This gives ",
           ...strips(linear),
           ...(pl.circle.vertices.length === 1 && linear[0] !== cyclic[0]
-            ? [
-                ", not the order ",
-                ...strips(cyclic),
-                " at the old junction (from the circle strip leaving it clockwise to the one leaving it counterclockwise): the strips before the cut move once around the circle to the end.",
-              ]
+            ? ["; the strips before the cut move once around the circle to the end."]
             : ["."]),
         ],
   );

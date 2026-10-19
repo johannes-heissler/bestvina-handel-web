@@ -20,9 +20,9 @@ import {
   traceProngThroughBranches,
 } from "../cut-along-leaf";
 import { FibredSurface } from "../fibred-surface";
-import { keepingStates, narrate } from "../narration";
+import { explain, keepingStates, narrate } from "../narration";
 import { type BranchPart, forgetInMarking, type Remarking } from "../remarking";
-import type { TextPart } from "../suggestions";
+import type { Text, TextPart } from "../suggestions";
 import { imageProng, type Prong, prongs } from "../singular-leaves";
 import type { TrainTrack } from "../train-track";
 import { tightenMarking } from "./isotopy";
@@ -77,26 +77,16 @@ export function attachmentSwitch(ct: CutTrack, word: EdgePath): Vertex | undefin
   return attached.length === 1 ? attached[0] : undefined;
 }
 
-/** The narration of removing the circles B. */
-function removalText(circles: readonly AttachedCircle[], remarking: Remarking | undefined): TextPart[] {
-  const start = (word: EdgePath) =>
-    `${word.letters
-      .slice(0, 6)
-      .map((x) => x.name)
-      .join(" ")}${word.length > 6 ? " …" : ""}`;
-  const circle = (word: EdgePath) =>
-    word.length === 1 ? `the loop ${start(word)}` : `a circle B of ${word.length} branches (${start(word)})`;
-  const [only] = circles;
-  return [
-    circles.length === 1 && only !== undefined
-      ? `The boundary of p is now ${circle(only.word)}, attached only at ${only.v.name}. Remove it (Lemma "Removing an almost peripheral subgraph"): its branches are deleted from all images. This fills in p.`
-      : `The boundaries of the ${circles.length} punctures of P are now circles, ${circles
-          .map(({ word, v }) => `${circle(word)} attached only at ${v.name}`)
-          .join(
-            "; ",
-          )}. Remove them all at once (Lemma "Removing an almost peripheral subgraph", for the orbit; g maps each into the next): their branches are deleted from all images. This fills in P.`,
-    ...(remarking === undefined ? [] : [" ", fillingText(remarking)]),
-  ];
+/** The step of removing the loops B (attached at their junctions), for the narration. */
+function removalText(loops: readonly Edge[]): Text {
+  const names = (f: (e: Edge) => TextPart): TextPart[] => loops.flatMap((e, i) => [...(i === 0 ? [] : [", "]), f(e)]);
+  return loops.length === 1
+    ? ["Remove the boundary loop ", ...names((e) => ({ strip: e.name })), " of p: this fills in p."]
+    : [
+        "Remove the boundary loops ",
+        ...names((e) => ({ strip: e.name })),
+        " of the punctures of P: this fills in P.",
+      ];
 }
 
 /** The colour of B while it is shown, before it is removed (port note 28). */
@@ -121,7 +111,7 @@ function removeCirclesAfterMerging(
 
   mergeAllValenceTwoLines(
     surface,
-    `The cut left valence-2 lines, among them the boundary B of ${circles.length === 1 ? "p" : "each puncture of P"} (pink). Merge each into one strip:`,
+    `The cut left valence-2 lines, among them the boundary B of ${circles.length === 1 ? "p" : "each puncture of P"} (pink).`,
   );
   tightenMarking(surface);
   // B is now one loop at its attachment junction.
@@ -131,13 +121,12 @@ function removeCirclesAfterMerging(
     loops.some((e) => e.source !== e.target || !circles.some(({ v }) => v === e.source))
   )
     throw new Error("The circles B didn't merge into loops at their junctions");
-  narrate(
-    removalText(
-      loops.map((e) => ({ word: EdgePath.of(e.forward), v: e.source })),
-      marking?.remarking,
-    ),
-    { before: keepingStates() ? surface.copy() : undefined },
-  );
+  narrate(removalText(loops), { before: keepingStates() ? surface.copy() : undefined });
+  explain([
+    loops.length === 1 ? "It is" : "They are",
+    ' deleted from all images (Lemma "Removing an almost peripheral subgraph").',
+  ]);
+  if (marking !== undefined) explain([fillingText(marking.remarking)]);
   const loopSet = new Set(loops);
   g.substituteInImages((e) => (loopSet.has(e) ? EdgePath.EMPTY : undefined));
   for (const e of loops) {
@@ -384,6 +373,7 @@ export function cutClosedSurface(tt: TrainTrack, option: CutOption, remarking?: 
       ]
     : [n];
   // The state before the cut: G with Q blown up.
+  narrate(blowUpText(orbit.map((v) => v.name)));
   let before = keep ? shown(track([])) : undefined;
   let previous: { real: readonly OrientedEdge[]; partial: boolean }[] = [];
   let done = 0;
@@ -401,37 +391,31 @@ export function cutClosedSurface(tt: TrainTrack, option: CutOption, remarking?: 
         ...(slit.partial ? [" (into it partly)"] : []),
       ];
     });
-    narrate(
-      done === 0
-        ? [
-            `The leaf L from the singularity of `,
-            { junction: (final[0] as (typeof final)[number]).start.name },
-            ` runs through ${n} branches: `,
-            ...branchList(real),
-            ".",
-            ...(final.length > 1
-              ? [
-                  " Its preimages under f are cut as well, so that the new map g′ is defined on whole pieces: ",
-                  ...final
-                    .slice(1)
-                    .flatMap((slit, i): TextPart[] => [
-                      i === 0 ? "" : "; ",
-                      `${name(i + 1)} from `,
-                      { junction: slit.start.name },
-                      ": ",
-                      ...branchList(slit.real),
-                      ...(slit.partial ? [" (the last partly)"] : []),
-                    ]),
-                  ".",
-                ]
-              : []),
-            ` Cut along ${count === n ? "all of them" : `the first ${count === 1 ? "branch" : `${count} branches`}`}: `,
-            ...gains,
-            ".",
-          ]
-        : ["Cut further: ", ...gains, ` (${count} of ${n}).`],
-      { before },
-    );
+    if (done === 0) {
+      explain([
+        "The leaf L from ",
+        { junction: (final[0] as (typeof final)[number]).start.name },
+        ` runs through ${n} branches: `,
+        ...branchList(real),
+        ".",
+      ]);
+      if (final.length > 1)
+        explain([
+          "Its preimages are cut as well, so that g′ is defined on whole pieces: ",
+          ...final
+            .slice(1)
+            .flatMap((slit, i): TextPart[] => [
+              i === 0 ? "" : "; ",
+              `${name(i + 1)} from `,
+              { junction: slit.start.name },
+              ": ",
+              ...branchList(slit.real),
+              ...(slit.partial ? [" (the last partly)"] : []),
+            ]),
+          ".",
+        ]);
+    }
+    narrate(["Cut along ", ...gains, count === n && done === 0 ? "." : ` (${count} of ${n}).`], { before });
     previous = now;
     ct = track(slitsForProng(tt, option.prong, count));
     if (keep) before = shown(ct);
@@ -446,8 +430,19 @@ export function cutClosedSurface(tt: TrainTrack, option: CutOption, remarking?: 
     remarking && { mu: cutMarking(tt, full, remarking), remarking },
   );
   if (remarking !== undefined) surface = finishRemarking(surface, remarking);
-  mergeAllValenceTwoLines(surface, "Removing B left valence-2 lines. Merge each into one strip:");
+  mergeAllValenceTwoLines(surface, "Removing B left valence-2 lines.");
   return { surface, prong: option.prong, realBranches: option.realBranches, cut: full };
+}
+
+/** The step of blowing up the junctions of the new punctures into their polygons, for the narration. */
+export function blowUpText(junctions: readonly string[]): Text {
+  return [
+    "Blow up ",
+    ...junctions.flatMap((name, i): TextPart[] => [...(i === 0 ? [] : [", "]), { junction: name }]),
+    junctions.length === 1
+      ? " into its polygon, with the new puncture inside."
+      : " into their polygons, with the new punctures inside.",
+  ];
 }
 
 /** What filling in P does to the picture (the side of G₀), for the narration. */
@@ -455,29 +450,34 @@ export function fillingText(remarking: Remarking): string {
   const [only] = remarking.walls;
   if (remarking.walls.length === 1 && only !== undefined) {
     const { name, image } = only;
-    return `In the picture, p is filled in (the dots at the corners): the chord ${name} from p to a new puncture becomes a wall, and the strands that crossed it go around p instead (${name} ↦ ${image} in μ).`;
+    return `In the picture, the chord ${name} from p to a new puncture becomes a wall; strands that crossed it go around p (${name} ↦ ${image} in μ).`;
   }
-  return `In the picture, P is filled in (the dots): from each of its punctures a chord to a neighbour becomes a wall, and the strands that crossed it go around the filled-in point instead (${remarking.walls
+  return `In the picture, a chord from each puncture of P becomes a wall; strands that crossed it go around (${remarking.walls
     .map(({ name, image }) => `${name} ↦ ${image}`)
     .join("; ")} in μ).`;
 }
 
-/** The step of contracting the walls after filling in P (port notes 26, 27), for the narration. */
-function slideText(remarking: Remarking, slid: NonNullable<ReturnType<Remarking["slide"]>>): string {
+/** The step of contracting the walls after filling in P (port notes 26, 27), and a note on it, for the narration. */
+function slideText(
+  remarking: Remarking,
+  slid: NonNullable<ReturnType<Remarking["slide"]>>,
+): { step: string; note: string } {
   const walls = remarking.walls.map(({ name }) => name).join(", ");
-  return [
-    slid.filledPoints === 0
-      ? `Slide the new puncture of ${slid.point ?? "q"} along the wall ${walls} into the corner, where p was: the wall disappears, and the chords that ended at the puncture now end at the corner (G₀ and μ stay the same).`
-      : `Contract the walls ${walls}: each filled-in point moves along its wall into its neighbour${
-          slid.point === undefined ? "" : `, and the new puncture of ${slid.point} slides into the corner`
-        }. The walls disappear, and the chords that ended at a moved point now end where it went (G₀ and μ stay the same).`,
-    slid.merged.length === 0
-      ? ""
-      : ` The cells that collapse or can be joined are merged, so the chords ${slid.merged.join(", ")} drop out of μ.`,
-    slid.pointsLeft === 0
-      ? " The surface is drawn in the original polygon again, with the new puncture at its vertex."
-      : ` The other new ${slid.pointsLeft === 1 ? "puncture is" : "punctures are"} placed anew, each at the average of its neighbours along the chords.`,
-  ].join("");
+  return {
+    step:
+      slid.filledPoints === 0
+        ? `Slide the new puncture of ${slid.point ?? "q"} along the wall ${walls} into p's corner.`
+        : `Contract the walls ${walls}${slid.point === undefined ? "" : `, and slide the new puncture of ${slid.point} into the corner`}.`,
+    note: [
+      slid.filledPoints === 0
+        ? "The wall disappears; chords that ended at the puncture now end at the corner."
+        : "The walls disappear; chords that ended at a filled-in point now end where it went.",
+      slid.merged.length === 0 ? "" : ` The chords ${slid.merged.join(", ")} drop out of μ (merged cells).`,
+      slid.pointsLeft === 0
+        ? " The surface is drawn in the original polygon again."
+        : ` The other new ${slid.pointsLeft === 1 ? "puncture is" : "punctures are"} placed anew.`,
+    ].join(""),
+  };
 }
 
 /** n as a superscript, e.g. −2 as ⁻². */
@@ -498,7 +498,9 @@ export function finishRemarking(surface: FibredSurface, remarking: Remarking): F
     tightenMarking(finished);
     const slid = remarking.slide(finished);
     if (slid === undefined) return finished;
-    narrate([slideText(remarking, slid)], { before: keepingStates() ? finished.copy() : undefined });
+    const { step, note } = slideText(remarking, slid);
+    narrate([step], { before: keepingStates() ? finished.copy() : undefined });
+    explain([note]);
     tightenMarking(slid.surface);
     return slid.surface;
   }

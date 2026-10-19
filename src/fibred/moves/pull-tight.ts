@@ -14,7 +14,6 @@ import type { OrientedEdge, Vertex } from "../../graph/ribbon-graph";
 import { sharedPrefixLength } from "../../util/iter";
 import type { FibredSurface } from "../fibred-surface";
 import { narrate } from "../narration";
-import type { TextPart } from "../suggestions";
 import { lettersText } from "../text-parts";
 
 /** A backtrack in g(strip): the letters at `index − 1` and `index` are inverse to each other. */
@@ -78,7 +77,6 @@ export function pullTight(fs: FibredSurface, onlyAt?: ReadonlySet<OrientedEdge>)
       selected(fs.g.derivative(fs.graph.star(v)[0] as OrientedEdge)),
     );
     if (v !== undefined) {
-      narrateExtremalJunction(fs, v, all);
       pullTightExtremalJunction(fs, v, all);
       continue;
     }
@@ -105,6 +103,13 @@ export function pullTightExtremalJunction(fs: FibredSurface, v: Vertex, all = fa
     : 1;
   const lastRemoved = (images[0] as OrientedEdge[])[k - 1];
   if (k < 1 || lastRemoved === undefined) throw new Error(`The junction ${v} is not extremal`);
+  narrate([
+    "Remove ",
+    ...lettersText((images[0] as OrientedEdge[]).slice(0, k)),
+    " from the start of the images at ",
+    { junction: v.name },
+    ".",
+  ]);
   for (const e of star) fs.g.setImage(e, fs.g.image(e).slice(k)); // reads the current image, so loops lose both ends
   fs.g.setVertexImage(v, lastRemoved.target);
 }
@@ -143,42 +148,17 @@ export function removeBacktrack(fs: FibredSurface, backtrack: Backtrack, all = f
   );
 }
 
-/** "All images at v start with d e: remove it from them (g(v) moves along it)." */
-function narrateExtremalJunction(fs: FibredSurface, v: Vertex, all: boolean): void {
-  const star = fs.graph.star(v);
-  const images = star.map((e) => fs.g.image(e).letters);
-  const k = all
-    ? Math.min(...images.map((image) => sharedPrefixLength(images[0] as OrientedEdge[], image)))
-    : 1;
-  const prefix = (images[0] as OrientedEdge[]).slice(0, k);
-  narrate([
-    "All images at the junction ",
-    { junction: v.name },
-    " start with ",
-    ...lettersText(prefix),
-    ": g can be pulled tight there, removing ",
-    k === 1 ? "it" : "them",
-    " from the images of ",
-    ...star.flatMap((e, i): TextPart[] => [...(i === 0 ? [] : [", "]), { strip: e.name }]),
-    " (the image of ",
-    { junction: v.name },
-    " moves along ",
-    ...lettersText(prefix),
-    ").",
-  ]);
-}
-
-/** "g(a) = b c | C d: cancel the backtracking c C." */
+/** "In g(a) = … b c | C d …, cancel c C." */
 function narrateBacktrack(fs: FibredSurface, backtrack: Backtrack, all: boolean): void {
   const letters = fs.g.image(backtrack.strip).letters;
   const i = backtrack.index;
   let s = 1;
   if (all)
     while (i - s - 1 >= 0 && i + s < letters.length && letters[i + s] === letters[i - s - 1]?.reversed) s++;
-  // Only a few letters around the backtracking, for long images.
-  const [from, to] = [Math.max(0, i - s - 3), Math.min(letters.length, i + s + 3)];
+  // Only a letter around the backtracking, for long images.
+  const [from, to] = [Math.max(0, i - s - 1), Math.min(letters.length, i + s + 1)];
   narrate([
-    "g(",
+    "In g(",
     { strip: backtrack.strip.name },
     ") = ",
     ...(from > 0 ? ["… "] : []),
@@ -186,7 +166,7 @@ function narrateBacktrack(fs: FibredSurface, backtrack: Backtrack, all: boolean)
     " | ",
     ...lettersText(letters.slice(i, to)),
     ...(to < letters.length ? [" …"] : []),
-    " turns back: cancel ",
+    ", cancel ",
     ...lettersText(letters.slice(i - s, i + s)),
     ".",
   ]);

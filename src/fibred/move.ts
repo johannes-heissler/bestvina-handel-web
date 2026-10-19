@@ -10,7 +10,7 @@ import { EdgePath } from "../graph/edge-path";
 import { nameTable, parseEdgePath } from "../graph/path-parser";
 import type { Edge, OrientedEdge, Vertex } from "../graph/ribbon-graph";
 import { EdgePoint } from "./edge-point";
-import { about, narrate } from "./narration";
+import { about, explain, keepingStates, narrate, narrated, narrating, retell, stateNow } from "./narration";
 import type { Text, TextPart } from "./suggestions";
 import { type MapUpdateMode, renameJunction, renameStrip, updateMap } from "./map-editing";
 import type { FibredSurface } from "./fibred-surface";
@@ -175,21 +175,28 @@ export interface MoveHooks {
 
 /**
  * Applies a move (in place where possible; some moves return a new surface). It explains itself while it runs (see
- * `narration.ts`): a sentence on what the move does, then either its own steps (folds) or the changes it made.
+ * `narration.ts`): its own steps (folds, isotopies, …), or, for a move without steps of its own, its title as its one
+ * step, then notes on the changes it made.
  */
 export function applyMove(fs: FibredSurface, move: Move, hooks: MoveHooks = {}): FibredSurface {
   return about(fs, () => {
-    const intro = introduction(fs, move);
-    if (intro.length > 0) narrate(intro);
-    const before = snapshot(fs);
-    const result = applyMoveQuietly(fs, move, hooks);
-    // Moves that contract or split strips can leave a junction whose strips all leave across the same side of G₀;
-    // isotope it across (G and g stay the same), so that the embedding can be drawn.
-    tightenMarking(result);
-    if (!NARRATES_ITSELF.has(move.kind))
-      about(result, () => {
-        for (const line of changes(before, snapshot(result))) narrate(line);
-      });
+    const { title, note } = introduction(fs, move);
+    const before = stateNow();
+    const snapshotBefore = snapshot(fs);
+    const run = () => {
+      const result = applyMoveQuietly(fs, move, hooks);
+      // Moves that contract or split strips can leave a junction whose strips all leave across the same side of G₀;
+      // isotope it across (G and g stay the same), so that the embedding can be drawn.
+      tightenMarking(result);
+      return result;
+    };
+    if (!narrating()) return run();
+    const { result, steps } = narrated(run, { states: keepingStates() });
+    // (A move with steps of its own doesn't need its title: the move is shown with its name already.)
+    if (title !== undefined && !steps.some((s) => !s.note)) narrate(title, { before });
+    if (note !== undefined) explain(note);
+    retell(steps);
+    if (!NARRATES_ITSELF.has(move.kind)) for (const line of changes(snapshotBefore, snapshot(result))) explain(line);
     return result;
   });
 }
@@ -207,119 +214,118 @@ const NARRATES_ITSELF = new Set<MoveKind>([
   "replace puncture by singularity",
 ]);
 
-/** What a move does, in one sentence (before it is applied). */
-function introduction(fs: FibredSurface, move: Move): Text {
+/** What a move does: a short title (its one step if it has no steps of its own), and a note on why, if needed. */
+function introduction(fs: FibredSurface, move: Move): { title?: Text; note?: Text } {
   const list = (names: readonly string[]): TextPart[] =>
     names.flatMap((name, i) => [...(i === 0 ? [] : [", "]), { strip: name }]);
   const junctions = (names: readonly string[]): TextPart[] =>
     names.flatMap((name, i) => [...(i === 0 ? [] : [", "]), { junction: name }]);
   switch (move.kind) {
     case "collapse invariant subforest":
-      return [
-        "Collapse the invariant forest ",
-        ...list(move.strips),
-        ": g maps it into itself, so contracting each of its trees to one junction is a homotopy equivalence. Its strips disappear from all images.",
-      ];
+      return { title: ["Collapse the invariant forest ", ...list(move.strips), "."] };
     case "pull tight":
-      return [
-        "Pull g tight",
-        ...(move.at ? [" at ", ...list(move.at)] : [" everywhere"]),
-        ": cancel each backtracking x x̄ in the images (an isotopy of f, moving junctions along the cancelled pieces), and where all images at a junction start with the same strip, move the junction along it.",
-      ];
+      return { title: ["Pull g tight", ...(move.at ? [" at ", ...list(move.at)] : []), "."] };
     case "remove valence-1 junction":
-      return [
-        "Remove the junction",
-        move.junctions.length === 1 ? " " : "s ",
-        ...junctions(move.junctions),
-        " of valence 1 together with its strip: the strip retracts into its other end (a homotopy equivalence), and it disappears from all images.",
-      ];
+      return {
+        title: [
+          move.junctions.length === 1 ? "Remove the junction " : "Remove the junctions ",
+          ...junctions(move.junctions),
+          " of valence 1.",
+        ],
+      };
     case "merge valence-2 lines":
-      return [
-        move.lines?.length === 1 ? "Merge a valence-2 line" : "Merge valence-2 lines",
-        ...(move.lines ? [" (through ", ...junctions(move.lines), ")"] : []),
-        ": the strips of each line, whose inner junctions have valence 2, become one strip (a homotopy equivalence), and the inner junctions are forgotten.",
-      ];
+      return {
+        title: [
+          move.lines?.length === 1 ? "Merge a valence-2 line" : "Merge the valence-2 lines",
+          ...(move.lines && move.lines.length > 1 ? [" (through ", ...junctions(move.lines), ")"] : []),
+          ".",
+        ],
+      };
     case "remove valence-2 junctions":
-      return [
-        "Remove junctions of valence 2",
-        ...(move.junctions ? [" (", ...junctions(move.junctions), ")"] : []),
-        ": at each, its two strips become one, and the junction is forgotten (the images are rewritten accordingly).",
-      ];
+      return {
+        title: move.junctions
+          ? [
+              move.junctions.length === 1 ? "Remove the junction " : "Remove the junctions ",
+              ...junctions(move.junctions),
+              " of valence 2.",
+            ]
+          : ["Remove the junctions of valence 2."],
+      };
     case "absorb into periphery":
-      return [
-        "Absorb into the periphery: make the peripheral subgraph maximal and efficient, so that g acts on it as an automorphism (strips that g maps into the periphery are absorbed into it).",
-      ];
+      return { title: ["Absorb into the periphery."] };
     case "reduce":
-      return [
-        "Reduce along the invariant subgraph ",
-        ...list(move.preserved),
-        `: the boundary of a neighbourhood of it is a reduction system; split along it and continue on piece ${(move.piece ?? 0) + 1} with the first-return map of g.`,
-      ];
+      return {
+        title: ["Reduce along ", ...list(move.preserved), "."],
+        note: [
+          `Split along the boundary of a neighbourhood of it (a reduction system), and continue on piece ${(move.piece ?? 0) + 1} with the first-return map of g.`,
+        ],
+      };
     case "ignore reducibility":
-      return [
-        "Ignore the reducibility found, and continue the algorithm as if the map were irreducible. Convergence and correctness are not guaranteed.",
-      ];
+      return {
+        title: ["Ignore the reducibility."],
+        note: ["The algorithm continues as if g were irreducible: convergence and correctness are not guaranteed."],
+      };
     case "set peripheral subgraph":
-      return [
-        "Take ",
-        ...(move.strips.length === 0 ? ["the empty subgraph"] : list(move.strips)),
-        " as the peripheral subgraph P: the circles around all punctures but one orbit, which is essential.",
-      ];
+      return {
+        title: [
+          "Take ",
+          ...(move.strips.length === 0 ? ["the empty subgraph"] : list(move.strips)),
+          " as the peripheral subgraph P.",
+        ],
+      };
     case "move junction image":
-      return [
-        "Shortcut: move the image of the junction ",
-        { junction: move.junction },
-        " along ",
-        { strip: move.along },
-        " (a homotopy of g; the embedding stays). Every image at ",
-        { junction: move.junction },
-        " that starts with ",
-        { strip: move.along },
-        " loses it, the others get ",
-        { strip: strip(fs, move.along).reversed.name },
-        " in front.",
-      ];
+      return {
+        title: ["Move g(", { junction: move.junction }, ") along ", { strip: move.along }, "."],
+        note: [
+          "Images at ",
+          { junction: move.junction },
+          " that start with ",
+          { strip: move.along },
+          " lose it; the others get ",
+          { strip: strip(fs, move.along).reversed.name },
+          " in front.",
+        ],
+      };
     case "ignore peripheral subgraph":
-      return [
-        "Continue with the peripheral subgraph as it is, although it doesn't fulfil its definition. Convergence and correctness are not guaranteed.",
-      ];
+      return {
+        title: ["Keep the peripheral subgraph as it is."],
+        note: ["It doesn't fulfil its definition: convergence and correctness are not guaranteed."],
+      };
     case "split junctions":
-      return [
-        `Split the junctions where the gate graph (the gates, joined by the infinitesimal branches of τ) is disconnected, into one junction per component: the boundary of a neighbourhood of τ is a reduction system. Continue on piece ${(move.piece ?? 0) + 1} with the first-return map of g.`,
-      ];
+      return {
+        title: ["Split the junctions whose gate graphs are disconnected."],
+        note: [
+          `One junction per component (the boundary of a neighbourhood of τ is a reduction system); continue on piece ${(move.piece ?? 0) + 1} with the first-return map of g.`,
+        ],
+      };
     case "cut along a singular leaf":
-      return [
-        "Cut along a leaf from the singularity of ",
-        { junction: move.junction },
-        ": τ has only one cusp at each artificial puncture, so they can't simply be filled in. Instead the surface is punctured at this singularity (×; with its orbit under f): its junction is blown up into its infinitesimal polygon, with the new puncture inside.",
-      ];
+      return {
+        title: ["Cut along a leaf from the singularity at ", { junction: move.junction }, "."],
+        note: [
+          "τ has one cusp at each artificial puncture, so they can't be filled in: the surface is punctured at this singularity (and its orbit under f) instead.",
+        ],
+      };
     case "replace puncture by singularity":
-      return [
-        "Shortcut: puncture the surface at the singularity of ",
-        { junction: move.junction },
-        " (×; with its orbit under f) instead of p. Its junction is blown up into its infinitesimal polygon, with the new puncture inside.",
-      ];
+      return {
+        title: ["Puncture the surface at the singularity at ", { junction: move.junction }, " instead of p."],
+      };
     case "mark as closed":
-      return [
-        "The puncture is artificial: the surface is closed, and the map is studied there. G, g, μ and G₀ stay the same; the polygon becomes compact. τ has only one cusp at the puncture, so on the closed surface the puncture has to be replaced by a singularity next.",
-      ];
+      return {
+        title: ["Mark the surface as closed."],
+        note: [
+          "G, g, μ and G₀ stay the same; the polygon becomes compact. τ has one cusp at the puncture, so it is replaced by a singularity next.",
+        ],
+      };
     case "edit map":
-      return ["Replace g by the map entered."];
+      return { title: ["Replace g by the map entered."] };
     case "rename map":
-      return [move.name === undefined ? "Remove the name of g." : `Name g ${move.name}.`];
+      return { title: [move.name === undefined ? "Remove the name of g." : `Name g ${move.name}.`] };
     case "rename strip":
-      return ["Rename the strip ", { strip: move.strip }, ` to ${move.name}.`];
+      return { title: ["Rename the strip ", { strip: move.strip }, ` to ${move.name}.`] };
     case "rename junction":
-      return ["Rename the junction ", { junction: move.junction }, ` to ${move.name}.`];
-    case "remove inefficiency": {
-      const edge = fs.graph.edges.find((e) => e.name === move.at.strip);
-      const point = edge && new EdgePoint(edge.forward, move.at.index);
-      return point
-        ? ["Remove the inefficiency at ", ...point.describeText(fs), " completely, fold by fold:"]
-        : ["Remove an inefficiency completely, fold by fold:"];
-    }
+      return { title: ["Rename the junction ", { junction: move.junction }, ` to ${move.name}.`] };
     default:
-      return [];
+      return {};
   }
 }
 
@@ -349,14 +355,26 @@ function changes(before: Snapshot, after: Snapshot): Text[] {
     names.flatMap((name, i) => [...(i === 0 ? [] : [", "]), { junction: name }]);
   const removed = [...before.g.keys()].filter((n) => !after.g.has(n));
   const added = [...after.g.keys()].filter((n) => !before.g.has(n));
-  if (removed.length > 0) lines.push(["Strips removed: ", ...strips(removed), "."]);
-  if (added.length > 0) lines.push(["New strips: ", ...strips(added), "."]);
   const gone = [...before.junctions].filter((n) => !after.junctions.has(n));
   const come = [...after.junctions].filter((n) => !before.junctions.has(n));
-  if (gone.length > 0) lines.push(["Junctions removed: ", ...junctions(gone), "."]);
-  if (come.length > 0) lines.push(["New junctions: ", ...junctions(come), "."]);
+  /** "strips a, b; junction v" */
+  const both = (stripNames: readonly string[], junctionNames: readonly string[]): TextPart[] => [
+    ...(stripNames.length === 0 ? [] : [stripNames.length === 1 ? "strip " : "strips ", ...strips(stripNames)]),
+    ...(stripNames.length > 0 && junctionNames.length > 0 ? ["; "] : []),
+    ...(junctionNames.length === 0
+      ? []
+      : [junctionNames.length === 1 ? "junction " : "junctions ", ...junctions(junctionNames)]),
+  ];
+  if (removed.length + gone.length > 0) lines.push(["Removed: ", ...both(removed, gone), "."]);
+  if (added.length + come.length > 0) lines.push(["New: ", ...both(added, come), "."]);
+  /** A path, its first letters for long ones. */
   const path = (letters: readonly string[]): TextPart[] =>
-    letters.length === 0 ? ["·"] : letters.flatMap((n, i) => [...(i === 0 ? [] : [" "]), { strip: n }]);
+    letters.length === 0
+      ? ["·"]
+      : [
+          ...letters.slice(0, 10).flatMap((n, i) => [...(i === 0 ? [] : [" "]), { strip: n }]),
+          ...(letters.length > 10 ? [" …"] : []),
+        ];
   const changed = [...after.g].filter(
     ([n, image]) => before.g.has(n) && (before.g.get(n) as string[]).join(" ") !== image.join(" "),
   );

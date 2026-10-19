@@ -7,7 +7,7 @@
 import { EdgePath } from "../../graph/edge-path";
 import type { Edge, OrientedEdge, Vertex } from "../../graph/ribbon-graph";
 import type { FibredSurface } from "../fibred-surface";
-import { keepingStates, narrate, quietly } from "../narration";
+import { explain, keepingStates, narrate, quietly } from "../narration";
 import { perronFrobenius } from "../perron-frobenius";
 import type { TextPart } from "../suggestions";
 import { lettersText } from "../text-parts";
@@ -31,28 +31,20 @@ export function removeValenceOneJunction(fs: FibredSurface, v: Vertex): void {
   const e = star[0] as OrientedEdge;
   const w = e.target;
   slideAlong(fs, v, e, [
-    "Isotopy: slide the junction ",
+    "Isotopy: slide ",
     { junction: v.name },
-    " (of valence 1) along its strip ",
+    " along its strip ",
     { strip: e.name },
-    ` (μ = ${String(fs.mu.image(e))}) towards `,
+    " to ",
     { junction: w.name },
     ".",
   ]);
-  narrate([
-    "Retract ",
-    { strip: e.name },
-    " into ",
-    { junction: w.name },
-    ": the junction ",
-    { junction: v.name },
-    " and the strip disappear, and so do the letters ",
+  narrate(["Retract ", { strip: e.name }, " into ", { junction: w.name }, "."]);
+  explain([
     { strip: e.name },
     " and ",
     { strip: e.reversed.name },
-    " from all images (an image entering ",
-    { junction: v.name },
-    " leaves it at once, so it contains ",
+    " disappear from all images (they only occur as ",
     { strip: e.reversed.name },
     " ",
     { strip: e.name },
@@ -98,35 +90,39 @@ export function removeValenceTwoJunction(fs: FibredSurface, v: Vertex, removed?:
   const k = r === s0 ? s1 : s0;
   const u = r.target;
   slideAlong(fs, v, r, [
-    "Isotopy: slide the junction ",
+    "Isotopy: slide ",
     { junction: v.name },
     " along ",
     { strip: r.name },
-    ` (μ = ${String(fs.mu.image(r))}) towards `,
+    " to ",
     { junction: u.name },
     ", so that ",
     { strip: r.name },
     " crosses no side.",
   ]);
   const merged = fs.g.image(r).inverse.concat(fs.g.image(k)).letters;
+  const mergedName = k.edge.name.toLowerCase().startsWith(r.edge.name.toLowerCase()) ? r.edge.name : k.edge.name;
   narrate([
     "Merge ",
     { strip: r.reversed.name },
     " and ",
     { strip: k.name },
-    " at the junction ",
+    " at ",
     { junction: v.name },
-    " of valence 2 into one strip ",
-    { strip: k.edge.name.toLowerCase().startsWith(r.edge.name.toLowerCase()) ? r.edge.name : k.edge.name },
-    " from ",
-    { junction: u.name },
-    ": its image is g(",
+    " into ",
+    { strip: mergedName },
+    ".",
+  ]);
+  explain([
+    "g(",
+    { strip: mergedName },
+    ") = g(",
     { strip: r.reversed.name },
     ") g(",
     { strip: k.name },
     ") = ",
     ...lettersText(merged),
-    " (not yet cancelled), and ",
+    " (not yet cancelled); ",
     { strip: r.name },
     " disappears from all images.",
   ]);
@@ -237,27 +233,25 @@ export function mergeValenceTwoLine(
 ): void {
   mergeValenceTwoLines(fs, [{ line, kept }], (merged) => {
     const [only] = merged;
-    if (only === undefined) return [];
+    if (only === undefined) return { step: [] };
     const { line, image, name } = only;
-    return [
-      "Merge the valence-2 line ",
-      ...lettersText(line.strips),
-      " from ",
-      { junction: (line.strips[0] as OrientedEdge).source.name },
-      " to ",
-      { junction: (line.strips.at(-1) as OrientedEdge).target.name },
-      " into one strip ",
-      { strip: name },
-      ": its image is ",
-      ...lettersText(image),
-      " (not yet cancelled), and the other strips disappear from all images.",
-    ];
+    return {
+      step: ["Merge the valence-2 line ", ...lineText(line), " into ", { strip: name }, "."],
+      note: [
+        "g(",
+        { strip: name },
+        ") = ",
+        ...lettersText(image.slice(0, 10)),
+        image.length > 10 ? " …" : "",
+        " (not yet cancelled).",
+      ],
+    };
   });
 }
 
 /**
  * Merges all valence-2 lines at once, each into its default strip ({@link defaultStripToKeep}), as one narrated step
- * that starts with `intro` (used at the end of the closed-surface moves, port note 28).
+ * after the note `intro` (used at the end of the closed-surface moves, port note 28).
  */
 export function mergeAllValenceTwoLines(fs: FibredSurface, intro: string): void {
   const lines = valenceTwoLines(fs);
@@ -267,16 +261,19 @@ export function mergeAllValenceTwoLines(fs: FibredSurface, intro: string): void 
   mergeValenceTwoLines(
     fs,
     lines.map((line) => ({ line, kept: defaultStripToKeep(fs, line, widths, prePeriphery) })),
-    (merged) => [
-      intro,
-      ...merged.flatMap(({ line, name }, i): TextPart[] => [
-        i === 0 ? " " : "; ",
+    (merged) => {
+      explain([intro]);
+      const list = merged.flatMap(({ line, name }, i): TextPart[] => [
+        ...(i === 0 ? [] : ["; "]),
         ...lineText(line),
         " into ",
         { strip: name },
-      ]),
-      ". The other strips disappear from all images.",
-    ],
+      ]);
+      // (Many lines are listed in a note, so that the step stays short.)
+      return merged.length <= 2
+        ? { step: [merged.length === 1 ? "Merge the valence-2 line " : "Merge the valence-2 lines ", ...list, "."] }
+        : { step: [`Merge the ${merged.length} valence-2 lines into single strips.`], note: [...list, "."] };
+    },
   );
 }
 
@@ -312,13 +309,13 @@ export interface MergedLine {
 
 /**
  * Merges several valence-2 lines (each into its strip `kept`, see {@link mergeValenceTwoLine}) as one narrated step:
- * `describe` gives the text from the merged lines, and a sentence on where the junction images at inner junctions went
- * is added.
+ * `describe` gives the text of the step from the merged lines (and a note after it), and a note on where the junction
+ * images at inner junctions went is added.
  */
 export function mergeValenceTwoLines(
   fs: FibredSurface,
   merges: readonly { readonly line: ValenceTwoLine; readonly kept: Edge }[],
-  describe: (merged: readonly MergedLine[]) => readonly TextPart[],
+  describe: (merged: readonly MergedLine[]) => { step: readonly TextPart[]; note?: readonly TextPart[] },
 ): void {
   if (merges.length === 0) return;
   const before = keepingStates() ? fs.copy() : undefined;
@@ -352,21 +349,21 @@ export function mergeValenceTwoLines(
   });
 
   const merged = merges.map(({ line, kept }, i) => ({ line, image: images[i] ?? [], name: kept.name }));
-  narrate(
-    [
-      ...describe(merged),
+  const { step, note } = describe(merged);
+  narrate(step, { before });
+  if (note !== undefined) explain(note);
+  if (moved.length > 0)
+    explain([
       ...moved.flatMap(({ x, from, to }, i): TextPart[] => [
-        i === 0 ? " The junction images inside go to the ends: g(" : ", g(",
+        i === 0 ? "g(" : ", g(",
         { junction: x.name },
         ") moves from ",
         { junction: from.name },
         " to ",
         { junction: to.name },
       ]),
-      ...(moved.length > 0 ? ["."] : []),
-    ],
-    { before },
-  );
+      ".",
+    ]);
 }
 
 /** Junctions that g maps to `from` are mapped to `to` instead. */

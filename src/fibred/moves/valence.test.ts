@@ -122,10 +122,9 @@ describe("valence-2 lines (port note 28)", () => {
   it("merges it into the kept strip, as removing its junctions one by one does", () => {
     const merged = make();
     const { steps } = narrated(() => mergeValenceTwoLine(merged, lineOf(merged), edge(merged, "y")));
-    expect(steps.map(plainText)).toEqual([
-      expect.stringMatching(
-        /^Merge the valence-2 line (x y z|Z Y X) from p to p into one strip y: its image is /,
-      ),
+    expect(steps.map((s) => plainText(s.text))).toEqual([
+      expect.stringMatching(/^Merge the valence-2 line (x y z|Z Y X) from p to p into y\.$/),
+      expect.stringMatching(/^g\(y\) = .* \(not yet cancelled\)\.$/),
     ]);
     const single = make();
     const [m1, m2] = [edge(single, "x").target, edge(single, "y").target];
@@ -156,9 +155,7 @@ describe("valence-2 lines (port note 28)", () => {
     );
     expect(fs.checkIntegrity()).toEqual([]);
     const { steps } = narrated(() => mergeValenceTwoLine(fs, lineOf(fs), edge(fs, "z")));
-    expect(steps.map(plainText)[0]).toMatch(
-      /The junction images inside go to the ends: g\(\w+\) moves from \w+ to p\.$/,
-    );
+    expect(plainText(steps.at(-1)!.text)).toMatch(/^g\(\w+\) moves from \w+ to p\.$/);
     expect(fs.checkIntegrity()).toEqual([]);
   });
 });

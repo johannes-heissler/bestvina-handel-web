@@ -179,5 +179,5 @@ describe("cutting again (port note 26)", () => {
 /** The text of the last step that doesn't merge valence-2 lines. */
 function lastBeforeMerging(steps: readonly { readonly text: Text }[]): string {
   const texts = steps.map((step) => plainText(step.text));
-  return texts.findLast((t) => !/valence-2 lines\. Merge/.test(t)) ?? "";
+  return texts.findLast((t) => !/^Merge the (\d+ )?valence-2 lines? /.test(t)) ?? "";
 }

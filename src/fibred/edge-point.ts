@@ -93,12 +93,22 @@ export class EdgePoint {
     return (star[0] === e ? star[1] : star[0]) as OrientedEdge;
   }
 
-  /** The same as {@link describe}, as structured text (the strips in their colours). */
-  describeText(fs: FibredSurface): Text {
+  /**
+   * The same as {@link describe}, as structured text (the strips in their colours). With `around`, at most that many
+   * letters on each side of the point ("g(a) = … b C | a B …").
+   */
+  describeText(fs: FibredSurface, around = Infinity): Text {
     const names = (xs: readonly OrientedEdge[]): TextPart[] =>
       xs.flatMap((x, i) => [...(i === 0 ? [] : [" "]), { strip: x.name }]);
     const { path, before, after } = this.split(fs);
-    return ["g(", ...names(path), ") = ", ...names(before), " | ", ...names(after)];
+    return [
+      "g(",
+      ...names(path),
+      ") = ",
+      ...(before.length > around ? ["… ", ...names(before.slice(-around))] : names(before)),
+      " | ",
+      ...(after.length > around ? [...names(after.slice(0, around)), " …"] : names(after)),
+    ];
   }
 
   /** E.g. "g(a) = b C|a B", or at a junction of valence 2 between the strips a and b, "g(a b) = b C|a B". */

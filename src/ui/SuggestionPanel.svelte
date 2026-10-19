@@ -170,6 +170,24 @@
           ...preview.automatic.map((a) => ({ text: describeMove(a.move), surface: a.surface })),
         ],
   );
+  /**
+   * The lines of "What will happen": the moments (numbered, clickable) and the notes between them, which change
+   * nothing (with the number of moments before them).
+   */
+  type Line = { readonly moment: number } | { readonly note: Text; readonly after: number };
+  const lines = $derived.by(() => {
+    if (preview?.surface === undefined) return [];
+    const list: Line[] = [];
+    let after = 0;
+    for (const x of preview.explanation)
+      if ("note" in x) list.push({ note: x.note, after });
+      else {
+        list.push({ moment: x.step });
+        after = x.step + 1;
+      }
+    for (let k = preview.steps.length; k < moments.length; k++) list.push({ moment: k });
+    return list;
+  });
   let position = $state<number | undefined>(undefined);
   let playing = $state(false);
   $effect(() => {
@@ -359,27 +377,37 @@
           }}>Now</button
         >
       </div>
-      <ol class="will-happen">
-        {#each moments as moment, k (k)}
-          <li
-            class:automatic-step={k >= preview.steps.length}
-            class:pending={position !== undefined && position <= k}
-            class:now={position !== undefined && position > k && position <= k + 1}
-          >
-            <button
-              class="step"
-              title="Show the state after this step"
-              onclick={() => {
-                playing = false;
-                position = k + 1;
-              }}><TextView text={moment.text} surface={preview.before} /></button
+      <ul class="will-happen">
+        {#each lines as line, i (i)}
+          {#if "note" in line}
+            <li class="explanation" class:pending={position !== undefined && position < line.after}>
+              <TextView text={line.note} surface={preview.before} />
+            </li>
+          {:else}
+            {@const k = line.moment}
+            <li
+              class:automatic-step={k >= preview.steps.length}
+              class:pending={position !== undefined && position <= k}
+              class:now={position !== undefined && position > k && position <= k + 1}
             >
-          </li>
+              <button
+                class="step"
+                title="Show the state after this step"
+                onclick={() => {
+                  playing = false;
+                  position = k + 1;
+                }}><span class="number">{k + 1}.</span>
+                <span><TextView text={(moments[k] as Moment).text} surface={preview.before} /></span></button
+              >
+            </li>
+          {/if}
         {/each}
-      </ol>
+      </ul>
       <p class="hint">
-        {#if preview.automatic.length > 0}Steps {preview.steps.length + 1}–{moments.length} are the automatic steps after it.
-        {/if}Afterwards: {preview.growth === undefined ? "the growth can't be computed" : `growth λ = ${preview.growth.toFixed(6)}`}
+        {#if preview.automatic.length === 1}Step {moments.length} is the automatic step after it.
+        {:else if preview.automatic.length > 1}Steps {preview.steps.length + 1}–{moments.length} are the automatic steps
+          after it.
+        {/if}{" "}Afterwards: {preview.growth === undefined ? "the growth can't be computed" : `growth λ = ${preview.growth.toFixed(6)}`}
         <span class="timing">({preview.time.toFixed(0)} ms)</span>
       </p>
     {/if}

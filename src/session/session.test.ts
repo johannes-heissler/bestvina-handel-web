@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import type { FibredSurface } from "../fibred/fibred-surface";
 import { plainText } from "../fibred/suggestions";
 import { Session } from "./session";
 import { decodeSession, encodeSession } from "./share";
@@ -129,5 +130,32 @@ describe("the hint for the next fold", () => {
     const next = session.suggestion();
     if (next.kind === "fold")
       expect(plainText(next.options[0]!.label)).toMatch(/^Next fold of the last inefficiency/);
+  });
+});
+
+describe("the explanation of a move", () => {
+  /** G, g and μ, by name. */
+  const fingerprint = (fs: FibredSurface) =>
+    JSON.stringify([
+      fs.graph.edges.map((e) => [e.name, String(fs.g.image(e.forward)), String(fs.mu.image(e.forward))]),
+      fs.graph.vertices.map((v) => [v.name, String(fs.mu.vertexImage(v))]),
+      [...fs.peripheral].map((e) => e.name),
+    ]);
+
+  it("numbers only the steps that change the surface; the notes between them change nothing", () => {
+    for (const preset of ["Bestvina–Handel example 6.1", "Closed genus 2"]) {
+      const session = Session.create({ kind: "preset", preset });
+      for (let i = 0; i < 6; i++) {
+        const suggestion = session.suggestion();
+        if (suggestion.kind === "finished") break;
+        const move = suggestion.autopilotMove ?? suggestion.options[0]!.move;
+        const preview = session.preview(move);
+        const numbers = preview.explanation.flatMap((x) => ("step" in x ? [x.step] : []));
+        expect(numbers).toEqual(preview.steps.map((_, k) => k));
+        const states = [preview.before, ...preview.steps.map((s) => s.after)].map(fingerprint);
+        preview.steps.forEach((step, k) => expect(states[k + 1], plainText(step.text)).not.toBe(states[k]));
+        session.commit(preview);
+      }
+    }
   });
 });

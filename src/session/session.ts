@@ -20,7 +20,7 @@ import {
   type Text,
 } from "../fibred/suggestions";
 import { perronFrobenius } from "../fibred/perron-frobenius";
-import { type Motion, narrated } from "../fibred/narration";
+import { type Motion, type NarratedStep, narrated } from "../fibred/narration";
 import type { RemarkingProvider } from "../fibred/remarking";
 import { modelOfSpine, remarkClosedSurface } from "../embedding/remark";
 import {
@@ -56,8 +56,8 @@ export interface HistoryNode {
    * fold, so that this fold is suggested first.
    */
   readonly followUp?: FollowUp;
-  /** What the move did, step by step (subdivisions, isotopies, folds, …); empty if it doesn't say. */
-  readonly steps?: readonly Text[];
+  /** What the move did, step by step (subdivisions, isotopies, folds, …), with notes; empty if it doesn't say. */
+  readonly steps?: readonly NarratedStep[];
 }
 
 /** One step of a move shown step by step: its explanation and the surface after it. */
@@ -77,11 +77,13 @@ export interface Preview {
   /** The surface before the move. */
   readonly before: FibredSurface;
   readonly steps: readonly PreviewStep[];
+  /** The explanation in order: the steps (by their index in `steps`) and the notes between them, which change nothing. */
+  readonly explanation: readonly ({ readonly step: number } | { readonly note: Text })[];
   /** The surface after the move (undefined if it failed). */
   readonly surface?: FibredSurface;
   readonly followUp?: FollowUp;
   /** The automatic steps after the move: each move, its explanation and the surface after it. */
-  readonly automatic: readonly { move: Move; steps: readonly Text[]; surface: FibredSurface }[];
+  readonly automatic: readonly { move: Move; steps: readonly NarratedStep[]; surface: FibredSurface }[];
   /** The growth of g after the move and the automatic steps (undefined if it can't be computed). */
   readonly growth?: number;
   /** Why the move can't be applied. */
@@ -200,7 +202,7 @@ export class Session {
       const copy = node.surface.copy();
       copy.onError = () => {};
       const hint: { followUp?: FollowUp } = {};
-      const { result, narrated: told } = narrated(
+      const { result, steps: told } = narrated(
         () =>
           applyMove(copy, move, {
             followUp: (point) => (hint.followUp = point),
@@ -211,12 +213,15 @@ export class Session {
       const problems = result.checkIntegrity();
       if (problems.length > 0) throw new Error(problems.join("\n"));
       // The surface after step k is the one before step k + 1, and the result after the last step.
-      const steps = told.map((step, k) => ({
+      const changing = told.filter((step) => !step.note);
+      const steps = changing.map((step, k) => ({
         text: step.text,
-        after: (told[k + 1]?.before ?? result) as FibredSurface,
+        after: (changing[k + 1]?.before ?? result) as FibredSurface,
         ...(step.motion && { motion: step.motion }),
       }));
-      const auto: { move: Move; steps: readonly Text[]; surface: FibredSurface }[] = [];
+      let k = 0;
+      const explanation = told.map((step) => (step.note ? { note: step.text } : { step: k++ }));
+      const auto: { move: Move; steps: readonly NarratedStep[]; surface: FibredSurface }[] = [];
       if (automatic.size > 0) {
         const start = result.copy();
         start.onError = () => {};
@@ -239,6 +244,7 @@ export class Session {
         move,
         before: node.surface,
         steps,
+        explanation,
         surface: result,
         ...(hint.followUp && { followUp: hint.followUp }),
         automatic: auto,
@@ -250,6 +256,7 @@ export class Session {
         move,
         before: node.surface,
         steps: [],
+        explanation: [],
         automatic: [],
         error: e instanceof Error ? e.message : String(e),
         time: performance.now() - started,
@@ -276,7 +283,9 @@ export class Session {
         preview.move,
         preview.surface,
         preview.followUp,
-        preview.steps.map((s) => s.text),
+        preview.explanation.map((x) =>
+          "note" in x ? { text: x.note, note: true as const } : { text: (preview.steps[x.step] as PreviewStep).text },
+        ),
       );
     for (const step of preview.automatic) {
       const existing = node.children.find((c) => JSON.stringify(c.move) === JSON.stringify(step.move));
@@ -348,7 +357,7 @@ export class Session {
     move: Move,
     surface: FibredSurface,
     followUp?: FollowUp,
-    steps?: readonly Text[],
+    steps?: readonly NarratedStep[],
   ): HistoryNode {
     const model =
       surface.spine0 !== parent.surface.spine0

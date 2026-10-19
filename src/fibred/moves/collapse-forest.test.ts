@@ -106,10 +106,11 @@ describe("collapsing a forest with several components", () => {
 
   it("is consistent before each narrated step, so that a preview can copy it there", () => {
     const fs = twiceSubdivided();
-    const { narrated: steps } = narrated(
+    const { steps: told } = narrated(
       () => applyMove(fs, { kind: "collapse invariant subforest", strips: ["y", "w"] }),
       { states: true },
     );
+    const steps = told.filter((s) => !s.note);
     expect(steps.length).toBeGreaterThan(2);
     for (const step of steps) expect(step.before?.checkIntegrity()).toEqual([]);
   });

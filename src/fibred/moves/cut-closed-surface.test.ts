@@ -56,15 +56,19 @@ describe("closed surfaces: cutting along a singular leaf (the thesis's move)", (
 
   it("merges the valence-2 lines first, so that B is a pink loop when it is removed (port note 28)", () => {
     const [option] = cutOptions(tt, prongsOfOrbit(tt, p));
-    const { result, narrated: steps } = narrated(() => cutClosedSurface(tt, option!), { states: true });
+    const { result, steps } = narrated(() => cutClosedSurface(tt, option!), { states: true });
     const texts = steps.map((s) => plainText(s.text));
-    const merge = texts.findIndex((t) => t.startsWith("The cut left valence-2 lines"));
-    expect(merge).toBeGreaterThan(0);
-    expect(texts[merge + 1]).toMatch(/^The boundary of p is now the loop \S+, attached only at/);
+    const intro = texts.findIndex((t) => t.startsWith("The cut left valence-2 lines"));
+    expect(intro).toBeGreaterThan(0);
+    expect(steps[intro]!.note).toBe(true);
+    const merge = intro + 1; // (the step after the note)
+    expect(texts[merge]).toMatch(/^Merge the (\d+ )?valence-2 lines? /);
+    const removal = texts.findIndex((t) => t.startsWith("Remove the boundary loop"));
+    expect(texts[removal]).toMatch(/^Remove the boundary loop \S+ of p: this fills in p\.$/);
     const pink = (i: number) =>
       steps[i]!.before!.graph.edges.filter((e) => e.color.equals(Color.fromHex("#ff10f0")));
     expect(pink(merge)).toHaveLength(23); // B, contracted where it ran along the polygons outside Q
-    expect(pink(merge + 1)).toHaveLength(1);
+    expect(pink(removal)).toHaveLength(1);
     const { surface } = result;
     expect(valenceTwoJunctions(surface)).toEqual([]);
     expect(surface.checkIntegrity()).toEqual([]);
