@@ -7,6 +7,7 @@
  */
 import type { CombinatorialMap } from "../../graph/combinatorial-map";
 import { EdgePath } from "../../graph/edge-path";
+import { letterIndex } from "../../graph/names";
 import type { Edge, OrientedEdge, RibbonGraph, Vertex } from "../../graph/ribbon-graph";
 import { cut, type CutTrack, type Piece, slitsForProng, traceProngThroughBranches } from "../cut-along-leaf";
 import { FibredSurface } from "../fibred-surface";
@@ -92,6 +93,7 @@ export function removeAlmostPeripheralCircle(
   // Filling in p on the side of G₀ too, at the same time (port note 22, § 4).
   if (marking !== undefined && mu !== undefined) mu = marking.remarking.filled(mu);
   const surface = new FibredSurface({ graph, g, ...(mu && { mu }) });
+  surface.legacyDefaultNames = ct.legacyDefaultNames;
   collapseUncut(surface, options.uncut, options.junctionOf, options.inQ);
   // Without a marking, G₀ is (a copy of) the result itself.
   return mu === undefined ? new FibredSurface({ graph, g }) : surface;
@@ -102,7 +104,7 @@ export function removeAlmostPeripheralCircle(
  * bound disks, not punctures, so these junctions never needed to be blown up (port note 22, § 6). Each polygon loses
  * one branch ε, which is homotopic to the rest of the polygon reversed (that replaces ε in all images); the rest is a
  * forest and is collapsed. The junctions get the names of the junctions of G they come from (`junctionOf`): numbered
- * where the slits split one (v0, v0_2, …), and lettered for the corners of the polygons of Q (v2a, v2b, …).
+ * where the slits split one (v, v_2, …), and lettered for the corners of the polygons of Q (w_a, w_b, …).
  */
 export function collapseUncut(
   surface: FibredSurface,
@@ -132,7 +134,7 @@ export function collapseUncut(
   for (const s of graph.vertices) {
     const junction = origin.get(s);
     if (junction === undefined) continue;
-    s.name = junctionPartName(junction, inQ.has(junction), used);
+    s.name = junctionPartName(junction, inQ.has(junction), used, surface.legacyDefaultNames);
   }
 }
 
@@ -338,6 +340,7 @@ export function cutClosedSurface(tt: TrainTrack, option: CutOption, remarking?: 
     partOf: (e: Edge) => BranchPart,
   ): FibredSurface => {
     const { copy, correspondence } = new FibredSurface({ graph, g, mu }).copyWithCorrespondence();
+    copy.legacyDefaultNames = tt.legacyDefaultNames;
     const back = new Map([...correspondence.vertexMap].map(([a, b]) => [b, a]));
     const junctionOf = junctionOfSwitch(graph, partOf);
     const uncut = [...uncutOf(graph, (e) => partOf(e).branch)].map(
@@ -464,14 +467,17 @@ export function finishRemarking(surface: FibredSurface, remarking: Remarking): F
 }
 
 /**
- * A new name for a part of the junction v: the corners of the polygon of a junction of Q are lettered (v2a, v2b, …),
- * the parts of another junction that the slits split are numbered (v3, v3_2, …). `used` collects the names given.
+ * A new name for a part of the junction v: the corners of the polygon of a junction of Q are lettered (v_a, …, v_z,
+ * v_aa, …), the parts of another junction that the slits split are numbered (v, v_2, …). `used` collects the names
+ * given. `legacy`: as before session format 4, va, vb, … (and vb2 after vz).
  */
-export function junctionPartName(v: Vertex, inQ: boolean, used: Set<string>): string {
-  const letters = "abcdefghijklmnopqrstuvwxyz";
-  let name = inQ ? `${v.name}a` : v.name;
-  for (let k = 1; used.has(name); k++)
-    name = inQ ? `${v.name}${letters[k % 26]}${k >= 26 ? Math.floor(k / 26) + 1 : ""}` : `${v.name}_${k + 1}`;
+export function junctionPartName(v: Vertex, inQ: boolean, used: Set<string>, legacy = false): string {
+  const corner = (k: number) =>
+    legacy
+      ? `${v.name}${"abcdefghijklmnopqrstuvwxyz"[k % 26]}${k >= 26 ? Math.floor(k / 26) + 1 : ""}`
+      : `${v.name}_${letterIndex(k)}`;
+  let name = inQ ? corner(0) : v.name;
+  for (let k = 1; used.has(name); k++) name = inQ ? corner(k) : `${v.name}_${k + 1}`;
   used.add(name);
   return name;
 }

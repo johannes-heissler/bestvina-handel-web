@@ -1,40 +1,18 @@
 /**
- * Default names and colours for new junctions and strips (the C# `FibredSurfaceNamesAndColors`).
+ * Colours for new junctions and strips (the C# `FibredSurfaceNamesAndColors`), and the names as before session
+ * format 4. The names themselves are in `graph/names` (port note 25).
  *
  * @module
  */
+import { EDGE_NAMES, VERTEX_NAMES } from "../graph/names";
 import { Color } from "../math/color";
 import { argMin } from "../util/iter";
 
-/**
- * Names for new edges, in order of preference. As in C#, e, f and g are left out (they denote edges and
- * maps in the text). Unlike C#, μ, σ and λ are left out as well, since they denote the inverse marking, the
- * cyclic order and the growth rate.
- */
-export const EDGE_NAMES: readonly string[] = [
-  ..."abcdxyzuhijklmno",
-  ..."αβγδεζθκξπρτφψω",
-  ...Array.from({ length: 1000 }, (_, i) => `e${i + 1}`),
-];
+/** {@link EDGE_NAMES} as before session format 4, with the fallbacks e1, e2, …. */
+export const LEGACY_EDGE_NAMES: readonly string[] = EDGE_NAMES.map((name) => name.replace(/^e_/, "e"));
 
-/**
- * Names for new peripheral strips: Greek letters, first those whose capitals (the inverses) don't look like Latin
- * capitals (Γ Δ Θ Ξ Π Φ Ψ Ω, then Σ and Λ, which also denote the cyclic order and the growth), then the others;
- * never μ (the inverse marking), nor υ (Υ looks like Y). Then with indices (γ_1, shown as γ₁).
- */
-export const PERIPHERAL_EDGE_NAMES: readonly string[] = (() => {
-  const letters = [..."γδθξπφψωσλ", ..."αβεζηικνορτχ"];
-  return [
-    ...letters,
-    ...Array.from({ length: 9 }, (_, k) => k + 1).flatMap((k) => letters.map((x) => `${x}_${k}`)),
-  ];
-})();
-
-/** Names for new vertices, in order of preference. */
-export const VERTEX_NAMES: readonly string[] = [
-  ..."vwpqrst",
-  ...Array.from({ length: 1000 }, (_, i) => `v${i + 1}`),
-];
+/** {@link VERTEX_NAMES} as before session format 4, with the fallbacks v1, v2, …. */
+export const LEGACY_VERTEX_NAMES: readonly string[] = VERTEX_NAMES.map((name) => name.replace(/^v_/, "v"));
 
 /** Colours for edges (the C# `Curve.colors`). */
 export const EDGE_COLORS: readonly Color[] = [
@@ -65,13 +43,6 @@ export const VERTEX_COLORS: readonly Color[] = [
   new Color(0.3, 0.3, 0.3),
   Color.fromBytes(50, 6, 99),
 ];
-
-/** The first name in `names` that is not in `used`. */
-export function firstUnusedName(names: readonly string[], used: ReadonlySet<string>): string {
-  const name = names.find((n) => !used.has(n));
-  if (name === undefined) throw new Error("Ran out of names");
-  return name;
-}
 
 /**
  * The colour of `palette` that occurs least often among `used` (the first one in case of a tie).

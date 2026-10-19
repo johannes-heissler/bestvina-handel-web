@@ -1,6 +1,6 @@
 <!-- The transition matrix of g with the Perron–Frobenius widths and lengths (collapsible). -->
 <script lang="ts">
-  import { displayName } from "../graph/names";
+  import Name from "./Name.svelte";
   import { matrixInfo } from "../session/analysis";
   import { stripColors } from "./colors";
   import { app } from "./state.svelte";
@@ -22,14 +22,14 @@
         <thead>
           <tr>
             <th>λ={fmt(info.data.growth)}</th>
-            {#each info.data.strips as e (e.id)}<th style:color={info.colors.get(e.name)}>{displayName(e.name)}</th>{/each}
+            {#each info.data.strips as e (e.id)}<th style:color={info.colors.get(e.name)}><Name name={e.name} /></th>{/each}
             <th class="weight">width</th>
           </tr>
         </thead>
         <tbody>
           {#each info.data.strips as row, i (row.id)}
             <tr>
-              <th style:color={info.colors.get(row.name)}>{displayName(row.name)}</th>
+              <th style:color={info.colors.get(row.name)}><Name name={row.name} /></th>
               {#each info.data.entries[i] ?? [] as entry, j (j)}<td class:zero={entry === 0}>{entry}</td>{/each}
               <td class="weight">{fmt(info.data.widths.get(row))}</td>
             </tr>

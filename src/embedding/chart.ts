@@ -62,8 +62,18 @@ export type Decoration =
   | { readonly kind: "puncture"; readonly at: Complex }
   /** A filled-in point (the vertex of a closed polygon with interior punctures). */
   | { readonly kind: "marked"; readonly at: Complex }
-  /** A chord between cells of a polygon (glued by the identity), or the wall of a filled-in vertex (no port). */
-  | { readonly kind: "chord"; readonly from: Complex; readonly to: Complex; readonly wall: boolean }
+  /**
+   * A chord between cells of a polygon (glued by the identity), or the wall of a filled-in vertex (no port). A chord
+   * from `from` to `to` runs counterclockwise around the cell that its edge of G₀ (`label`, forward) leaves.
+   */
+  | {
+      readonly kind: "chord";
+      readonly from: Complex;
+      readonly to: Complex;
+      readonly wall: boolean;
+      readonly label?: string;
+      readonly color?: Color;
+    }
   | { readonly kind: "disk"; readonly center: Complex; readonly radius: number }
   /** A junction of a ribbon model: a convex region (a rounded polygon). */
   | { readonly kind: "region"; readonly boundary: readonly Complex[] }
@@ -165,7 +175,8 @@ function polygonChart(model: PolygonModel, spine: Spine, sideFraction?: number):
         outward: new Complex(tangent.im, -tangent.re),
         stub: 0,
       });
-      if (!onPolygon && x.isForward) chords.push({ kind: "chord", from: p, to: q, wall: false });
+      if (!onPolygon && x.isForward)
+        chords.push({ kind: "chord", from: p, to: q, wall: false, label: x.name, color: x.color });
     });
   }
   sides.forEach((x, k) =>

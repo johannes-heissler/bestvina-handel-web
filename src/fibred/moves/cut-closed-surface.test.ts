@@ -4,7 +4,13 @@ import { runAlgorithm } from "../algorithm";
 import { cut, slitsForProng } from "../cut-along-leaf";
 import { perronFrobenius } from "../perron-frobenius";
 import { trainTrack } from "../train-track";
-import { circleDefects, cutClosedSurface, cutOptions, prongsOfOrbit } from "./cut-closed-surface";
+import {
+  circleDefects,
+  cutClosedSurface,
+  cutOptions,
+  junctionPartName,
+  prongsOfOrbit,
+} from "./cut-closed-surface";
 import { inefficiencies } from "./inefficiency";
 import { pullTight } from "./pull-tight";
 
@@ -14,14 +20,14 @@ const growth = (fs: Parameters<typeof perronFrobenius>[0]) =>
 describe("closed surfaces: cutting along a singular leaf (the thesis's move)", () => {
   const original = closedGenus2OneCusp();
   const tt = trainTrack(original);
-  const v2 = original.graph.vertices.find((v) => v.name === "v2")!;
+  const p = original.graph.vertices.find((v) => v.name === "p")!;
 
   it("lists the prongs of an orbit", () => {
-    expect(prongsOfOrbit(tt, v2)).toHaveLength(3); // v2 is fixed; its triangle has 3 prongs
+    expect(prongsOfOrbit(tt, p)).toHaveLength(3); // p is fixed; its triangle has 3 prongs
   });
 
   it("prolongs L until the boundary of p is a circle attached at one switch, and removes it", () => {
-    const [option] = cutOptions(tt, prongsOfOrbit(tt, v2));
+    const [option] = cutOptions(tt, prongsOfOrbit(tt, p));
     expect(option).toBeDefined();
     expect(circleDefects(cut(tt, slitsForProng(tt, option!.prong, option!.realBranches)))).toHaveLength(1); // only the attachment switch
     expect(
@@ -43,13 +49,34 @@ describe("closed surfaces: cutting along a singular leaf (the thesis's move)", (
     expect(growth(surface)).toBeCloseTo(4.212077, 5);
   });
 
-  it("reaches the same growth when cutting at the singularity v3 (period 2)", { timeout: 30_000 }, () => {
-    const v3 = original.graph.vertices.find((v) => v.name === "v3")!;
-    const [option] = cutOptions(tt, prongsOfOrbit(tt, v3));
+  it("reaches the same growth when cutting at the singularity q (period 2)", { timeout: 30_000 }, () => {
+    const q = original.graph.vertices.find((v) => v.name === "q")!;
+    const [option] = cutOptions(tt, prongsOfOrbit(tt, q));
     expect(option?.realBranches).toBe(18);
     const { surface } = cutClosedSurface(tt, option!);
     expect(surface.checkIntegrity()).toEqual([]);
     runAlgorithm(surface);
     expect(growth(surface)).toBeCloseTo(4.212077, 5);
+  });
+
+  it("letters the corners of Q like spreadsheet columns and numbers the other parts (port note 25)", () => {
+    const parts = (inQ: boolean, count: number, legacy = false) => {
+      const used = new Set<string>();
+      return Array.from({ length: count }, () => junctionPartName(p, inQ, used, legacy));
+    };
+    expect(parts(true, 28).filter((_, i) => [0, 1, 25, 26, 27].includes(i))).toEqual([
+      "p_a",
+      "p_b",
+      "p_z",
+      "p_aa",
+      "p_ab",
+    ]);
+    expect(parts(false, 3)).toEqual(["p", "p_2", "p_3"]);
+    expect(parts(true, 28, true).filter((_, i) => [0, 25, 26, 27].includes(i))).toEqual([
+      "pa",
+      "pz",
+      "pa2",
+      "pb2",
+    ]);
   });
 });

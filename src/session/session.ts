@@ -103,9 +103,13 @@ export class Session {
     this.current = this.root;
   }
 
-  /** @throws Error if the start is not a valid fibred surface (e.g. the map is not a homeomorphism). */
-  static create(start: Start): Session {
-    const { surface, model } = startSurface(start);
+  /**
+   * `legacyDefaultNames`: with the default names as before session format 4, for replaying older files.
+   *
+   * @throws Error if the start is not a valid fibred surface (e.g. the map is not a homeomorphism).
+   */
+  static create(start: Start, legacyDefaultNames = false): Session {
+    const { surface, model } = startSurface(start, legacyDefaultNames);
     const problems = surface.checkIntegrity();
     if (problems.length > 0) throw new Error(problems.join("\n"));
     return new Session(start, surface, model);
@@ -310,8 +314,8 @@ export class Session {
     if (file.format !== FILE_FORMAT) throw new Error("This is not a saved session");
     if (file.version > FILE_VERSION)
       throw new Error("This session was saved by a newer version of the program");
-    const session = Session.create(file.start);
     // Older sessions replay with the names they were saved with.
+    const session = Session.create(file.start, file.version < 4);
     if (file.version < 2) session.root.surface.legacyNames = true;
     if (file.version < 3) session.root.surface.legacyPeripheralNames = true;
     let skipped = 0;
@@ -365,8 +369,10 @@ export const FILE_FORMAT = "bestvina-handel-session";
  * 2: subdivisions during folds keep the name of the rest (see `FibredSurface.legacyNames`).
  * 3: new peripheral strips get Greek names, and unchanged peripheral circles keep theirs
  * (`FibredSurface.legacyPeripheralNames`).
+ * 4: default names from lists or with subscripts: v, w, … instead of v0, v1, …, the chords and lassos from the edge
+ * names, Greek peripheral lassos from γ, v_a and v_α in τ, … (`FibredSurface.legacyDefaultNames`, port note 25).
  */
-export const FILE_VERSION = 3;
+export const FILE_VERSION = 4;
 
 export interface SavedNode {
   readonly move?: Move;
@@ -382,14 +388,17 @@ export interface SessionFile {
   readonly current: readonly number[];
 }
 
-/** The surface and model a start describes. */
-export function startSurface(start: Start): { surface: FibredSurface; model: SurfaceModel } {
+/** The surface and model a start describes (`legacyDefaultNames`: see {@link Session.create}). */
+export function startSurface(
+  start: Start,
+  legacyDefaultNames = false,
+): { surface: FibredSurface; model: SurfaceModel } {
   if (start.kind === "preset") {
     const preset = presetNamed(start.preset, start.seed ?? 1);
     if (preset === undefined) throw new Error(`There is no example "${start.preset}"`);
-    return { surface: buildPreset(preset), model: preset.model };
+    return { surface: buildPreset(preset, legacyDefaultNames), model: preset.model };
   }
-  const surface = initialFibredSurface(start.model, start.options);
+  const surface = initialFibredSurface(start.model, start.options, legacyDefaultNames);
   if (start.map !== undefined && start.map.trim() !== "")
     applyMove(surface, { kind: "edit map", text: start.map, mode: "replace" });
   return { surface, model: start.model };

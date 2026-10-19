@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { spineOfGraph, type SurfaceModel } from "../examples/models";
+import { initialFibredSurface, spineOfGraph, type SurfaceModel } from "../examples/models";
 import { buildPreset, PRESETS } from "../examples/presets";
 import { chartOf } from "../embedding/chart";
 import { layout } from "../embedding/layout";
@@ -9,7 +9,7 @@ import { trainTrack } from "../fibred/train-track";
 import { Session } from "../session/session";
 import { decodeSession } from "../session/share";
 import { renderSvg, turnSide } from "./svg";
-import type { OrientedEdge, Vertex } from "../graph/ribbon-graph";
+import type { Edge, OrientedEdge, Vertex } from "../graph/ribbon-graph";
 
 const chartFor = (model: SurfaceModel, fs: FibredSurface) => ({
   chart: chartOf(model, {}, spineOfGraph(model, fs.spine0)),
@@ -98,6 +98,25 @@ describe("SVG", () => {
     }
   });
 
+  it("draws the names of the chords and the indices of names as subscripts (port note 25)", () => {
+    const model: SurfaceModel = {
+      kind: "polygon",
+      name: "",
+      description: "",
+      word: "a b A B c d C D".split(" "),
+      geometry: { kind: "compact" },
+      closed: true,
+      points: [[0, 0]],
+    };
+    const surface = initialFibredSurface(model);
+    (surface.graph.edges[0] as Edge).name = "a_b";
+    const { chart } = chartFor(model, surface);
+    const { svg } = renderSvg(surface, layout(surface, chart), { model: "poincare", view: "standard" });
+    expect(svg).toMatch(/font-size="16(\.0+)?"[^>]*>x<\/text>/); // the chord x (the wall y has no name)
+    expect(svg).not.toMatch(/>y<\/text>/);
+    expect(svg).toMatch(/>a<tspan dy="[\d.]+" font-size="[\d.]+">b<\/tspan><\/text>/);
+  });
+
   it("explains why the striped view needs a tight map", () => {
     const fs = buildPreset(PRESETS.find((p) => p.name === "Point push")!);
     const { chart } = chartFor(pointPushModel(), fs);
@@ -155,7 +174,8 @@ describe("SVG", () => {
     expect(bands(equation.svg)).toBe(branches);
     expect(equation.svg).not.toContain("NaN");
     // The junction disks are larger (and fainter) than usual.
-    const radii = (svg: string) => [...svg.matchAll(/<circle [^>]*r="([\d.]+)"[^>]*stroke="#1a693a"/g)].map((m) => Number(m[1]));
+    const radii = (svg: string) =>
+      [...svg.matchAll(/<circle [^>]*r="([\d.]+)"[^>]*stroke="#1a693a"/g)].map((m) => Number(m[1]));
     expect(Math.max(...radii(equation.svg))).toBeGreaterThan(Math.max(...radii(plain.svg)));
     expect(equation.svg).toContain('fill-opacity="0.15"');
     // Only the train track has a width equation.

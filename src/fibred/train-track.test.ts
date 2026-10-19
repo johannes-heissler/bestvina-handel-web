@@ -29,6 +29,22 @@ describe("trainTrack", () => {
     expect(tt.gTau.checkContinuity()).toEqual([]);
   });
 
+  it("names the switches of v v_a, v_b, … and its infinitesimal branches v_α, v_β, … (port note 25)", () => {
+    const { tt } = summary(torusAnosov());
+    expect(tt.graph.vertices.map((s) => s.name)).toEqual(["v_a", "v_b", "v_c"]);
+    const infinitesimal = tt.graph.edges.filter((e) => tt.kind.get(e) === "infinitesimal");
+    expect(infinitesimal.map((e) => e.name)).toEqual(["v_α", "v_β"]);
+    // Before session format 4: v_0, v_1, … and ε1, ε2, ….
+    const legacy = torusAnosov();
+    legacy.legacyDefaultNames = true;
+    const old = trainTrack(legacy);
+    expect(old.graph.vertices.map((s) => s.name)).toEqual(["v_0", "v_1", "v_2"]);
+    expect(old.graph.edges.filter((e) => old.kind.get(e) === "infinitesimal").map((e) => e.name)).toEqual([
+      "ε1",
+      "ε2",
+    ]);
+  });
+
   it("satisfies the switch equation", () => {
     for (const fs of [torusAnosov(), closedGenus2Example()]) {
       const defects = switchEquationDefects(trainTrack(fs));

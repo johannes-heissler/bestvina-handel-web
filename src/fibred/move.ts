@@ -521,6 +521,7 @@ function keepFlags(from: FibredSurface, to: FibredSurface): FibredSurface {
   to.isClosed = from.isClosed;
   to.legacyNames = from.legacyNames;
   to.legacyPeripheralNames = from.legacyPeripheralNames;
+  to.legacyDefaultNames = from.legacyDefaultNames;
   to.onError = from.onError;
   return to;
 }

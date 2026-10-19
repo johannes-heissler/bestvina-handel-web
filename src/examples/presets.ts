@@ -27,17 +27,23 @@ export interface Preset {
   readonly setup?: readonly Move[];
   /** Strip names changed after the setup (applied at once, so swaps work). */
   readonly renames?: Readonly<Record<string, string>>;
+  /** The setup and renames in the default names before session format 4, where they differ (port note 25). */
+  readonly legacy?: Pick<Preset, "setup" | "renames">;
   /** The map, as one or several texts applied in order, each with its name (composed into the name of g). */
   readonly maps: readonly { readonly text: string; readonly mode: MapUpdateMode; readonly name?: string }[];
   /** Generators of the mapping class group in the strips of the starting graph, suggested in the map editor. */
   readonly generators?: GeneratingSet;
 }
 
-/** Builds the fibred surface of a preset. */
-export function buildPreset(preset: Preset): FibredSurface {
-  const fs = initialFibredSurface(preset.model, preset.options);
-  for (const move of preset.setup ?? []) applyMove(fs, move);
-  const renames = Object.entries(preset.renames ?? {});
+/**
+ * Builds the fibred surface of a preset. `legacy`: with the default names as before session format 4
+ * (`FibredSurface.legacyDefaultNames`).
+ */
+export function buildPreset(preset: Preset, legacy = false): FibredSurface {
+  const fs = initialFibredSurface(preset.model, preset.options, legacy);
+  const { setup, renames: renaming } = { ...preset, ...(legacy && preset.legacy) };
+  for (const move of setup ?? []) applyMove(fs, move);
+  const renames = Object.entries(renaming ?? {});
   const edges = renames.map(([from]) => {
     const e = fs.graph.edges.find((x) => x.name === from);
     if (e === undefined) throw new Error(`The preset renames ${from}, which doesn't exist`);
@@ -187,8 +193,13 @@ export const PRESETS: readonly Preset[] = [
       "A map of the sphere with four punctures, three of them peripheral (α, β, γ), from Bestvina–Handel's paper.",
     model: polygon("a b c C B A"),
     options: { peripheral: 3 },
-    setup: [{ kind: "collapse invariant subforest", strips: ["a"] }],
-    renames: { b: "a", γ: "α", α: "β", β: "γ" },
+    // The stems are d, x, y and the lassos γ, δ, θ; the first stem is collapsed, as the paper's graph has none.
+    setup: [{ kind: "collapse invariant subforest", strips: ["d"] }],
+    renames: { y: "a", x: "c", θ: "α", γ: "β", δ: "γ" },
+    legacy: {
+      setup: [{ kind: "collapse invariant subforest", strips: ["a"] }],
+      renames: { b: "a", γ: "α", α: "β", β: "γ" },
+    },
     maps: replace("a -> β c γ C a, c -> β c γ C a α A c Γ C β c γ C a α A c Γ", "BH 6.2"),
   },
   {
