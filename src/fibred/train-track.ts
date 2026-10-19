@@ -12,6 +12,7 @@
 import { Matrix, solve } from "ml-matrix";
 import { CombinatorialMap } from "../graph/combinatorial-map";
 import { EdgePath } from "../graph/edge-path";
+import { greekIndex, letterIndex, nameKey } from "../graph/names";
 import { type Edge, type OrientedEdge, RibbonGraph, type Vertex } from "../graph/ribbon-graph";
 import type { FibredSurface } from "./fibred-surface";
 import { singleGateOrders } from "./gate-order";
@@ -62,6 +63,8 @@ export interface TrainTrack {
   readonly lengths: ReadonlyMap<Edge, number>;
   /** The boundary words of τ with their cusps. */
   boundaryWords(): TrackBoundaryWord[];
+  /** The default names of the surface (`FibredSurface.legacyDefaultNames`), for the junctions a cut creates. */
+  readonly legacyDefaultNames: boolean;
 }
 
 /** Builds τ, g_τ and the widths from a fibred surface. */
@@ -94,7 +97,9 @@ export function trainTrack(fs: FibredSurface): TrainTrack {
     for (const e of [...star.slice(k), ...star.slice(0, k)]) {
       const gate = gateOfEnd.get(e) as number;
       if (!switchOfGate.has(gate)) {
-        const s = tau.addVertex(`${v.name}_${switches.length}`, v.color);
+        // The switches of v are v_a, v_b, … (before session format 4: v_0, v_1, …).
+        const index = fs.legacyDefaultNames ? String(switches.length) : letterIndex(switches.length);
+        const s = tau.addVertex(`${v.name}_${index}`, v.color);
         switchOfGate.set(gate, s);
         junctionOf.set(s, v);
         switches.push(s);
@@ -127,11 +132,22 @@ export function trainTrack(fs: FibredSurface): TrainTrack {
     return d === undefined ? undefined : switchOf.get(d);
   };
   const infinitesimal = new Map<string, OrientedEdge>(); // key "s|t" in both directions
+  const infinitesimalCount = new Map<Vertex, number>(); // per junction
+  const stripNames = new Set(fs.graph.edges.map((e) => nameKey(e.name)));
   const addInfinitesimal = (s: Vertex, t: Vertex): OrientedEdge | undefined => {
     if (s === t) return undefined; // an illegal turn: no infinitesimal branch
     const existing = infinitesimal.get(`${s.id}|${t.id}`);
     if (existing !== undefined) return existing;
-    const branch = tau.addEdge(s, t, { name: `ε${kind.size - fs.graph.edgeCount + 1}`, color: s.color });
+    // The infinitesimal branches at v are v_α, v_β, … in the order they are found, skipping the names of strips (the
+    // polygons of an earlier closed-surface move are named so); before session format 4 ε1, ε2, … over all junctions.
+    const v = junctionOf.get(s) as Vertex;
+    let k = infinitesimalCount.get(v) ?? 0;
+    while (stripNames.has(nameKey(`${v.name}_${greekIndex(k)}`))) k++;
+    infinitesimalCount.set(v, k + 1);
+    const name = fs.legacyDefaultNames
+      ? `ε${kind.size - fs.graph.edgeCount + 1}`
+      : `${v.name}_${greekIndex(k)}`;
+    const branch = tau.addEdge(s, t, { name, color: s.color });
     kind.set(branch, "infinitesimal");
     infinitesimal.set(`${s.id}|${t.id}`, branch.forward);
     infinitesimal.set(`${t.id}|${s.id}`, branch.backward);
@@ -229,6 +245,7 @@ export function trainTrack(fs: FibredSurface): TrainTrack {
     widths,
     lengths,
     boundaryWords,
+    legacyDefaultNames: fs.legacyDefaultNames,
   };
 }
 

@@ -13,7 +13,7 @@
  *
  * @module
  */
-import { displayName } from "../graph/names";
+import { nameParts } from "../graph/names";
 import type { Edge, OrientedEdge, Vertex } from "../graph/ribbon-graph";
 import { Complex } from "../math/complex";
 import type { Color } from "../math/color";
@@ -103,6 +103,8 @@ export interface Rendered {
 const COPY_OPACITY = 0.35;
 /** The font size of the names of the sides (in pixels at the centre). */
 const SIDE_LABEL_SIZE = 20;
+/** The font size of the names of the chords between the cells of a polygon (a little smaller). */
+const CHORD_LABEL_SIZE = 16;
 /** The dark green of the junctions (the C# `vertexColors[1]`). */
 const JUNCTION_COLOR = "#1a693a";
 /** The highlight of the fold that is selected, and of the turns folded after it. */
@@ -1007,14 +1009,22 @@ export function renderSvg(fs: FibredSurface, layout: Layout, options: RenderOpti
     for (const d of chart.decorations) {
       const toScreen = (z: Complex) => toDisplay(transform ? transform(z) : z);
       if (hyperbolic && d.kind === "polygon") group.push(geodesicPolygon(d.vertices, transform));
-      else if (hyperbolic && d.kind === "chord")
+      else if (d.kind === "chord") {
         group.push(
-          chordPath(
-            geodesicSamples(d.from, d.to, transform).samples.map((x) => px(x.z)),
-            d.wall,
-          ),
+          hyperbolic
+            ? chordPath(
+                geodesicSamples(d.from, d.to, transform).samples.map((x) => px(x.z)),
+                d.wall,
+              )
+            : decoration(d, toScreen, px, scale, labels),
         );
-      else if (d.kind === "side") {
+        // The name of its edge of G₀, once, where the edge goes (as for a side, outside the cell it leaves).
+        if (labels && d.label !== undefined) {
+          const at = sideLabelAt(d.from, d.to, transform);
+          const color = d.color ? css(d.color) : "#555";
+          if (at) group.push(label(at, d.label, color, px, CHORD_LABEL_SIZE, true, nameShape(at)));
+        }
+      } else if (d.kind === "side") {
         group.push(
           hyperbolic
             ? geodesicSide(d.from, d.to, transform, css(d.color))
@@ -1323,8 +1333,28 @@ function label(
     const [a, b, c, d] = shape.matrix.map(fmt4);
     return `<g transform="translate(${x} ${y}) matrix(${a} ${b} ${c} ${d} 0 0)">${label(Complex.ZERO, text, color, () => "0,0", fontSize, italic)}</g>`;
   }
-  const size = fmt(fontSize * shape.scale);
-  return `<text x="${x}" y="${y}" fill="${color}" font-size="${size}" text-anchor="middle" dominant-baseline="middle" stroke="#ffffff" stroke-width="2.5" stroke-opacity="0.8" stroke-linejoin="round" paint-order="stroke"${italic ? ' font-style="italic"' : ""}>${escape(displayName(text))}</text>`;
+  const size = fontSize * shape.scale;
+  return `<text x="${x}" y="${y}" fill="${color}" font-size="${fmt(size)}" text-anchor="middle" dominant-baseline="middle" stroke="#ffffff" stroke-width="2.5" stroke-opacity="0.8" stroke-linejoin="round" paint-order="stroke"${italic ? ' font-style="italic"' : ""}>${nameMarkup(text, size)}</text>`;
+}
+
+/**
+ * A name as the content of a `<text>` of this font size: its indices as subscripts, lowered with `dy` (which, unlike
+ * `baseline-shift`, all renderers and svg2pdf support) and raised again for the text after them.
+ */
+function nameMarkup(name: string, fontSize: number): string {
+  const shift = fmt(0.3 * fontSize);
+  let lowered = false;
+  return nameParts(name)
+    .map((part) => {
+      if (part.subscript) {
+        lowered = true;
+        return `<tspan dy="${shift}" font-size="${fmt(0.7 * fontSize)}">${escape(part.text)}</tspan>`;
+      }
+      if (!lowered) return escape(part.text);
+      lowered = false;
+      return `<tspan dy="-${shift}">${escape(part.text)}</tspan>`;
+    })
+    .join("");
 }
 
 // ─── Geometry helpers ───────────────────────────────────────────────────────────────────────

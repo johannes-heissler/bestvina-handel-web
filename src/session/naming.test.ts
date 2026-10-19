@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
+import type { FibredSurface } from "../fibred/fibred-surface";
 import { plainText } from "../fibred/suggestions";
+import { trainTrack } from "../fibred/train-track";
 import { Session } from "./session";
 import { decodeSession } from "./share";
 
@@ -21,5 +23,41 @@ describe("the names that folds give", () => {
     expect(
       texts.some((t) => /the rest keeps the name \w+, the initial segment is called \w+_1/.test(t)),
     ).toBe(true);
+  });
+});
+
+/** The names of the junctions and strips of G and of the switches and branches of τ. */
+function names(fs: FibredSurface): string[] {
+  const tt = trainTrack(fs);
+  return [...fs.graph.vertices, ...fs.graph.edges, ...tt.graph.vertices, ...tt.graph.edges].map(
+    (x) => x.name,
+  );
+}
+
+describe("default names (port note 25)", () => {
+  // Through the closed-surface move (switches and infinitesimal branches become junctions and strips), and with
+  // peripheral lassos and stems.
+  const presets = ["Closed genus 2", "Bestvina–Handel example 6.2"];
+
+  it("never put a digit right after a letter in new sessions", { timeout: 60_000 }, () => {
+    for (const preset of presets) {
+      const session = Session.create({ kind: "preset", preset });
+      session.runAutopilot();
+      for (const node of session.path())
+        expect(names(node.surface).filter((name) => /\p{L}\d/u.test(name))).toEqual([]);
+    }
+  });
+
+  it("replays sessions saved before format 4 with the old names", { timeout: 60_000 }, () => {
+    for (const preset of presets) {
+      const old = Session.create({ kind: "preset", preset }, true);
+      old.runAutopilot();
+      expect(old.root.surface.graph.vertices.map((v) => v.name)).toContain("v0");
+      const file = { ...old.toFile(), version: 3 };
+      const { session, skipped } = Session.fromFile(JSON.parse(JSON.stringify(file)));
+      expect(skipped).toBe(0);
+      expect(session.current.surface.toString()).toBe(old.current.surface.toString());
+      expect(names(session.current.surface)).toEqual(names(old.current.surface));
+    }
   });
 });

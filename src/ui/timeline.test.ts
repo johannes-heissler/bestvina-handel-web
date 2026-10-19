@@ -4,6 +4,7 @@ import { Session } from "../session/session";
 import { decodeSession } from "../session/share";
 import { drawTimeline } from "./drawing";
 import type { Move } from "../fibred/move";
+import { polygonSingularities, type Singularity } from "../fibred/moves/fill-puncture";
 
 // A fold whose isotopy (moving the new junction along B A b) passes through states that can't be laid out: the
 // strip runs parallel to another one with the same μ until they are folded.
@@ -114,15 +115,20 @@ describe("the timeline of a cut on the point push", () => {
       expect(drawTimeline(session.current.model, states, motions, position, { size: 100 }).notes).toEqual([]);
     return preview;
   };
-  const cut: Move = { kind: "cut along a singular leaf", junction: "v0" };
+  // The cut from the fixed singularity (the shortest orbit).
+  const cutFrom = (session: Session): Move => ({
+    kind: "cut along a singular leaf",
+    junction: (polygonSingularities(session.current.surface)[0] as Singularity).junction.name,
+  });
 
   it("draws the states after a cut without a model for the new G₀ as ribbon graphs (surface not marked closed)", () => {
-    expect(drawsEveryMoment(atEnd(), cut).steps).toHaveLength(3); // (cut in one go)
+    const session = atEnd();
+    expect(drawsEveryMoment(session, cutFrom(session)).steps).toHaveLength(3); // (cut in one go)
   });
 
   it("shows the cut branch by branch in the compact polygon after marking the surface as closed", () => {
     const session = atEnd();
     session.apply({ kind: "mark as closed" });
-    expect(drawsEveryMoment(session, cut).steps.length).toBeGreaterThan(3);
+    expect(drawsEveryMoment(session, cutFrom(session)).steps.length).toBeGreaterThan(3);
   });
 });

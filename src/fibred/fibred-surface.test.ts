@@ -5,7 +5,8 @@ import { EdgePath } from "../graph/edge-path";
 import { nameTable, parseEdgePath } from "../graph/path-parser";
 import { RibbonGraph } from "../graph/ribbon-graph";
 import { FibredSurface, isCyclicInterval } from "./fibred-surface";
-import { EDGE_NAMES, firstUnusedName, leastUsedColor } from "./names-and-colors";
+import { EDGE_NAMES, firstUnusedName } from "../graph/names";
+import { leastUsedColor } from "./names-and-colors";
 
 const torus = () => FibredSurface.fromText([["a", "b", "A", "B"]], "a -> a b, b -> b a b");
 const edge = (fs: FibredSurface, name: string) => fs.graph.edges.find((e) => e.name === name)!;
@@ -45,8 +46,9 @@ describe("adding and removing strips and junctions", () => {
   it("uses the next free names and least used colours", () => {
     const fs = torus();
     const v = fs.graph.vertices[0]!;
+    expect(v.name).toBe("v");
     const w = fs.addJunction();
-    expect(w.name).toBe("v");
+    expect(w.name).toBe("w");
     const c = fs.addStrip(v, w);
     expect(c.name).toBe("c");
     expect(c.color.equals(edge(fs, "a").color)).toBe(false);

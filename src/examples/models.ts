@@ -19,7 +19,7 @@
 import { CombinatorialMap } from "../graph/combinatorial-map";
 import { EdgePath } from "../graph/edge-path";
 import { fromBoundaryWords, fromStars } from "../graph/from-boundary-words";
-import { invertName, isForwardName, nameKey } from "../graph/names";
+import { EDGE_NAMES, firstUnusedName, invertName, isForwardName, nameKey } from "../graph/names";
 import type { Edge, OrientedEdge, RibbonGraph, Vertex } from "../graph/ribbon-graph";
 import { FibredSurface } from "../fibred/fibred-surface";
 import { IDENTITY_NAME } from "../fibred/map-editing";
@@ -139,39 +139,62 @@ interface PolygonCells {
   readonly wall: string | undefined;
 }
 
-function polygonCells(model: PolygonModel): PolygonCells {
+/** How the edges of G₀ that the model itself doesn't name are named. */
+interface DefaultNaming {
+  /** Names the chords may not take (the new names of the sides). */
+  readonly reserved?: Iterable<string>;
+  /** The names as before session format 4 (`FibredSurface.legacyDefaultNames`). */
+  readonly legacy?: boolean;
+}
+
+/**
+ * The cells and the names of their exits. The chords take the next names of {@link EDGE_NAMES} after the sides, in the
+ * order they appear, the wall candidate (the first chord from the vertex class to an interior point) last, so that the
+ * open and the closed model of a polygon name their chords alike (port note 25). Before session format 4 they were
+ * s_1, s_2, … in the order they appear.
+ */
+function polygonCells(model: PolygonModel, naming: DefaultNaming = {}): PolygonCells {
   if ((model.points ?? []).length === 0)
     return { cells: [model.word.map((_, i) => i)], names: [[...model.word]], wall: undefined };
   const { vertices, points } = polygonCorners(model);
   const n = vertices.length;
   const { cells } = cellDecomposition(vertices, points);
-  const used = new Set(model.word.map((x) => x.toLowerCase()));
-  const chordNames = new Map<string, string>(); // "a-b" (smaller corner first) → forward name
-  // Chords are named s_1, s_2, … (shown as s₁, s₂; not with letters, which the strips of G use).
-  const chordName = () => {
-    let k = 1;
-    while (used.has(`s_${k}`)) k++;
-    return `s_${k}`;
-  };
-  const names = cells.map((cell) =>
+  // The sides of each cell; a chord is keyed "a-b" (smaller corner first).
+  const sides = cells.map((cell, k) =>
     cell.map((a, i) => {
       const b = cell[(i + 1) % cell.length] as number;
-      if (a < n && b === (a + 1) % n) return model.word[a] as string;
-      const key = a < b ? `${a}-${b}` : `${b}-${a}`;
-      const known = chordNames.get(key);
-      if (known !== undefined) return invertName(known);
-      const name = chordName();
-      used.add(name);
-      chordNames.set(key, name);
+      return { a, b, k, i, key: a < b ? `${a}-${b}` : `${b}-${a}`, onPolygon: a < n && b === (a + 1) % n };
+    }),
+  );
+  const wall = sides.flat().find(({ a, b }) => a < n !== b < n);
+  if (model.closed && wall === undefined) throw new Error("No chord joins the vertex to an interior point");
+  // The chords in the order they appear; each leaves the cell where it appears first by its forward name.
+  const chords = [...new Set(sides.flat().flatMap((x) => (x.onPolygon ? [] : [x.key])))];
+  if (!naming.legacy && wall !== undefined) chords.push(...chords.splice(chords.indexOf(wall.key), 1));
+  const reserved = naming.legacy ? [] : (naming.reserved ?? []);
+  const used = new Set([...model.word, ...reserved].map((x) => x.toLowerCase()));
+  const chordNames = new Map<string, string>();
+  for (const key of chords) {
+    let name: string;
+    if (naming.legacy) {
+      let k = 1;
+      while (used.has(`s_${k}`)) k++;
+      name = `s_${k}`;
+    } else name = firstUnusedName(EDGE_NAMES, used);
+    used.add(name);
+    chordNames.set(key, name);
+  }
+  const seen = new Set<string>();
+  const names = sides.map((cell) =>
+    cell.map((side) => {
+      if (side.onPolygon) return model.word[side.a] as string;
+      const name = chordNames.get(side.key) as string;
+      if (seen.has(side.key)) return invertName(name);
+      seen.add(side.key);
       return name;
     }),
   );
-  if (!model.closed) return { cells, names, wall: undefined };
-  // The first chord from the vertex class to an interior point.
-  const wall = cells
-    .flatMap((cell, k) => cell.map((a, i) => ({ a, b: cell[(i + 1) % cell.length] as number, k, i })))
-    .find(({ a, b }) => a < n !== b < n);
-  if (wall === undefined) throw new Error("No chord joins the vertex to an interior point");
+  if (!model.closed || wall === undefined) return { cells, names, wall: undefined };
   return { cells, names, wall: (names[wall.k] as string[])[wall.i]?.toLowerCase() };
 }
 
@@ -181,17 +204,17 @@ function isWall(cells: PolygonCells, name: string): boolean {
 }
 
 /** The oriented edge names at each vertex of G₀ (before renaming). */
-function stars(model: SurfaceModel): string[][] | undefined {
+function stars(model: SurfaceModel, naming: DefaultNaming): string[][] | undefined {
   switch (model.kind) {
     case "polygon":
-      return polygonCells(model).names.map((names) => [...names]);
+      return polygonCells(model, naming).names.map((names) => [...names]);
     case "plane": {
       const n = model.points.length;
-      const loop = (i: number) => lassoName(i);
+      const loop = (i: number) => lassoName(i, naming.legacy);
       if (model.spine === "rose")
         return [Array.from({ length: n }, (_, i) => [loop(i), invertName(loop(i))]).flat()];
       // comb: base point i has the path edges t(i−1) (to the left), t(i) (to the right) and its lasso below it.
-      const path = (i: number) => `t${i + 1}`;
+      const path = (i: number) => (naming.legacy ? `t${i + 1}` : `t_${i + 1}`);
       return Array.from({ length: n }, (_, i) => [
         ...(i > 0 ? [invertName(path(i - 1))] : []),
         loop(i),
@@ -204,22 +227,27 @@ function stars(model: SurfaceModel): string[][] | undefined {
   }
 }
 
-/** The name of the lasso around the i-th point of a plane model: a, b, c, … */
-function lassoName(i: number): string {
-  return i < 26 ? String.fromCharCode(97 + i) : `l${i + 1}`;
+/** The name of the lasso around the i-th point of a plane model: a, b, c, d, x, … ({@link EDGE_NAMES}). */
+function lassoName(i: number, legacy = false): string {
+  if (legacy) return i < 26 ? String.fromCharCode(97 + i) : `l${i + 1}`;
+  return EDGE_NAMES[i] as string;
 }
 
-/** G₀ of a model, with the edges renamed and reoriented as given. */
-export function spineOf(model: SurfaceModel, naming: SpineNames = {}): Spine {
-  const starLists = stars(model);
+/**
+ * G₀ of a model, with the edges renamed and reoriented as given. `legacy`: the default names as before session format
+ * 4 (port note 25).
+ */
+export function spineOf(model: SurfaceModel, naming: SpineNames = {}, legacy = false): Spine {
+  const starLists = stars(model, { reserved: Object.values(naming.names ?? {}), legacy });
   const graph =
     starLists === undefined ? fromBoundaryWords((model as RibbonModel).boundaryWords) : fromStars(starLists);
+  if (legacy) legacyVertexNames(graph);
   const byName = new Map(graph.orientedEdges.map((e) => [e.name, e]));
   const sides =
     model.kind === "polygon" ? model.word.map((name) => byName.get(name) as OrientedEdge) : undefined;
   let cells: SpineCell[] | undefined;
   if (model.kind === "polygon") {
-    const decomposition = polygonCells(model);
+    const decomposition = polygonCells(model, { reserved: Object.values(naming.names ?? {}), legacy });
     cells = decomposition.cells.map((corners, k) => ({
       vertex: graph.vertices[k] as Vertex,
       corners,
@@ -234,7 +262,7 @@ export function spineOf(model: SurfaceModel, naming: SpineNames = {}): Spine {
     model.kind === "plane"
       ? // With the star "… a A …", the inside of the petal is the boundary word "A", on the right of Ā: a runs
         // counterclockwise around its point.
-        model.points.map((_, i) => byName.get(lassoName(i)) as OrientedEdge)
+        model.points.map((_, i) => byName.get(lassoName(i, legacy)) as OrientedEdge)
       : undefined;
   for (const name of naming.reversed ?? []) {
     const e = byName.get(name);
@@ -385,10 +413,15 @@ export function contractedWord(graph: RibbonGraph): { word: string[]; tree: Set<
 
 /**
  * The fibred surface G = G₀ with μ = the identity (a copy of G₀ mapping onto it), g = the identity, and a peripheral
- * lasso for each chosen puncture. The map (and its name) is then set with `updateMap`.
+ * lasso for each chosen puncture. The map (and its name) is then set with `updateMap`. `legacy`: the default names as
+ * before session format 4 (`FibredSurface.legacyDefaultNames`).
  */
-export function initialFibredSurface(model: SurfaceModel, options: FibredSurfaceOptions = {}): FibredSurface {
-  const spine = spineOf(model, options);
+export function initialFibredSurface(
+  model: SurfaceModel,
+  options: FibredSurfaceOptions = {},
+  legacy = false,
+): FibredSurface {
+  const spine = spineOf(model, options, legacy);
   const g0 = spine.graph;
   let graph: RibbonGraph;
   let mu: CombinatorialMap;
@@ -400,6 +433,7 @@ export function initialFibredSurface(model: SurfaceModel, options: FibredSurface
     for (const e of g0.edges) mu.setImage(copy.orient(e.forward), EdgePath.of(e.forward));
   } else {
     graph = fromBoundaryWords(options.graph);
+    if (legacy) legacyVertexNames(graph);
     const { word, tree } = contractedWord(graph);
     if (
       g0.vertexCount !== 1 ||
@@ -429,6 +463,7 @@ export function initialFibredSurface(model: SurfaceModel, options: FibredSurface
   const fs = new FibredSurface({ graph, g: CombinatorialMap.identity(graph), mu });
   fs.mapName = IDENTITY_NAME;
   fs.isClosed = isClosedModel(model);
+  fs.legacyDefaultNames = legacy;
   for (const name of options.peripheralStrips ?? []) {
     const e = graph.edges.find((x) => x.name === name);
     if (e === undefined) throw new Error(`G₀ has no strip ${name}`);
@@ -448,14 +483,23 @@ export function initialFibredSurface(model: SurfaceModel, options: FibredSurface
     throw new Error("A closed surface has no punctures to make peripheral");
   if (chosen.length >= words.length && chosen.length > 0 && words.length > 1)
     throw new Error("At least one puncture must stay non-peripheral");
-  PUNCTURE_NAMES.slice(0, chosen.length).forEach((loopName, k) =>
-    addPeripheralLasso(fs, words[chosen[k] as number] as EdgePath, loopName),
+  chosen.forEach((i, k) =>
+    addPeripheralLasso(
+      fs,
+      words[i] as EdgePath,
+      legacy ? (LEGACY_PUNCTURE_NAMES[k] as string) : fs.nextPeripheralEdgeName(),
+    ),
   );
   return fs;
 }
 
-/** Names for the peripheral loops, as in C#: α, β, γ, … */
-const PUNCTURE_NAMES = [..."αβγδεζηθικλ", ...Array.from({ length: 100 }, (_, i) => `ρ${i + 1}`)];
+/** The names of the peripheral loops before session format 4, as in C#: α, β, γ, … */
+const LEGACY_PUNCTURE_NAMES = [..."αβγδεζηθικλ", ...Array.from({ length: 100 }, (_, i) => `ρ${i + 1}`)];
+
+/** The vertex names before session format 4: v0, v1, … by id (port note 25). */
+function legacyVertexNames(graph: RibbonGraph): void {
+  for (const v of graph.vertices) v.name = `v${v.id}`;
+}
 
 /**
  * Adds a peripheral lasso around the puncture whose boundary word in G₀ is `puncture` (the C# `SpineForSurface`):
@@ -474,8 +518,9 @@ function addPeripheralLasso(fs: FibredSurface, puncture: EdgePath, loopName: str
   const candidates = face.letters.filter(
     (y) => !onFace.has(y.reversed) && !fs.peripheral.has(y.edge) && !isStem(fs, y.edge),
   );
-  // Prefer strips named with a digit (the C# rule: sides that were split for extra punctures).
-  const y = candidates.find((x) => /\d$/.test(x.edge.name)) ?? candidates[0];
+  // Before session format 4: prefer strips named with a digit (the C# rule for sides split for extra punctures).
+  const y =
+    (fs.legacyDefaultNames ? candidates.find((x) => /\d$/.test(x.edge.name)) : undefined) ?? candidates[0];
   if (y === undefined)
     throw new Error(`No strip next to the puncture ${puncture} can be replaced by a lasso`);
   const k = face.letters.indexOf(y);
@@ -484,15 +529,25 @@ function addPeripheralLasso(fs: FibredSurface, puncture: EdgePath, loopName: str
 
   const e = y.reversed;
   const c = e.source;
-  // The stem takes e's place in the cyclic order at c: before the next end there that isn't ē. e is removed first,
-  // so that the stem can reuse the name (as in C#, where the removed side's strip was never created).
+  // The stem takes e's place in the cyclic order at c: before the next end there that isn't ē. It gets a name that no
+  // edge of G₀ has (μ of the stem is trivial); before session format 4 e was removed first, so that the stem could
+  // reuse its name (as in C#).
   const next = fs.graph
     .starFrom(e)
     .slice(1)
     .find((x) => x !== y);
+  const stemName = fs.legacyDefaultNames
+    ? undefined
+    : firstUnusedName(
+        EDGE_NAMES,
+        new Set([...fs.graph.edges, ...fs.spine0.edges].map((x) => nameKey(x.name))),
+      );
   fs.removeStrip(e.edge);
   const w = fs.addJunction();
-  const stem = fs.addStrip(c, w, { atSource: next === undefined ? { at: "end" } : { before: next } });
+  const stem = fs.addStrip(c, w, {
+    ...(stemName && { name: stemName }),
+    atSource: next === undefined ? { at: "end" } : { before: next },
+  });
   const loop = fs.addStrip(w, w, { name: freeName(fs, loopName) });
   for (const x of [stem, loop]) fs.g.setImage(x.forward, EdgePath.of(x.forward));
   fs.g.setVertexImage(w, w);

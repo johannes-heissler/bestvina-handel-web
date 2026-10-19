@@ -1,4 +1,4 @@
-# 25 — Cutting again: an orbit of artificial punctures
+# 26 — Cutting again: an orbit of artificial punctures
 
 **Source:** not in the C# code. The thesis mentions it at the very end of § "Closed surfaces and cutting" without
 working it out (port note 15, former Q3).

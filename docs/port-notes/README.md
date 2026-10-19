@@ -42,8 +42,9 @@ in `docs/`.
 | 22  | [Interior punctures, filled points, cutting in the polygon](22-interior-punctures.md) | thesis § Closed surfaces (not in C#)                                             | ✍️   | phases 1–3     | ✅    |
 | 23  | [Showing a state in another model](23-switching-models.md)                            | – (new)                                                                          | ✍️   |                |       |
 | 24  | [Marking a once-punctured surface as closed](24-marking-closed.md)                    | – (new)                                                                          | ✅   | ✅             | ✅    |
-| 25  | [Cutting again: an orbit of artificial punctures](25-cutting-again.md)                | thesis § Closed surfaces (remark at the end)                                     | ✍️   |                |       |
-| 26+ | Point pushes, 3D                                                                      | `PointPushes.cs`, `GeometricObjects_Visualization/*`                             |      |                |       |
+| 25  | [Default names](25-default-names.md)                                                  | – (new; replaces the C# names v0, e0, b@1)                                       | 🔍   | ✅             | ✅    |
+| 26  | [Cutting again: an orbit of artificial punctures](26-cutting-again.md)                | thesis § Closed surfaces (remark at the end)                                     | ✍️   |                |       |
+| 27+ | Point pushes, 3D                                                                      | `PointPushes.cs`, `GeometricObjects_Visualization/*`                             |      |                |       |
 | 3   | Curves, points, geodesics                                                             | `GeometricObjects_Abstract/*`                                                    |      |                |       |
 | 4   | Surfaces, homeomorphisms                                                              | `GeometricObjects_Abstract/*`                                                    |      |                |       |
 | …   | Embedding layer, suggestion system, examples, rendering, UI                           |                                                                                  |      |                |       |

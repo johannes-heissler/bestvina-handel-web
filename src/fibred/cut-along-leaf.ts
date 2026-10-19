@@ -15,6 +15,7 @@
  */
 import { CombinatorialMap } from "../graph/combinatorial-map";
 import { EdgePath } from "../graph/edge-path";
+import { firstUnusedName, letterIndex, VERTEX_NAMES } from "../graph/names";
 import { type Edge, type OrientedEdge, RibbonGraph, type Vertex } from "../graph/ribbon-graph";
 import { imageProng, type Prong, switchArc } from "./singular-leaves";
 import { strands as computeStrands } from "./strands";
@@ -132,6 +133,8 @@ export interface CutTrack {
   readonly isOnSlit: (e: OrientedEdge) => boolean;
   /** The side of its switch that each branch end is on (to the right: real branches, or the part after a subdivision). */
   readonly side: ReadonlyMap<OrientedEdge, "right" | "left">;
+  /** The default names of the surface that was cut (`FibredSurface.legacyDefaultNames`). */
+  readonly legacyDefaultNames: boolean;
 }
 
 /** An end of a piece on an arc, with its height interval on the arc. */
@@ -218,6 +221,13 @@ export function cut(tt: TrainTrack, slits: readonly Slit[]): CutTrack {
   // 3. Arcs with their piece ends, then split into switches.
   const graph = new RibbonGraph();
   const arcs: { name: string; ends: ArcEnd[] }[] = [];
+  // The arcs of the subdivisions get new names that no junction of G and no switch has (port note 25).
+  const used = new Set([...tt.junctionOf.values(), ...tt.graph.vertices].map((v) => v.name));
+  const subdivisionName = () => {
+    const name = firstUnusedName(VERTEX_NAMES, used);
+    used.add(name);
+    return name;
+  };
   for (const s of tt.graph.vertices) {
     const arc = switchArc(tt, s);
     const ends: ArcEnd[] = [];
@@ -247,7 +257,7 @@ export function cut(tt: TrainTrack, slits: readonly Slit[]): CutTrack {
         ends.push({ piece, leaves: true, side: "right", low: piece.bottom, high: piece.top });
       for (const piece of pieceDrafts.get(key(e, k - 1)) as PieceDraft[])
         ends.push({ piece, leaves: false, side: "left", low: piece.bottom, high: piece.top });
-      arcs.push({ name: `${e.name}@${k}`, ends });
+      arcs.push({ name: tt.legacyDefaultNames ? `${e.name}@${k}` : subdivisionName(), ends });
     }
 
   const switchOfEnd = new Map<PieceDraft, { start?: Vertex; end?: Vertex }>();
@@ -269,7 +279,9 @@ export function cut(tt: TrainTrack, slits: readonly Slit[]): CutTrack {
       const inside = arc.ends.filter(
         (x) => x.low >= lo - TOLERANCE * width && x.high <= hi + TOLERANCE * width,
       );
-      const v = graph.addVertex(bounds.length > 2 ? `${arc.name}_${j}` : arc.name);
+      // The parts of a split arc: v_a_a, v_a_b, … (before session format 4: v_0_0, v_0_1, …).
+      const part = tt.legacyDefaultNames ? String(j) : letterIndex(j);
+      const v = graph.addVertex(bounds.length > 2 ? `${arc.name}_${part}` : arc.name);
       starOf.set(v, inside);
       for (const x of inside) {
         const entry = switchOfEnd.get(x.piece) ?? {};
@@ -401,5 +413,15 @@ export function cut(tt: TrainTrack, slits: readonly Slit[]): CutTrack {
     const w = widthOf(piece.branch);
     return h > TOLERANCE * w && h < w * (1 - TOLERANCE);
   };
-  return { graph, gPrime, kind, widths: newWidths, lengths: newLengths, pieces, isOnSlit, side };
+  return {
+    graph,
+    gPrime,
+    kind,
+    widths: newWidths,
+    lengths: newLengths,
+    pieces,
+    isOnSlit,
+    side,
+    legacyDefaultNames: tt.legacyDefaultNames,
+  };
 }

@@ -21,7 +21,7 @@ const pointOn = (port: Port, u: number) => port.right.add(port.left.sub(port.rig
 const withPoints = (g: number, p: number) =>
   gallery(g, p).filter((e) => e.model.kind === "polygon" && (e.model.points ?? []).length > 0);
 
-/** The closed octagon with one puncture in the middle: G₀ has the cells a b A s_2 D and B c d C S_2 (s_1 is the wall). */
+/** The closed octagon with one puncture in the middle: G₀ has the cells a b A x D and B c d C X (y is the wall). */
 const octagon: PolygonModel = {
   kind: "polygon",
   name: "",
@@ -117,10 +117,16 @@ describe("polygons with interior punctures", () => {
           .map((x) => x.name)
           .join(" "),
       ),
-    ).toEqual(["a b A s_2 D", "B c d C S_2"]);
-    // The wall x, seen from both cells.
+    ).toEqual(["a b A x D", "B c d C X"]);
+    // The wall, seen from both cells; it is named last (y), so the chord that stays is x.
     expect(spine.cells?.flatMap((c) => c.exits).filter((x) => x === undefined)).toHaveLength(2);
-    expect(spine.graph.edges.map((e) => e.name)).not.toContain("s_1");
+    expect(spine.graph.edges.map((e) => e.name)).not.toContain("y");
+  });
+
+  it("labels each chord once with its edge of G₀, and not the wall (port note 25)", () => {
+    const chords = chartOf(octagon).decorations.flatMap((d) => (d.kind === "chord" ? [d] : []));
+    expect(chords.filter((d) => d.wall).map((d) => d.label)).toEqual([undefined]);
+    expect(chords.filter((d) => !d.wall).map((d) => d.label)).toEqual(["x"]);
   });
 
   it("have charts with a region per cell, chords glued by the identity, and the wall without a port", () => {

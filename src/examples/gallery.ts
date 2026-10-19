@@ -5,6 +5,7 @@
  *
  * @module
  */
+import { EDGE_NAMES } from "../graph/names";
 import {
   polygonCorners,
   topology,
@@ -36,8 +37,8 @@ export const TWICE_PUNCTURED_TORUS: Required<GalleryEntry> = {
   naming: { reversed: ["b"] },
 };
 
-/** Side labels in order of use. */
-const LABELS = "abcdefghijkmnopqrstuvwxyz".split("");
+/** Side labels in order of use: the edge names (a b c d x y z u h …, never e, f, g; port note 25). */
+const LABELS = EDGE_NAMES;
 
 /** Builds a word from pairs given as "x" (the pair x … X) with a function that places them. */
 function upper(label: string): string {

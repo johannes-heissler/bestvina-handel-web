@@ -17,7 +17,7 @@
  */
 import { Color } from "../math/color";
 import { EdgePath } from "./edge-path";
-import { invertName } from "./names";
+import { EDGE_NAMES, firstUnusedName, invertName, nameKey, VERTEX_NAMES } from "./names";
 
 /** A vertex (junction). Its star is stored in the graph. */
 export class Vertex {
@@ -303,16 +303,21 @@ export class RibbonGraph {
 
   // ─── Changes ──────────────────────────────────────────────────────────────────────────────────
 
+  /** Adds a vertex, by default with the first unused name of {@link VERTEX_NAMES}. */
   addVertex(name?: string, color: Color = Color.BLACK): Vertex {
     const id = this.nextVertexId++;
-    const v = new Vertex(id, name ?? `v${id}`, color);
+    const v = new Vertex(
+      id,
+      name ?? firstUnusedName(VERTEX_NAMES, new Set(this.vertices.map((w) => w.name))),
+      color,
+    );
     this.stars.set(v, []);
     return v;
   }
 
   /**
-   * Adds an edge from `source` to `target`. `atSource` / `atTarget` say where its two ends go in the
-   * cyclic orders (default: at the end).
+   * Adds an edge from `source` to `target`, by default with the first unused name of {@link EDGE_NAMES}.
+   * `atSource` / `atTarget` say where its two ends go in the cyclic orders (default: at the end).
    */
   addEdge(
     source: Vertex,
@@ -327,7 +332,8 @@ export class RibbonGraph {
     this.assertVertex(source);
     this.assertVertex(target);
     const id = this.nextEdgeId++;
-    const edge = new Edge(id, options.name ?? `e${id}`, options.color ?? Color.BLACK, source, target);
+    const name = options.name ?? firstUnusedName(EDGE_NAMES, new Set(this.edges.map((e) => nameKey(e.name))));
+    const edge = new Edge(id, name, options.color ?? Color.BLACK, source, target);
     this.edgeSet.add(edge);
     this.insertIntoStar(edge.forward, options.atSource ?? AT_END);
     this.insertIntoStar(edge.backward, options.atTarget ?? AT_END);

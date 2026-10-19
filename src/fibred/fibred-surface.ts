@@ -9,7 +9,7 @@
  *
  * @module
  */
-import { nameKey } from "../graph/names";
+import { EDGE_NAMES, firstUnusedName, nameKey, PERIPHERAL_EDGE_NAMES, VERTEX_NAMES } from "../graph/names";
 import type { Color } from "../math/color";
 import { CombinatorialMap } from "../graph/combinatorial-map";
 import { EdgePath } from "../graph/edge-path";
@@ -19,12 +19,10 @@ import type { Edge, GraphCopy, RibbonGraph, StarPosition, Vertex } from "../grap
 import { firstDuplicate } from "../util/iter";
 import {
   EDGE_COLORS,
-  EDGE_NAMES,
-  firstUnusedName,
-  PERIPHERAL_EDGE_NAMES,
+  LEGACY_EDGE_NAMES,
+  LEGACY_VERTEX_NAMES,
   leastUsedColor,
   VERTEX_COLORS,
-  VERTEX_NAMES,
 } from "./names-and-colors";
 
 /** The parts a {@link FibredSurface} is made of. */
@@ -76,6 +74,13 @@ export class FibredSurface {
    * ordinary names, and unchanged circles get new names too. Set when replaying older saved sessions.
    */
   legacyPeripheralNames = false;
+  /**
+   * The default names as before session format 4 (port note 25): v0, v1, … for the junctions of G₀, `b@1` for the
+   * switches that subdivide a branch when cutting along a leaf, v_0, v_1, … for the switches of τ, ε1, ε2, … for its
+   * infinitesimal branches, va, vb, … for the corners of Q, and e1, v1, … after the lists. Set when replaying older
+   * saved sessions.
+   */
+  legacyDefaultNames = false;
   /**
    * The reduction curves of the reductions so far, as cyclically reduced closed paths in G₀. After a reduction, G is a
    * spine of a subsurface of the original surface (μ still describes its embedding), and μ maps each boundary word of
@@ -144,6 +149,7 @@ export class FibredSurface {
     result.isClosed = this.isClosed;
     result.legacyNames = this.legacyNames;
     result.legacyPeripheralNames = this.legacyPeripheralNames;
+    result.legacyDefaultNames = this.legacyDefaultNames;
     result.reductionCurves.push(...this.reductionCurves);
     result.onError = this.onError;
     return { copy: result, correspondence: graphCopy };
@@ -200,17 +206,24 @@ export class FibredSurface {
   }
 
   nextEdgeName(): string {
-    return firstUnusedName(EDGE_NAMES, new Set(this.graph.edges.map((e) => e.name.toLowerCase())));
+    return firstUnusedName(this.edgeNames(), new Set(this.graph.edges.map((e) => e.name.toLowerCase())));
   }
 
   /** The next free name for a peripheral strip (a Greek letter, see {@link PERIPHERAL_EDGE_NAMES}). */
   nextPeripheralEdgeName(): string {
     const used = new Set(this.graph.edges.map((e) => e.name.toLowerCase()));
-    return firstUnusedName(this.legacyPeripheralNames ? EDGE_NAMES : PERIPHERAL_EDGE_NAMES, used);
+    return firstUnusedName(this.legacyPeripheralNames ? this.edgeNames() : PERIPHERAL_EDGE_NAMES, used);
   }
 
   nextVertexName(): string {
-    return firstUnusedName(VERTEX_NAMES, new Set(this.graph.vertices.map((v) => v.name)));
+    return firstUnusedName(
+      this.legacyDefaultNames ? LEGACY_VERTEX_NAMES : VERTEX_NAMES,
+      new Set(this.graph.vertices.map((v) => v.name)),
+    );
+  }
+
+  private edgeNames(): readonly string[] {
+    return this.legacyDefaultNames ? LEGACY_EDGE_NAMES : EDGE_NAMES;
   }
 
   // ─── Subgraphs ───────────────────────────────────────────────────────────────────────────────

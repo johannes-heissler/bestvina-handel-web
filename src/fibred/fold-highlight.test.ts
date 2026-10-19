@@ -26,9 +26,9 @@ describe("fold highlight", () => {
   it("highlights the folded ends and the turns folded after them", () => {
     const { surface, suggestion, option } = bh61AtAFoldOfOrder2();
     expect(suggestion.kind).toBe("fold");
-    expect(plainText(option!.label)).toBe("Fold a and initial segments of X at v0: order 2, 2 places");
+    expect(plainText(option!.label)).toBe("Fold a and initial segments of X at v: order 2, 2 places");
     const wedges = foldHighlight(surface, option!.move);
-    // The fold: all of a and the first 2 of the 7 letters of g(X), in their cyclic order at v0.
+    // The fold: all of a and the first 2 of the 7 letters of g(X), in their cyclic order at v.
     expect(wedges[0]).toEqual({ ends: ["X", "a"], kind: "fold", fractions: [2 / 7, 1] });
     // The inefficiencies of order 2 are the turn (x, c); folding X and a first maps it to a turn of order 1.
     expect(wedges.slice(1)).toEqual([{ ends: ["x", "c"], kind: "turn" }]);

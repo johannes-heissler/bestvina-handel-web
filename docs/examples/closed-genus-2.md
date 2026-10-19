@@ -5,6 +5,9 @@ The author's example `closedGenus2OneCusp` (`src/examples/maps.ts`): a pseudo-An
 (`src/fibred/moves/fill-puncture.ts`, port note 15), for **every** choice of the singularity q and of the deleted infinitesimal
 branch ε of its polygon. After filling in p, the algorithm (`nextStep` until nothing applies) runs again.
 
+The trace uses the default names from before port note 25: the junctions v0 … v4 are now v, w, p, q, r, and the
+infinitesimal branches ε1, ε2, … are now named per junction (v_α, v_β, …).
+
 ## Observations
 
 - **λ increases when p is filled in**, to between 4.48 and 13.18 depending on ε, and then **decreases through the algorithm**, in all

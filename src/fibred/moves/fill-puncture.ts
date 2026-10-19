@@ -83,6 +83,7 @@ export function replacePunctureBySingularity(
           peripheral: blownUp.surface.peripheral,
         });
   surface.onError = fs.onError;
+  surface.legacyDefaultNames = fs.legacyDefaultNames;
   const { x, forwardImage } = fillingWord(surface, epsilon);
   narrate(
     [
@@ -163,7 +164,11 @@ export function blowUpOrbit(fs: FibredSurface, q: Singularity, tt: TrainTrack = 
   const used = new Set(graph.vertices.map((v) => v.name));
   for (const s of tt.graph.vertices) {
     const junction = tt.junctionOf.get(s) as Vertex;
-    if (inQ.has(junction)) vertexOf.set(s, graph.addVertex(junctionPartName(junction, true, used), s.color));
+    if (inQ.has(junction))
+      vertexOf.set(
+        s,
+        graph.addVertex(junctionPartName(junction, true, used, fs.legacyDefaultNames), s.color),
+      );
   }
   const endVertex = (e: OrientedEdge) =>
     vertexOf.get(inQ.has(e.source) ? (tt.switchOf.get(e) as Vertex) : e.source) as Vertex;
@@ -216,6 +221,7 @@ export function blowUpOrbit(fs: FibredSurface, q: Singularity, tt: TrainTrack = 
 
   const surface = new FibredSurface({ graph, g: g0, peripheral: [...polygons.values()].flat() });
   surface.onError = fs.onError;
+  surface.legacyDefaultNames = fs.legacyDefaultNames;
   const invert = <K, V>(map: Map<K, V>) => new Map([...map].map(([k, v]) => [v, k] as const));
   return { surface, polygons, tt, origin: { vertices: invert(vertexOf), edges: invert(edgeOf) } };
 }
@@ -258,6 +264,7 @@ export function fillPuncture(
 
   const result = new FibredSurface({ graph: fs.graph, g: fs.g, ...(options.keepMarking && { mu: fs.mu }) });
   result.onError = fs.onError;
+  result.legacyDefaultNames = fs.legacyDefaultNames;
   return result;
 }
 
