@@ -15,14 +15,22 @@ Several agents may work on this repository at the same time. Before changing any
 
 - Run `git status`. If there are uncommitted changes you didn't make, another agent is working in this checkout:
   don't touch, stash, reset or commit them, and don't switch branches here.
-- Work in your own git worktree instead, in a folder next to this one (not inside it, so that editors list it as a
-  repository of its own): `git worktree add ../bestvina-handel-web-<task> -b <task> HEAD`. Claude Code: switch
-  into it with the worktree tool (by its path), not by creating one with the tool, which would put it under
-  `.claude/worktrees/`. Run `npm ci` there (`node_modules` is not shared). The C# project is at
+- Work in an **agent slot** instead: a git worktree next to this folder that is kept and reused, so that its
+  `node_modules` (not shared between worktrees) and its place in the editor stay. The slots are
+  `../bestvina-handel-web-a`, `../bestvina-handel-web-b`, … (`git worktree list` shows them). The C# project is at
   `../Surface-Mappings-Visualizer` from there too.
-- Commit on your branch and leave the merge into `main` to the author (or merge when asked). The new worktree
-  starts at the last commit, so it doesn't see the other agent's uncommitted work.
-- Remove the worktree when the branch is merged: `git worktree remove ../bestvina-handel-web-<task>`.
+- **Taking a slot.** A slot is free when `git status` there is clean and it is on a detached `main` (no branch
+  checked out). Then start your task from the current `main` (worktrees share the branches, no fetch needed):
+  `git switch -c <task> main`, and run `npm ci` if `package-lock.json` changed since that slot's last install. If
+  no slot is free, add the next one: `git worktree add --detach ../bestvina-handel-web-<letter> main`, then
+  `npm ci` there. Claude Code: switch into the slot with the worktree tool by its path; don't create one with the
+  tool, which would put it under `.claude/worktrees/`.
+- Commit on your branch and leave the merge into `main` to the author (or merge when asked). The branch starts at
+  the last commit of `main`, so it doesn't see another agent's uncommitted work.
+- **Handing the slot back.** Stop every dev server and watcher you started there, with its whole process tree
+  (on Windows `taskkill /T /F /PID <pid>`; stopping only the `npx` wrapper leaves `node` running and the files
+  locked). Then detach, so that the branch can be merged and deleted elsewhere: `git switch --detach main`, and
+  after the merge `git branch -d <task>`. Don't delete the slot.
 
 ## Process
 
