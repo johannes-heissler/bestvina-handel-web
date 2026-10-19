@@ -192,3 +192,92 @@ Decision: **implement both.** The full trace of the shortcut is in [docs/example
      per edge, and stops building an orbit as soon as it can't be a forest (30 s → milliseconds);
   3. the algorithm collapses all maximal invariant subforests at once when their union is still a periphery-friendly forest
      (197 steps → 18).
+
+## Update (2026-10-20): the length of L from the slits, without cutting
+
+The search above cut along every candidate length of every prong, up to 4 laps per prong: on the fourth cut of the
+"Point push with Dehn twists" chain (42 prongs, laps of 70 letters, cut tracks of 1100 switches) that took 383 s. First
+the prongs that need at least twice as many real branches as the best one were skipped (87 s). Now the length is
+decided from the slits themselves, and only the length found is cut, to confirm it.
+
+### The criterion (the author's idea, generalized)
+
+Notation: W is the boundary word of a puncture p ∈ P in τ, with p on the right of its letters; r₁, …, r_m are its real
+letters, cyclically. Exactly one turn of W is a cusp (two real branches leaving a switch on the same side, the author's
+a and b); every other turn r_i → r_{i+1} is smooth and runs along an infinitesimal letter ι_i, a side of the polygon of
+its junction. The distance of a slit traversing r_i from p is its height measured from p's side (y, or w − y when it runs
+against r_i). n_i is the traversal of r_i by any slit (L or a preimage) nearest to p.
+
+A smooth turn i → i+1 is **joined** if n_i and n_{i+1} are consecutive real branches of one slit, and **closed by Q** if
+they are the first branches of two slits starting at the two corners of ι_i (then ι_i is a side of a polygon of Q).
+
+**Lemma.** The boundary of p in the cut track is a circle attached at exactly one vertex iff (a) every r_i is traversed,
+and no n_i is the partial last branch of a slit, and (b) every smooth turn is joined or closed by Q. (For P: for every
+puncture.)
+
+**Two facts.** (1) At a smooth turn, p's corner is an end of the switch arc, and heights measured from it are preserved:
+a leaf at distance d < w(r_{i+1}) in r_i continues into r_{i+1} at distance d; a leaf entering r_{i+1} from another
+branch of the gate of r_i has distance ≥ w(r_i). (2) At the cusp, a leaf near p arrives at a height inside the other
+side of the arc, so it leaves p: a stretch along W ends at the cusp at the latest.
+
+**Proof, ⇐.** The piece next to p in r_i is the strip below n_i. At a joined turn the slit passes at the same distance d
+on both sides, so the arc is split at d, and the vertex below contains only the two pieces next to p (valence 2). At a
+turn closed by Q, the arcs are split at both prong corners (the cut splits an arc where a slit starts), and below each
+corner there are only the piece next to p and the piece of ι_i (Q is blown up): valence 2. At the cusp the valence is
+≥ 3: the slits are disjoint arcs with one end on Q and one inside, so cutting along them doesn't disconnect, and the
+ring isn't a component of its own.
+
+**Proof, ⇒.** If d_i < d_{i+1}, the slit of n_i would continue into r_{i+1} (fact 1) unless it ends at this arc (only L
+can). The arc is then not split at d_i but at d_{i+1}, and the vertex below contains the two pieces next to p and the
+piece of r_i between d_i and d_{i+1}: valence ≥ 3, a second attachment (the author's remark: if L ends in the middle of
+the lap, the vertex at its end has valence > 2). If d_i > d_{i+1}, the slit of n_{i+1} starts at this arc, and without a
+second slit from the other corner the corner vertex has valence ≥ 3. Equal distances on different slits are impossible
+(different prongs, different leaves, no saddle connections). If (a) fails, the arc where the slit ends inside r_i isn't
+split at its height, which again gives valence ≥ 3.
+
+**Not proven:**
+
+1. The cut is made on G (port note 29). At a junction that isn't blown up, a slit is a chord of the junction's disk, not
+   a split of a switch arc. The argument carries over because the two strip ends at p's corner are consecutive around
+   the disk, but this hasn't been checked against the code.
+2. A branch with p on both sides (two letters of W): the argument per letter should carry over; no example seen.
+3. Heights equal within the tolerance (10⁻⁹), and a preimage whose length ends exactly at a switch.
+
+**Compared with the author's formulation.** "Only a and b need checking" is right except for slits that start at a polygon
+of Q next to p (fact 1: a closer slit enters at the cusp or starts on W). "L ends with A or B" holds for the shortest L
+when one slit makes the ring, but not in general: with |P| > 1 every puncture's ring is made by a different slit (L
+or one of its preimages; f⁻ʲ[L] contains f⁻ʲ of L's ring), and the slit that decides the length varies. "Within ε of
+the boundary" has to mean the boundary of P, with ε the smallest width of the letters of W (real ones included); ε-closeness to any branch side, as before, also happens near the polygons of Q.
+
+### The implementation
+
+- `growingSlits(tt, prong, max)` traces L and each preimage prong once; the slits for every count are initial
+  segments of these traces, ended exactly as `traceProngToLength` ends them. `slitsForProng` uses it, so the
+  search and the cut use the same slits. A leaf that runs into a corner gives slits only up to there (before, the whole
+  prong was skipped).
+- `ringLetters(tt)` gives the real letters and the cusp of each puncture of P; `ringsCutOff(tt, rings, slits)` is the
+  lemma.
+- `cutOptions` finds the first count with `ringsCutOff` for each prong, then cuts once at each such count, in increasing
+  order and only below twice the best, and keeps those for which `attachedCircles` confirms it.
+- The ε-trace, `lap`, and the window of four laps are gone.
+
+**Time** of `cutOptions` on the chain of "Point push with Dehn twists" (same shortest lengths 22, 24, 32, 71):
+
+| cut | prongs | cutting every length | skipping prongs | the lemma |
+| --- | ------ | -------------------- | --------------- | --------- |
+| 1   | 6      | 0.6 s                | 0.5 s           | 0.1 s     |
+| 2   | 18     | 6.9 s                | 3.4 s           | 0.1 s     |
+| 3   | 30     | 61 s                 | 18.8 s          | 1.1 s     |
+| 4   | 42     | 383 s                | 87 s            | 7.5 s     |
+
+**Checked:** the lemma against the full cut at every length up to the success plus a lap, for every prong of every orbit
+offered: closed genus 2 (orbits p, q, w), the point push, and the chains of "Point push with Dehn twists" and of two
+other searched maps (three cuts each, |P| up to 6): 21 156 lengths, no difference. (In the orbit q of the point push the
+full cut fails at every length, "the image of a piece doesn't fit"; that is an older problem, and the orbit is skipped.)
+An earlier version that accepted any two slit starts at a turn had one false positive, where three slits start at p.
+
+### A shortcut for later
+
+When a polygon of Q lies at p, a second leaf L′ from the other corner (if it isn't a preimage of L) could be cut along
+together with L: f⁻¹ of the union of both slit systems lies in it, and L, L′ and ι enclose the ring after one lap in
+total. That would change the move (two prongs and two lengths) and needs its own note.

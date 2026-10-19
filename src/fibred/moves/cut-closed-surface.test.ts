@@ -2,22 +2,28 @@ import { describe, expect, it } from "vitest";
 import { closedGenus2OneCusp } from "../../examples/maps";
 import { Color } from "../../math/color";
 import { runAlgorithm } from "../algorithm";
-import { cut, slitsForProng } from "../cut-along-leaf";
+import { cut, growingSlits, type Slit, slitsForProng, traceProngThroughBranches } from "../cut-along-leaf";
 import { perronFrobenius } from "../perron-frobenius";
 import { trainTrack } from "../train-track";
 import {
+  attachedCircles,
   circleDefects,
   cutClosedSurface,
   cutOrbit,
   cutOptions,
   junctionPartName,
   prongsOfOrbit,
+  ringLetters,
+  ringsCutOff,
 } from "./cut-closed-surface";
 import { narrated } from "../narration";
-import { plainText } from "../suggestions";
+import { autopilot, DEFAULT_AUTOMATIC, plainText } from "../suggestions";
 import { inefficiencies } from "./inefficiency";
 import { valenceTwoJunctions } from "./valence";
 import { pullTight } from "./pull-tight";
+import type { FibredSurface } from "../fibred-surface";
+import { applyMove } from "../move";
+import { buildPreset, presetNamed } from "../../examples/presets";
 
 const growth = (fs: Parameters<typeof perronFrobenius>[0]) =>
   perronFrobenius(fs, { essentialOnly: false }).growth;
@@ -106,4 +112,71 @@ describe("closed surfaces: cutting along a singular leaf (the thesis's move)", (
       "pb2",
     ]);
   });
+});
+
+describe("the length of L from the slits, without cutting (port note 15, update 2026-10-20)", () => {
+  /** For every prong of the orbits and every count up to `max`: the criterion against the full cut. */
+  function compareWithCut(fs: FibredSurface, junctions: readonly string[], max: number): number {
+    const tt = trainTrack(fs);
+    const rings = ringLetters(tt);
+    let successes = 0;
+    for (const name of junctions) {
+      const junction = fs.graph.vertices.find((v) => v.name === name)!;
+      for (const prong of prongsOfOrbit(tt, junction)) {
+        const slitsFor = growingSlits(tt, prong, max);
+        const blownUp = new Set(cutOrbit(tt, prong));
+        for (let count = 1; count <= max; count++) {
+          const slits = slitsFor(count);
+          if (slits === undefined) break;
+          let truth: boolean;
+          try {
+            truth = attachedCircles(cut(tt, slits, blownUp), rings.length) !== undefined;
+          } catch {
+            continue;
+          }
+          expect(ringsCutOff(tt, rings, slits), `${name}, count ${count}`).toBe(truth);
+          if (truth) successes++;
+        }
+      }
+    }
+    return successes;
+  }
+
+  it("grows the slits from one trace, as tracing each length separately does", () => {
+    const original = closedGenus2OneCusp();
+    const tt = trainTrack(original);
+    const q = original.graph.vertices.find((v) => v.name === "q")!;
+    const show = (s: Slit) => [s.path.map(String), s.heights, s.partialLength];
+    for (const prong of prongsOfOrbit(tt, q)) {
+      const slitsFor = growingSlits(tt, prong, 60);
+      for (const count of [1, 2, 17, 18, 60]) {
+        const [L, ...preimages] = slitsFor(count)!;
+        expect(show(L!)).toEqual(show(traceProngThroughBranches(tt, prong, count)));
+        // The preimages, traced only as far as this length needs.
+        expect(preimages.map(show)).toEqual(growingSlits(tt, prong, count)(count)!.slice(1).map(show));
+      }
+    }
+  });
+
+  it("agrees with the cut at every length, in closed genus 2", () => {
+    expect(compareWithCut(closedGenus2OneCusp(), ["p", "q"], 60)).toBeGreaterThan(20);
+  });
+
+  it(
+    "agrees with the cut where two slits start at a polygon of Q next to p (closed by Q)",
+    { timeout: 60_000 },
+    () => {
+      const automatic = new Set([...DEFAULT_AUTOMATIC].filter((k) => k !== "closed surface"));
+      const start = buildPreset(presetNamed("Point push with Dehn twists")!);
+      const surface = applyMove(autopilot(start, { maxSteps: 1000, automatic }).surface.copy(), {
+        kind: "mark as closed",
+      });
+      // In the orbit of p, one prong's L starts right at the puncture; a preimage starting at the other corner of that
+      // side of the polygon closes the ring after 22 real branches, long before L could come around once more.
+      expect(compareWithCut(surface, ["p"], 60)).toBeGreaterThan(20);
+      const tt = trainTrack(surface);
+      const p = surface.graph.vertices.find((v) => v.name === "p")!;
+      expect(cutOptions(tt, prongsOfOrbit(tt, p)).map((o) => o.realBranches)).toContain(22);
+    },
+  );
 });

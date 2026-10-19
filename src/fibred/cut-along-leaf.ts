@@ -54,6 +54,18 @@ export function traceProngThroughBranches(tt: TrainTrack, prong: Prong, count: n
 }
 
 function traceProng(tt: TrainTrack, prong: Prong, until: { length?: number; count?: number }): Slit {
+  const { blocked, ...slit } = traceUntilCorner(tt, prong, until);
+  if (blocked !== undefined)
+    throw new Error(`The leaf runs into a corner at ${blocked} (a saddle connection)`);
+  return slit;
+}
+
+/** {@link traceProng}, but stopping where the leaf runs into a corner (`blocked`) instead of throwing. */
+function traceUntilCorner(
+  tt: TrainTrack,
+  prong: Prong,
+  until: { length?: number; count?: number },
+): Slit & { blocked?: Vertex } {
   const widths = tt.widths as ReadonlyMap<Edge, number>;
   const corner = switchArc(tt, prong.atSwitch).infinitesimal.find((i) => i.end === prong.below);
   if (corner === undefined) throw new Error("The prong's lower branch doesn't start at its switch");
@@ -63,7 +75,7 @@ function traceProng(tt: TrainTrack, prong: Prong, until: { length?: number; coun
   let [travelled, count] = [0, 0];
   for (let step = 0; step < 100_000; step++) {
     const interval = switchArc(tt, s)[side].find((i) => i.bottom < h && h < i.top);
-    if (interval === undefined) throw new Error(`The leaf runs into a corner at ${s} (a saddle connection)`);
+    if (interval === undefined) return { path, heights, blocked: s };
     const y = h - interval.bottom;
     path.push(interval.end);
     heights.push(y);
@@ -94,20 +106,62 @@ function traceProng(tt: TrainTrack, prong: Prong, until: { length?: number; coun
  * of the prong mapped to `prong` by fʲ.
  */
 export function slitsForProng(tt: TrainTrack, prong: Prong, count: number): Slit[] {
+  const slits = growingSlits(tt, prong, count)(count);
+  if (slits === undefined) throw new Error("A slit runs into a corner (a saddle connection)");
+  return slits;
+}
+
+/**
+ * The slits of {@link slitsForProng} for every count up to `maxCount`, from a single trace of each prong of the
+ * orbit: those for a smaller count are initial segments. `undefined` for the counts where a slit runs into a corner.
+ */
+export function growingSlits(
+  tt: TrainTrack,
+  prong: Prong,
+  maxCount: number,
+): (count: number) => Slit[] | undefined {
   const same = (p: Prong, q: Prong) => p.atSwitch === q.atSwitch && p.below === q.below;
   const orbit = [prong]; // prong, f(prong), f²(prong), …
   for (let p = imageProng(tt, prong); !same(p, prong) && orbit.length < 10_000; p = imageProng(tt, p))
     orbit.push(p);
-  const L = traceProngThroughBranches(tt, prong, count);
-  const length = L.path.reduce((sum, e) => sum + (tt.lengths.get(e.edge) as number), 0);
+  const L = traceUntilCorner(tt, prong, { count: maxCount });
+  // The index in L.path of the n-th real branch, and the length of L through it.
+  const ends: number[] = [];
+  const lengths: number[] = [];
+  let length = 0;
+  L.path.forEach((e, k) => {
+    length += tt.lengths.get(e.edge) as number;
+    if (tt.kind.get(e.edge) === "real") [ends[ends.length], lengths[lengths.length]] = [k, length];
+  });
   const P = orbit.length;
-  // f⁻ʲ(prong) = f^{P−j}(prong).
-  return [
-    L,
-    ...Array.from({ length: P - 1 }, (_, i) =>
-      traceProngToLength(tt, orbit[P - 1 - i] as Prong, length / tt.growth ** (i + 1)),
-    ),
-  ];
+  // f⁻ʲ(prong) = f^{P−j}(prong), traced as far as the longest L needs.
+  const scale = (j: number) => tt.growth ** j;
+  const preimages = Array.from({ length: P - 1 }, (_, i) =>
+    traceUntilCorner(tt, orbit[P - 1 - i] as Prong, { length: length / scale(i + 1) }),
+  );
+  return (count) => {
+    const end = ends[count - 1];
+    if (end === undefined) return undefined;
+    const prefix = { path: L.path.slice(0, end + 1), heights: L.heights.slice(0, end + 1) };
+    const ℓ = lengths[count - 1] as number;
+    const shorter = preimages.map((trace, i) => initialSegment(tt, trace, ℓ / scale(i + 1)));
+    return shorter.every((s) => s !== undefined) ? [prefix, ...shorter] : undefined;
+  };
+}
+
+/** The initial segment of length `length` of a traced leaf, as {@link traceProngToLength} ends it; else undefined. */
+function initialSegment(tt: TrainTrack, trace: Slit, length: number): Slit | undefined {
+  let travelled = 0;
+  for (let k = 0; k < trace.path.length; k++) {
+    const e = trace.path[k] as OrientedEdge;
+    if (tt.kind.get(e.edge) !== "real") continue;
+    const l = tt.lengths.get(e.edge) as number;
+    const prefix = { path: trace.path.slice(0, k + 1), heights: trace.heights.slice(0, k + 1) };
+    if (travelled + l > length + TOLERANCE * length) return { ...prefix, partialLength: length - travelled };
+    travelled += l;
+    if (near(travelled, length, length)) return prefix;
+  }
+  return undefined;
 }
 
 /** A piece of τ′: a horizontal strip of a (subdivided) branch of τ. */

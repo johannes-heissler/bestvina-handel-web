@@ -11,14 +11,7 @@ import { Color } from "../../math/color";
 import { EdgePath } from "../../graph/edge-path";
 import { letterIndex } from "../../graph/names";
 import type { Edge, OrientedEdge, Vertex } from "../../graph/ribbon-graph";
-import {
-  cut,
-  type CutTrack,
-  type Piece,
-  type Slit,
-  slitsForProng,
-  traceProngThroughBranches,
-} from "../cut-along-leaf";
+import { cut, type CutTrack, growingSlits, type Piece, type Slit, slitsForProng } from "../cut-along-leaf";
 import { FibredSurface } from "../fibred-surface";
 import { explain, keepingStates, narrate } from "../narration";
 import { type BranchPart, forgetInMarking, type Remarking } from "../remarking";
@@ -79,7 +72,8 @@ export function attachmentSwitch(ct: CutTrack, word: EdgePath): Vertex | undefin
 
 /** The step of removing the loops B (attached at their junctions), for the narration. */
 function removalText(loops: readonly Edge[]): Text {
-  const names = (f: (e: Edge) => TextPart): TextPart[] => loops.flatMap((e, i) => [...(i === 0 ? [] : [", "]), f(e)]);
+  const names = (f: (e: Edge) => TextPart): TextPart[] =>
+    loops.flatMap((e, i) => [...(i === 0 ? [] : [", "]), f(e)]);
   return loops.length === 1
     ? ["Remove the boundary loop ", ...names((e) => ({ strip: e.name })), " of p: this fills in p."]
     : [
@@ -219,67 +213,127 @@ export interface CutOption {
   readonly realBranches: number;
 }
 
+/** The boundary of a puncture of P in τ: its real letters (p on their right), and the turn at its one cusp. */
+export interface RingLetters {
+  readonly letters: readonly OrientedEdge[];
+  /** The index i of the cusp turn letters[i] → letters[i + 1] (cyclically). */
+  readonly cusp: number;
+}
+
+/** The {@link RingLetters} of the punctures of P (the boundary words of τ that aren't infinitesimal polygons). */
+export function ringLetters(tt: TrainTrack): RingLetters[] {
+  const real = (x: OrientedEdge) => tt.kind.get(x.edge) === "real";
+  return tt
+    .boundaryWords()
+    .filter((b) => !b.infinitesimal)
+    .map(({ word }) => {
+      const all = word.letters;
+      // A cusp is a turn between two real letters (with no infinitesimal letter between them).
+      const cuspAfter = all.findIndex((x, i) => real(x) && real(all[(i + 1) % all.length] as OrientedEdge));
+      const letters = all.filter(real);
+      return { letters, cusp: letters.indexOf(all[cuspAfter] as OrientedEdge) };
+    });
+}
+
+/** The traversal of a letter of a ring by a slit that is nearest to the puncture. */
+interface Traversal {
+  readonly slit: number;
+  /** Its index in the slit's path. */
+  readonly k: number;
+  readonly distance: number;
+  /** Whether the slit runs along the letter (else against it). */
+  readonly along: boolean;
+  /** Whether it is the last branch of a slit that ends inside it. */
+  readonly partial: boolean;
+}
+
+/**
+ * Whether cutting along `slits` makes the boundary of every puncture of P a circle attached at one switch (port note
+ * 15, update 2026-10-20), decided from the slits alone. For each real letter of the ring, take the traversal by a slit
+ * nearest to the puncture: it bounds the piece next to the puncture. Every letter must be traversed completely, and
+ * every turn except the cusp must be
+ * - joined: the nearest traversals of its two letters are consecutive real branches of one slit, or
+ * - closed by Q: they are the first branches of two slits starting at the two corners of the side of a polygon of Q
+ *   that lies between the letters.
+ * The cusp is then the only switch of the ring with valence > 2.
+ */
+export function ringsCutOff(tt: TrainTrack, rings: readonly RingLetters[], slits: readonly Slit[]): boolean {
+  const widths = tt.widths as ReadonlyMap<Edge, number>;
+  const occurrences = new Map<Edge, { ring: number; i: number; letter: OrientedEdge }[]>();
+  rings.forEach(({ letters }, ring) =>
+    letters.forEach((letter, i) => {
+      const list = occurrences.get(letter.edge) ?? [];
+      list.push({ ring, i, letter });
+      occurrences.set(letter.edge, list);
+    }),
+  );
+  const nearest = rings.map(({ letters }) =>
+    new Array<Traversal | undefined>(letters.length).fill(undefined),
+  );
+  slits.forEach((slit, s) =>
+    slit.path.forEach((x, k) => {
+      for (const { ring, i, letter } of occurrences.get(x.edge) ?? []) {
+        const y = slit.heights[k] as number;
+        const along = x === letter;
+        const distance = along ? y : (widths.get(x.edge) as number) - y;
+        const old = (nearest[ring] as (Traversal | undefined)[])[i];
+        if (old === undefined || distance < old.distance) {
+          const partial = slit.partialLength !== undefined && k === slit.path.length - 1;
+          (nearest[ring] as (Traversal | undefined)[])[i] = { slit: s, k, distance, along, partial };
+        }
+      }
+    }),
+  );
+  return rings.every(({ letters, cusp }, ring) => {
+    const ts = nearest[ring] as (Traversal | undefined)[];
+    if (ts.some((t) => t === undefined || t.partial)) return false;
+    const n = letters.length;
+    for (let i = 0; i < n; i++) {
+      if (i === cusp) continue;
+      const [t, u] = [ts[i] as Traversal, ts[(i + 1) % n] as Traversal];
+      const joined = t.slit === u.slit && t.along === u.along && u.k - t.k === (t.along ? 2 : -2);
+      const start = (x: Traversal) => ((slits[x.slit] as Slit).path[0] as OrientedEdge).source;
+      const closedByQ =
+        t.k === 0 &&
+        u.k === 0 &&
+        start(t) === (letters[i] as OrientedEdge).target &&
+        start(u) === (letters[(i + 1) % n] as OrientedEdge).source;
+      if (!joined && !closedByQ) return false;
+    }
+    return true;
+  });
+}
+
 /**
  * For each candidate prong, the shortest L that makes B a circle attached at one junction, sorted by that length.
  *
- * To avoid cutting for every length, each prong is traced once to find where it first comes within ε (the width of the
- * narrowest infinitesimal branch) of the boundary: from there it runs parallel to all of p's boundary (the thesis), so
- * a cut succeeds about one lap later. Cuts are tried from one lap before that point to three laps after it.
- *
- * Prongs that would need at least twice as many real branches as the best option found so far are skipped: the prongs
- * are tried in the order of their first approach, and each stops below twice the best length.
+ * The length is found without cutting: each prong of the orbit is traced once ({@link growingSlits}), and
+ * {@link ringsCutOff} is checked for L through 1, 2, … real branches. Only the length found is cut, to confirm it, and
+ * not for prongs that would need at least twice as many real branches as the best option.
  */
 export function cutOptions(tt: TrainTrack, candidates: readonly Prong[], maxRealBranches = 500): CutOption[] {
-  const widths = tt.widths as ReadonlyMap<Edge, number>;
-  const infinitesimal = tt.graph.edges.filter((e) => tt.kind.get(e) === "infinitesimal");
-  // ε, the width of the narrowest infinitesimal branch: once L is closer than ε to the boundary, it runs parallel to
-  // all of it (the thesis). At corners with wider infinitesimal branches, success can come a little earlier.
-  const ε = Math.min(...infinitesimal.map((e) => widths.get(e) as number));
-  const lap = tt
-    .boundaryWords()
-    .filter((b) => !b.infinitesimal)
-    .reduce((n, b) => n + b.word.length, 0);
   const punctures = punctureCount(tt);
-  const approaches = candidates.flatMap((prong) => {
-    let L;
-    try {
-      L = traceProngThroughBranches(tt, prong, maxRealBranches);
-    } catch {
-      return []; // the leaf runs into a singularity
+  const rings = ringLetters(tt);
+  const found = candidates.flatMap((prong) => {
+    const slitsFor = growingSlits(tt, prong, maxRealBranches);
+    for (let count = 1; count <= maxRealBranches; count++) {
+      const slits = slitsFor(count);
+      if (slits === undefined) return []; // a slit runs into a corner
+      if (ringsCutOff(tt, rings, slits)) return [{ prong, realBranches: count, slits }];
     }
-    let realIndex = 0;
-    let firstWithinε: number | undefined;
-    L.path.forEach((x, k) => {
-      if (tt.kind.get(x.edge) !== "real") return;
-      realIndex++;
-      const w = widths.get(x.edge) as number;
-      const y = L.heights[k] as number;
-      if (firstWithinε === undefined && Math.min(y, w - y) < ε) firstWithinε = realIndex;
-    });
-    return firstWithinε === undefined ? [] : [{ prong, firstWithinε }];
+    return [];
   });
   const options: CutOption[] = [];
-  let best = Infinity;
-  for (const { prong, firstWithinε } of approaches.sort((a, b) => a.firstWithinε - b.firstWithinε)) {
-    const from = Math.max(1, firstWithinε - lap);
-    const to = Math.min(maxRealBranches, firstWithinε + 3 * lap, 2 * best - 1);
-    if (from > to) continue;
-    const blownUp = new Set(cutOrbit(tt, prong));
-    for (let count = from; count <= to; count++) {
-      let ct: CutTrack;
-      try {
-        ct = cut(tt, slitsForProng(tt, prong, count), blownUp);
-      } catch {
-        continue;
-      }
-      if (attachedCircles(ct, punctures) !== undefined) {
-        options.push({ prong, realBranches: count });
-        best = Math.min(best, count);
-        break;
-      }
+  for (const { prong, realBranches, slits } of found.sort((a, b) => a.realBranches - b.realBranches)) {
+    if (options.length > 0 && realBranches >= 2 * (options[0] as CutOption).realBranches) break;
+    try {
+      if (attachedCircles(cut(tt, slits, new Set(cutOrbit(tt, prong))), punctures) !== undefined)
+        options.push({ prong, realBranches });
+    } catch {
+      // (the cut fails for this prong)
     }
   }
-  return options.sort((a, b) => a.realBranches - b.realBranches);
+  return options;
 }
 
 /** The junctions of the singularities in the orbit of the prong (where the preimage slits start): the new punctures Q. */
