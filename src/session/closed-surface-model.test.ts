@@ -5,7 +5,6 @@ import { modelOfSpine } from "../embedding/remark";
 import { withTightMarking } from "../embedding/image";
 import { type PolygonModel, spineOfGraph, type SurfaceModel } from "../examples/models";
 import { DEFAULT_AUTOMATIC, plainText, type Text } from "../fibred/suggestions";
-import { presetNamed } from "../examples/presets";
 import type { FibredSurface } from "../fibred/fibred-surface";
 import type { Move } from "../fibred/move";
 import { Session } from "./session";
@@ -126,27 +125,10 @@ describe("marking a once-punctured surface as closed", () => {
 describe("cutting again (port note 26)", () => {
   // A point push composed with Dehn twists, found by a search: after the first closed-surface move, both new punctures
   // have one cusp, so the move is needed again, with the orbit P of two punctures.
-  const MAPS = [
-    "b ↦ c D C d A b a",
-    "c ↦ b A B a D c d",
-    "a ↦ B a D c d C b",
-    "b ↦ a D c d C b A",
-    "d ↦ C d",
-    "a ↦ B a D c d C b",
-    "a ↦ a D b, c ↦ d B c",
-    "b ↦ b A",
-  ];
   const automatic = new Set([...DEFAULT_AUTOMATIC].filter((k) => k !== "closed surface"));
 
   it("fills in an orbit of punctures in the polygon, and contracts the walls", () => {
-    const base = presetNamed("Point push as a composition")!;
-    const session = Session.create({
-      kind: "model",
-      model: base.model,
-      options: base.options!,
-      map: MAPS[0]!,
-    });
-    for (const text of MAPS.slice(1)) session.apply({ kind: "edit map", text, mode: "postcompose" });
+    const session = Session.create({ kind: "preset", preset: "Point push with Dehn twists" });
     session.runAutopilot({ automatic });
     session.apply({ kind: "mark as closed" });
     const first = session.suggestion().options.find((o) => o.move.kind === "cut along a singular leaf")!;

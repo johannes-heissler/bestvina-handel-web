@@ -243,6 +243,23 @@ export const PRESETS: readonly Preset[] = [
       { text: "d ↦ C d A b a B c", name: "P_δ" },
     ].map((map) => ({ ...map, mode: "postcompose" as const })),
   },
+  {
+    name: "Point push with Dehn twists",
+    description:
+      "Point pushes and Dehn twists on the genus-2 surface, found by a search: marked as closed, it needs the closed-surface move four times, and the artificial punctures grow from 1 to 2, 6 and 10.",
+    model: pointPushModel,
+    options: { reversed: ["a", "b"] },
+    maps: [
+      { text: "b ↦ c D C d A b a", name: "P_β̄⁻¹" },
+      { text: "c ↦ b A B a D c d", name: "P_γ⁻¹" },
+      { text: "a ↦ B a D c d C b", name: "P_α⁻¹" },
+      { text: "b ↦ a D c d C b A", name: "P_β̄" },
+      { text: "d ↦ C d", name: "D_d⁻¹" },
+      { text: "a ↦ B a D c d C b", name: "P_α⁻¹" },
+      { text: "a ↦ a D b, c ↦ d B c", name: "D_c₁⁻¹" },
+      { text: "b ↦ b A", name: "D_a⁻¹" },
+    ].map((map) => ({ ...map, mode: "postcompose" as const })),
+  },
   randomGenus2(1),
   {
     name: "Closed genus 2",
