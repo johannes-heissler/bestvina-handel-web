@@ -82,6 +82,11 @@ export class FibredSurface {
    */
   legacyDefaultNames = false;
   /**
+   * The closed-surface moves as before session format 5 (port note 28): without merging the valence-2 lines, and the
+   * cut removes B before contracting the polygons outside Q. Set when replaying older saved sessions.
+   */
+  legacyCut = false;
+  /**
    * The reduction curves of the reductions so far, as cyclically reduced closed paths in G₀. After a reduction, G is a
    * spine of a subsurface of the original surface (μ still describes its embedding), and μ maps each boundary word of
    * G either to a boundary word of G₀ (a puncture) or to one of these curves, in either orientation.
@@ -150,6 +155,7 @@ export class FibredSurface {
     result.legacyNames = this.legacyNames;
     result.legacyPeripheralNames = this.legacyPeripheralNames;
     result.legacyDefaultNames = this.legacyDefaultNames;
+    result.legacyCut = this.legacyCut;
     result.reductionCurves.push(...this.reductionCurves);
     result.onError = this.onError;
     return { copy: result, correspondence: graphCopy };

@@ -42,6 +42,15 @@ export function describeMove(move: Move): Text {
       return ["Move g(", { junction: move.junction }, ") along ", { strip: move.along }];
     case "split junctions":
       return ["Split junctions along τ", ...(move.piece !== undefined ? [` (piece ${move.piece + 1})`] : [])];
+    case "merge valence-2 lines":
+      return move.lines === undefined
+        ? ["Merge valence-2 lines"]
+        : [
+            "Merge the valence-2 line",
+            move.lines.length === 1 ? " through " : "s through ",
+            ...junctions(move.lines),
+            ...(move.kept === undefined ? [] : [" into ", { strip: move.kept }]),
+          ];
     case "remove valence-2 junctions":
       return move.junctions === undefined
         ? ["Remove valence-2 junctions"]

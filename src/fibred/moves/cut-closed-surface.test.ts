@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { closedGenus2OneCusp } from "../../examples/maps";
+import { Color } from "../../math/color";
 import { runAlgorithm } from "../algorithm";
 import { cut, slitsForProng } from "../cut-along-leaf";
 import { perronFrobenius } from "../perron-frobenius";
@@ -11,7 +12,10 @@ import {
   junctionPartName,
   prongsOfOrbit,
 } from "./cut-closed-surface";
+import { narrated } from "../narration";
+import { plainText } from "../suggestions";
 import { inefficiencies } from "./inefficiency";
+import { valenceTwoJunctions } from "./valence";
 import { pullTight } from "./pull-tight";
 
 const growth = (fs: Parameters<typeof perronFrobenius>[0]) =>
@@ -47,6 +51,28 @@ describe("closed surfaces: cutting along a singular leaf (the thesis's move)", (
     runAlgorithm(surface);
     expect(inefficiencies(surface)).toEqual([]);
     expect(growth(surface)).toBeCloseTo(4.212077, 5);
+  });
+
+  it("merges the valence-2 lines first, so that B is a pink loop when it is removed (port note 28)", () => {
+    const [option] = cutOptions(tt, prongsOfOrbit(tt, p));
+    const { result, narrated: steps } = narrated(() => cutClosedSurface(tt, option!), { states: true });
+    const texts = steps.map((s) => plainText(s.text));
+    const merge = texts.findIndex((t) => t.startsWith("The cut left valence-2 lines"));
+    expect(merge).toBeGreaterThan(0);
+    expect(texts[merge + 1]).toMatch(/^The boundary of p is now the loop \S+, attached only at/);
+    const pink = (i: number) =>
+      steps[i]!.before!.graph.edges.filter((e) => e.color.equals(Color.fromHex("#ff10f0")));
+    expect(pink(merge)).toHaveLength(23); // B, contracted where it ran along the polygons outside Q
+    expect(pink(merge + 1)).toHaveLength(1);
+    const { surface } = result;
+    expect(valenceTwoJunctions(surface)).toEqual([]);
+    expect(surface.checkIntegrity()).toEqual([]);
+    expect(surface.g.preservesBoundaryWords()).toBe(true);
+    expect(surface.graph.vertices).toHaveLength(6);
+
+    // Before port note 28 (saved sessions of format < 5): the valence-2 junctions stay.
+    const legacy = cutClosedSurface(tt, option!, undefined, { legacy: true }).surface;
+    expect(valenceTwoJunctions(legacy)).toHaveLength(17);
   });
 
   it("reaches the same growth when cutting at the singularity q (period 2)", { timeout: 30_000 }, () => {

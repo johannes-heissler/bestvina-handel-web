@@ -25,7 +25,7 @@ import { loosePositions, moveJunctionImage, pullTight } from "./moves/pull-tight
 import { reduce, type ReductionPiece } from "./moves/reduce";
 import { disconnectedJunctions, type SplitPiece, splitJunctions } from "./moves/split-junctions";
 import { finiteOrder, type ReductionCandidate, reductionCandidates } from "./moves/reducibility";
-import { valenceTwoJunctions } from "./moves/valence";
+import { valenceTwoLines } from "./moves/valence";
 import { EdgePoint } from "./edge-point";
 import { findGates } from "./gates";
 import { narrated, quietly } from "./narration";
@@ -33,6 +33,7 @@ import { invariantPunctureCircles, peripheryCandidates, peripheryProblems } from
 import { perronFrobenius } from "./perron-frobenius";
 import { prongs } from "./singular-leaves";
 import { type Slit, slitsForProng } from "./cut-along-leaf";
+import { lettersText } from "./text-parts";
 import { trainTrack } from "./train-track";
 
 // ─── Text ────────────────────────────────────────────────────────────────────────────────────
@@ -443,16 +444,18 @@ function nextStep(fs: FibredSurface, context: SuggestionContext): Suggestion {
           followUp.strips,
         ),
     );
-  const valenceTwo = pending ? [] : valenceTwoJunctions(fs);
-  if (valenceTwo.length > 0)
+  const lines = pending ? [] : valenceTwoLines(fs);
+  if (lines.length > 0)
     return {
       kind: "remove valence-2 junctions",
-      description: ["Junctions of valence 2 can be removed by merging their two strips."],
+      description: [
+        "There are valence-2 lines: paths whose inner junctions have valence 2. Each can be merged into one strip.",
+      ],
       options: [
-        { move: { kind: "remove valence-2 junctions" }, label: ["Remove all"] },
-        ...valenceTwo.map((v) => ({
-          move: { kind: "remove valence-2 junctions" as const, junctions: [v.name] },
-          label: ["Remove ", { junction: v.name }] as Text,
+        { move: { kind: "merge valence-2 lines" }, label: ["Merge all"] },
+        ...lines.map((line) => ({
+          move: { kind: "merge valence-2 lines" as const, lines: [(line.inner[0] as Vertex).name] },
+          label: ["Merge ", ...lettersText(line.strips)] as Text,
         })),
       ],
       multiple: true,
@@ -770,6 +773,10 @@ export function combine(moves: readonly Move[]): Move {
       const js = all(ofKind(first.kind).map((m) => m.junctions));
       return js === undefined ? { kind: first.kind } : { kind: first.kind, junctions: js };
     }
+    case "merge valence-2 lines": {
+      const lines = all(ofKind(first.kind).map((m) => m.lines));
+      return lines === undefined ? { kind: first.kind } : { kind: first.kind, lines };
+    }
     default:
       throw new Error(`Moves of the kind "${first.kind}" can't be combined`);
   }
@@ -790,6 +797,16 @@ export function variants(fs: FibredSurface, move: Move): MoveOption[] {
       return candidateCenters(fs, (components[0] as { vertices: Set<Vertex> }).vertices).map((v) => ({
         move: { ...move, centers: [v.name] },
         label: ["Collapse onto ", { junction: v.name }],
+      }));
+    }
+    case "merge valence-2 lines": {
+      if (move.lines?.length !== 1) return [];
+      const v = fs.graph.vertices.find((x) => x.name === move.lines?.[0]);
+      const line = v && valenceTwoLines(fs).find((l) => l.inner.includes(v));
+      if (line === undefined) return [];
+      return line.strips.map((x) => ({
+        move: { ...move, kept: x.edge.name },
+        label: ["Keep ", { strip: x.edge.name }],
       }));
     }
     case "remove valence-2 junctions": {

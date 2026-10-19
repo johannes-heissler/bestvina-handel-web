@@ -7,8 +7,9 @@
 import { EdgePath } from "../../graph/edge-path";
 import type { Edge, OrientedEdge, Vertex } from "../../graph/ribbon-graph";
 import type { FibredSurface } from "../fibred-surface";
-import { narrate } from "../narration";
+import { keepingStates, narrate, quietly } from "../narration";
 import { perronFrobenius } from "../perron-frobenius";
+import type { TextPart } from "../suggestions";
 import { lettersText } from "../text-parts";
 import { slideAlong } from "./isotopy";
 
@@ -160,6 +161,212 @@ export function defaultStripToRemove(
   if (prePeriphery.has(s1.edge)) return s1;
   const width = (e: Edge) => widths.get(e) ?? 0;
   return width(s0.edge) > width(s1.edge) ? s0 : s1;
+}
+
+/**
+ * A valence-2 line (port note 28): a maximal path of strips e₁ … eₙ (n ≥ 2) whose inner junctions all have valence 2,
+ * and whose ends u (where e₁ starts) and w (where eₙ ends) don't (u = w is allowed).
+ */
+export interface ValenceTwoLine {
+  readonly strips: readonly OrientedEdge[];
+  /** The inner junctions: the end of each strip but the last. */
+  readonly inner: readonly Vertex[];
+}
+
+/**
+ * The valence-2 lines. Every junction of {@link valenceTwoJunctions} lies on exactly one, unless its component is a
+ * circle of valence-2 junctions only (which has no ends, and is left out).
+ */
+export function valenceTwoLines(fs: FibredSurface): ValenceTwoLine[] {
+  const two = new Set(valenceTwoJunctions(fs));
+  const seen = new Set<Vertex>();
+  const lines: ValenceTwoLine[] = [];
+  for (const v of fs.graph.vertices) {
+    if (!two.has(v) || seen.has(v)) continue;
+    // The strips from v along x up to the end of the line, or undefined if they come back to v.
+    const walk = (x: OrientedEdge): OrientedEdge[] | undefined => {
+      const path = [x];
+      for (let y = x; two.has(y.target); path.push(y)) {
+        if (y.target === v) return undefined;
+        const [s0, s1] = fs.graph.star(y.target) as [OrientedEdge, OrientedEdge];
+        y = s0 === y.reversed ? s1 : s0;
+      }
+      return path;
+    };
+    const [a, b] = fs.graph.star(v) as [OrientedEdge, OrientedEdge];
+    const forward = walk(a);
+    const backward = walk(b);
+    if (forward === undefined || backward === undefined) continue;
+    const strips = [...backward.map((x) => x.reversed).reverse(), ...forward];
+    const inner = strips.slice(0, -1).map((x) => x.target);
+    for (const x of inner) seen.add(x);
+    lines.push({ strips, inner });
+  }
+  return lines;
+}
+
+/**
+ * The strip of a line that its merge keeps by default: the narrowest (by the Perron–Frobenius widths) that isn't in the
+ * pre-periphery, or the narrowest of all. This is what removing its junctions one by one with
+ * {@link defaultStripToRemove} keeps, in any order (port note 28).
+ */
+export function defaultStripToKeep(
+  fs: FibredSurface,
+  line: ValenceTwoLine,
+  widths: ReadonlyMap<Edge, number> = perronFrobenius(fs, { essentialOnly: true }).widths,
+  prePeriphery: ReadonlySet<Edge> = fs.prePeriphery(),
+): Edge {
+  const edges = line.strips.map((x) => x.edge);
+  const candidates = edges.some((e) => !prePeriphery.has(e))
+    ? edges.filter((e) => !prePeriphery.has(e))
+    : edges;
+  const width = (e: Edge) => widths.get(e) ?? 0;
+  return candidates.reduce((best, e) => (width(e) < width(best) ? e : best));
+}
+
+/**
+ * Merges a valence-2 line e₁ … eₙ from u to w into its strip `kept` = eₘ (port note 28): the homotopy equivalence
+ * collapses the other strips (the inner junctions before eₘ go to u, those after it to w) and stretches eₘ over the
+ * whole line. This is {@link removeValenceTwoJunction} at each inner junction, from eₘ outwards, always keeping eₘ,
+ * narrated as one step (without the slides of the junctions).
+ */
+export function mergeValenceTwoLine(
+  fs: FibredSurface,
+  line: ValenceTwoLine,
+  kept: Edge = defaultStripToKeep(fs, line),
+): void {
+  mergeValenceTwoLines(fs, [{ line, kept }], (merged) => {
+    const [only] = merged;
+    if (only === undefined) return [];
+    const { line, image, name } = only;
+    return [
+      "Merge the valence-2 line ",
+      ...lettersText(line.strips),
+      " from ",
+      { junction: (line.strips[0] as OrientedEdge).source.name },
+      " to ",
+      { junction: (line.strips.at(-1) as OrientedEdge).target.name },
+      " into one strip ",
+      { strip: name },
+      ": its image is ",
+      ...lettersText(image),
+      " (not yet cancelled), and the other strips disappear from all images.",
+    ];
+  });
+}
+
+/**
+ * Merges all valence-2 lines at once, each into its default strip ({@link defaultStripToKeep}), as one narrated step
+ * that starts with `intro` (used at the end of the closed-surface moves, port note 28).
+ */
+export function mergeAllValenceTwoLines(fs: FibredSurface, intro: string): void {
+  const lines = valenceTwoLines(fs);
+  if (lines.length === 0) return;
+  const { widths } = perronFrobenius(fs, { essentialOnly: true });
+  const prePeriphery = fs.prePeriphery();
+  mergeValenceTwoLines(
+    fs,
+    lines.map((line) => ({ line, kept: defaultStripToKeep(fs, line, widths, prePeriphery) })),
+    (merged) => [
+      intro,
+      ...merged.flatMap(({ line, name }, i): TextPart[] => [
+        i === 0 ? " " : "; ",
+        ...lineText(line),
+        " into ",
+        { strip: name },
+      ]),
+      ". The other strips disappear from all images.",
+    ],
+  );
+}
+
+/** A line, shortly: "a b c from u to w", or "a b … f (6 strips) from u to w". */
+function lineText(line: ValenceTwoLine): TextPart[] {
+  const { strips } = line;
+  const shown =
+    strips.length <= 4
+      ? lettersText(strips)
+      : [
+          ...lettersText(strips.slice(0, 2)),
+          " … ",
+          ...lettersText(strips.slice(-1)),
+          ` (${strips.length} strips)`,
+        ];
+  return [
+    ...shown,
+    " from ",
+    { junction: (strips[0] as OrientedEdge).source.name },
+    " to ",
+    { junction: (strips.at(-1) as OrientedEdge).target.name },
+  ];
+}
+
+/** What {@link mergeValenceTwoLines} tells its narration about each line. */
+export interface MergedLine {
+  readonly line: ValenceTwoLine;
+  /** g of the whole line, before the merge (not yet cancelled). */
+  readonly image: readonly OrientedEdge[];
+  /** The name of the merged strip. */
+  readonly name: string;
+}
+
+/**
+ * Merges several valence-2 lines (each into its strip `kept`, see {@link mergeValenceTwoLine}) as one narrated step:
+ * `describe` gives the text from the merged lines, and a sentence on where the junction images at inner junctions went
+ * is added.
+ */
+export function mergeValenceTwoLines(
+  fs: FibredSurface,
+  merges: readonly { readonly line: ValenceTwoLine; readonly kept: Edge }[],
+  describe: (merged: readonly MergedLine[]) => readonly TextPart[],
+): void {
+  if (merges.length === 0) return;
+  const before = keepingStates() ? fs.copy() : undefined;
+  // Where the junctions mapped to an inner junction go: to the end of the line on its side of the kept strip.
+  const end = new Map<Vertex, Vertex>();
+  for (const { line, kept } of merges) {
+    const m = line.strips.findIndex((x) => x.edge === kept);
+    if (m < 0) throw new Error(`The strip ${kept} is not on the line`);
+    const u = (line.strips[0] as OrientedEdge).source;
+    const w = (line.strips.at(-1) as OrientedEdge).target;
+    line.inner.forEach((v, i) => end.set(v, i < m ? u : w));
+  }
+  const moved = fs.graph.vertices.flatMap((x) => {
+    const image = fs.g.vertexImage(x);
+    const to = end.get(image);
+    return to === undefined || end.has(x) ? [] : [{ x, from: image, to }];
+  });
+  const images = merges.map(
+    ({ line }) => line.strips.reduce((path, x) => path.concat(fs.g.image(x)), EdgePath.EMPTY).letters,
+  );
+
+  quietly(() => {
+    for (const { line, kept } of merges) {
+      const m = line.strips.findIndex((x) => x.edge === kept);
+      // From eₘ outwards: at each inner junction, the strip end away from eₘ is removed.
+      for (let i = m - 1; i >= 0; i--)
+        removeValenceTwoJunction(fs, line.inner[i] as Vertex, (line.strips[i] as OrientedEdge).reversed);
+      for (let i = m; i < line.inner.length; i++)
+        removeValenceTwoJunction(fs, line.inner[i] as Vertex, line.strips[i + 1] as OrientedEdge);
+    }
+  });
+
+  const merged = merges.map(({ line, kept }, i) => ({ line, image: images[i] ?? [], name: kept.name }));
+  narrate(
+    [
+      ...describe(merged),
+      ...moved.flatMap(({ x, from, to }, i): TextPart[] => [
+        i === 0 ? " The junction images inside go to the ends: g(" : ", g(",
+        { junction: x.name },
+        ") moves from ",
+        { junction: from.name },
+        " to ",
+        { junction: to.name },
+      ]),
+      ...(moved.length > 0 ? ["."] : []),
+    ],
+    { before },
+  );
 }
 
 /** Junctions that g maps to `from` are mapped to `to` instead. */

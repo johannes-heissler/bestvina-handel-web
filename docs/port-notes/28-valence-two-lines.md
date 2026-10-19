@@ -3,7 +3,7 @@
 **Source:** not in the C# code. Builds on the valence-2 move (port note 9) and the cut (port notes 15, 22, 26).
 **Target:** `src/fibred/moves/valence.ts` (the line and its merge), `src/fibred/moves/cut-closed-surface.ts` (the
 cut), `src/fibred/suggestions.ts` and `src/fibred/move.ts` (the options, only with Q2)
-**Status:** ✍️ note awaiting review
+**Status:** ✅ approved (2026-10-19, in the conversation)
 
 ## The problem
 
@@ -63,28 +63,65 @@ if all are). The line merge uses that rule directly. After the cut there is no p
 contract the polygons outside Q). One more at the end doesn't change what the move means. (In the experiment, λ
 went from 4.2282 to 4.2280 for p and stayed at 4.2921 for q.)
 
-## Proposal
+## Decisions (author, 2026-10-19)
 
-1. **`valenceTwoLines(fs)`** in `valence.ts`: the lines, each as its edge path (oriented from one end to the other).
-2. **`mergeValenceTwoLine(fs, line, kept?)`**: merges the line as above, by calling `removeValenceTwoJunction`
-   n − 1 times (quietly) with the kept strip; one narration step before:
+- **Q1** Merge after the shortcut too: yes. **Q2** Lines everywhere: yes. **Q3** No per-junction slides: yes.
+  **Q4** The merged strip keeps the name of the kept strip: ok.
+- The narration says briefly where each junction image that was at an inner junction of the line goes (one of the
+  two ends).
+- In the cut, the lines are merged **before** B is removed, so that B can be seen: it becomes a single loop. B is
+  drawn in neon pink in the states where it is visible.
 
-   > Merge the valence-2 line e₁ e₂ … eₙ from u to w into one strip k (the narrowest, eₘ): its image is
-   > g(e₁) … g(eₙ) = … (not yet cancelled), and the other strips disappear from all images.
+## Proposal (revised after the decisions)
 
-   (The per-junction slides, which animate the isotopy, are not shown; the picture jumps from the line to the
-   strip. See Q3.)
+1. **`valenceTwoLines(fs)`** in `valence.ts`: the lines, each with its strips e₁ … eₙ (oriented from u to w) and its
+   inner junctions.
+2. **`mergeValenceTwoLine(fs, line, kept?)`**: removes the inner junctions with `removeValenceTwoJunction`, quietly,
+   from the kept strip eₘ outwards (vₘ₋₁, …, v₁, then vₘ, …, vₙ₋₁), removing the other strip each time. So vᵢ goes to
+   u for i < m and to w for i ≥ m, as in the composition above. The name is the kept strip's (with the subdivision
+   rule of port note 9, which the single merges apply). One narration step:
 
-3. **At the end of the cut** (`cutClosedSurface`, after `finishRemarking`, so in the final model): merge **all** lines,
-   one narration step for all of them together ("Merge the 3 valence-2 lines that the cut left: …, each into its
-   narrowest strip"), then `tightenMarking`. No stop at invariant subforests: the algorithm collapses them next.
-   Also in the shortcut (`replacePunctureBySingularity`), so that both routes end the same way (see Q1).
-4. **Tests** (`valence.test.ts`, `cut-closed-surface.test.ts`):
+   > Merge the valence-2 line e₁ e₂ … eₙ from u to w into one strip k: its image is g(e₁) … g(eₙ) = … (not yet
+   > cancelled), and the other strips disappear from all images. g(x): v₂ → u, g(y): v₅ → w.
+
+   (the last sentence only if some junction is mapped to an inner junction). The kept strip by default: the narrowest
+   that isn't pre-peripheral.
+
+3. **The move.** A new move kind `merge valence-2 lines` with `lines?` (each line named by one of its inner junctions)
+   and `kept?` (for a single line: the strip to keep). Without `lines`, all lines are merged one after the other,
+   stopping when an invariant subforest appears (as the C# "remove all" does per junction). The suggestion "remove
+   valence-2 junctions" offers "Merge all" and one option per line; the variants of a single line are its strips to
+   keep. The old move kind `remove valence-2 junctions` stays for replaying saved sessions, but isn't suggested any
+   more.
+4. **The cut** (`cutClosedSurface`), in a new order after the cut itself:
+   1. contract the polygons outside Q (`collapseUncut`, now before removing B; the shown intermediate states do this
+      already). In both examples B stays a circle attached at one junction (of valence 4); this is checked, and if it
+      fails, the cut falls back to the old order;
+   2. merge all lines (one narration step for all of them, with the junction images as above, no stop at invariant
+      subforests). Each B becomes a single loop at its attachment junction;
+   3. remove the loops B (narrated as today, "Remove it … This fills in p"), drawn in neon pink in the states before
+      steps 2 and 3;
+   4. `finishRemarking` (fill in, slide), then merge the lines that are left (the attachment junction has valence 2
+      after removing its loop).
+5. **The shortcut** (`replacePunctureBySingularity`): merge all lines at the end.
+6. **Saved sessions.** The cut and the shortcut now give other strips and names, so the moves saved after them would
+   no longer apply. The file format goes to 5, and `FibredSurface.legacyCut` (set for files of version < 5) keeps the
+   old cut and shortcut.
+7. **Tests** (`valence.test.ts`, `cut-closed-surface.test.ts`, `session`):
    - `valenceTwoLines` on a torus with a strip subdivided twice: one line of three strips; a loop junction is no line.
    - `mergeValenceTwoLine` gives the same g, μ and cyclic order as removing the inner junctions one by one with the
      same kept strip, and passes `checkIntegrity()`.
    - After the cut at p and at q: no valence-2 junctions, integrity, the boundary words under μ, and `runAlgorithm`
-     ends at λ ≈ 4.212077 (the existing expectations stay).
+     ends at λ ≈ 4.212077 (the existing expectations stay). The narration has a merge step with B pink in its state.
+   - The existing session and timeline tests; the valence-2 part of the timeline test about slides goes (Q3).
+
+## Implementation (2026-10-19)
+
+As proposed. Results on "Closed genus 2": after the cut at p, B is a pink line of 23 strips (35 before contracting
+the polygons outside Q), merged into the loop `c_1` at `p_o` and removed; removing it leaves `p_o` of valence 2, and the
+last merge takes it out. The surface then has 6 junctions of valence 3, and `runAlgorithm` needs 2 steps (before: 4).
+For the cut at q: 8 junctions, 32 steps (before: 40). Both end at λ ≈ 4.212077. The fallback to the old order (B not
+attached at one junction after contracting) is not reached in the tests.
 
 ## Questions
 

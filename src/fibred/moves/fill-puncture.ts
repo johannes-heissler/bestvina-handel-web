@@ -13,6 +13,7 @@ import type { Remarking } from "../remarking";
 import type { TextPart } from "../suggestions";
 import { fillingText, finishRemarking, junctionPartName } from "./cut-closed-surface";
 import { tightenMarking } from "./isotopy";
+import { mergeAllValenceTwoLines } from "./valence";
 import { trainTrack, type TrainTrack } from "../train-track";
 
 /** A junction with an infinitesimal polygon (a singularity of angle ≥ 3π) and its period under g. */
@@ -134,7 +135,10 @@ export function replacePunctureBySingularity(
   let filled = surface;
   for (const side of fillings)
     filled = fillPuncture(filled, side.edge, { keepMarking: remarking !== undefined, side });
-  return remarking === undefined ? filled : finishRemarking(filled, remarking);
+  const result = remarking === undefined ? filled : finishRemarking(filled, remarking);
+  if (!fs.legacyCut)
+    mergeAllValenceTwoLines(result, "Filling in left valence-2 lines. Merge each into one strip:");
+  return result;
 }
 
 /**

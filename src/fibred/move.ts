@@ -32,10 +32,13 @@ import { moveJunctionImage, pullTight } from "./moves/pull-tight";
 import { reduce } from "./moves/reduce";
 import { splitJunctions } from "./moves/split-junctions";
 import {
+  defaultStripToKeep,
   defaultStripToRemove,
+  mergeValenceTwoLine,
   removeValenceOneJunction,
   removeValenceTwoJunction,
   valenceTwoJunctions,
+  valenceTwoLines,
 } from "./moves/valence";
 import { invariantSubforests } from "./moves/collapse-forest";
 import { perronFrobenius } from "./perron-frobenius";
@@ -88,6 +91,15 @@ export type Move =
       readonly kind: "split junctions";
       /** Index into the offered pieces. */ readonly piece?: number;
     }
+  /** Merge valence-2 lines into single strips (port note 28). */
+  | {
+      readonly kind: "merge valence-2 lines";
+      /** Each line by one of its inner junctions; all lines (until an invariant subforest appears) if omitted. */
+      readonly lines?: readonly string[];
+      /** For a single line: the strip to keep. */
+      readonly kept?: string;
+    }
+  /** The valence-2 move junction by junction, as suggested before port note 28 (kept for replaying saved sessions). */
   | {
       readonly kind: "remove valence-2 junctions";
       /** All of them (until an invariant subforest appears) if omitted. */
@@ -220,6 +232,12 @@ function introduction(fs: FibredSurface, move: Move): Text {
         move.junctions.length === 1 ? " " : "s ",
         ...junctions(move.junctions),
         " of valence 1 together with its strip: the strip retracts into its other end (a homotopy equivalence), and it disappears from all images.",
+      ];
+    case "merge valence-2 lines":
+      return [
+        move.lines?.length === 1 ? "Merge a valence-2 line" : "Merge valence-2 lines",
+        ...(move.lines ? [" (through ", ...junctions(move.lines), ")"] : []),
+        ": the strips of each line, whose inner junctions have valence 2, become one strip (a homotopy equivalence), and the inner junctions are forgotten.",
       ];
     case "remove valence-2 junctions":
       return [
@@ -424,6 +442,16 @@ function applyMoveQuietly(fs: FibredSurface, move: Move, hooks: MoveHooks = {}):
         return piece;
       });
       return fs;
+    case "merge valence-2 lines":
+      if (move.lines === undefined) mergeLinesOneByOne(fs);
+      else
+        for (const name of move.lines) {
+          const v = junction(fs, name);
+          const line = valenceTwoLines(fs).find((l) => l.inner.includes(v));
+          if (line === undefined) throw new Error(`The junction ${name} is on no valence-2 line`);
+          mergeValenceTwoLine(fs, line, move.kept === undefined ? undefined : strip(fs, move.kept).edge);
+        }
+      return fs;
     case "remove valence-2 junctions":
       if (move.junctions === undefined) removeAllValenceTwoJunctions(fs);
       else
@@ -485,6 +513,7 @@ function applyMoveQuietly(fs: FibredSurface, move: Move, hooks: MoveHooks = {}):
         tt,
         { prong: option.prong, realBranches: option.realBranches },
         remarking,
+        { legacy: fs.legacyCut },
       );
       return keepFlags(fs, surface);
     }
@@ -513,6 +542,17 @@ function applyMoveQuietly(fs: FibredSurface, move: Move, hooks: MoveHooks = {}):
   }
 }
 
+/** Merges the valence-2 lines one by one, stopping when an invariant subforest appears (as C# does per junction). */
+export function mergeLinesOneByOne(fs: FibredSurface): void {
+  // The widths only decide which strip is kept; the kept strips keep their widths, so computing them once is enough.
+  const { widths } = perronFrobenius(fs, { essentialOnly: true });
+  const prePeriphery = fs.prePeriphery();
+  for (let [line] = valenceTwoLines(fs); line !== undefined; [line] = valenceTwoLines(fs)) {
+    mergeValenceTwoLine(fs, line, defaultStripToKeep(fs, line, widths, prePeriphery));
+    if (invariantSubforests(fs).length > 0) return;
+  }
+}
+
 /** Removes valence-2 junctions one by one, stopping when an invariant subforest appears (as in C#). */
 export function removeAllValenceTwoJunctions(fs: FibredSurface): void {
   // The widths only decide which of the two strips is removed; computing them once for the batch is enough.
@@ -531,6 +571,7 @@ function keepFlags(from: FibredSurface, to: FibredSurface): FibredSurface {
   to.legacyNames = from.legacyNames;
   to.legacyPeripheralNames = from.legacyPeripheralNames;
   to.legacyDefaultNames = from.legacyDefaultNames;
+  to.legacyCut = from.legacyCut;
   to.onError = from.onError;
   return to;
 }

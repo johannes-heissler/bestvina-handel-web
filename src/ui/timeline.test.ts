@@ -30,7 +30,7 @@ describe("the timeline of a move", () => {
 });
 
 describe("contracting strips as isotopies", () => {
-  it("slides the junctions of a collapsed tree and of a removed valence-2 junction across the sides, drawably", () => {
+  it("slides the junctions of a collapsed tree across the sides, and merges a valence-2 line in one step, drawably", () => {
     const session = Session.create({ kind: "preset", preset: "Bestvina–Handel example 6.1" });
     session.disabled = new Set(["move vertices"]); // (these tests are about folds and the bookkeeping steps)
     const found = new Set<string>();
@@ -38,28 +38,29 @@ describe("contracting strips as isotopies", () => {
       const s = session.suggestion();
       if (s.kind === "finished") break;
       const move = s.autopilotMove ?? s.options[0]!.move;
-      if (move.kind === "collapse invariant subforest" || move.kind === "remove valence-2 junctions") {
+      if (move.kind === "collapse invariant subforest" || move.kind === "merge valence-2 lines") {
         const preview = session.preview(move, new Set());
         const motions = preview.steps.map((x) => x.motion);
-        if (motions.some(Boolean)) {
+        const texts = preview.steps.map((x) => plainText(x.text));
+        if (move.kind === "merge valence-2 lines") {
+          // One step per line, without the slides of the junctions (port note 28).
+          expect(motions.filter(Boolean)).toEqual([]);
+          expect(texts.some((t) => t.startsWith("Merge the valence-2 line"))).toBe(true);
           found.add(move.kind);
-          const texts = preview.steps.map((x) => plainText(x.text));
+        } else if (motions.some(Boolean)) {
           expect(texts.some((t) => t.startsWith("Isotopy: slide the junction"))).toBe(true);
-          expect(
-            texts.some((t) =>
-              t.startsWith(move.kind === "remove valence-2 junctions" ? "Merge" : "Contract"),
-            ),
-          ).toBe(true);
-          const states = [preview.before, ...preview.steps.map((x) => x.after)];
-          for (let position = 0; position <= preview.steps.length; position += 0.25)
-            expect(
-              drawTimeline(session.current.model, states, motions, position, { size: 100 }).notes,
-            ).toEqual([]);
+          expect(texts.some((t) => t.startsWith("Contract"))).toBe(true);
+          found.add(move.kind);
         }
+        const states = [preview.before, ...preview.steps.map((x) => x.after)];
+        for (let position = 0; position <= preview.steps.length; position += 0.25)
+          expect(drawTimeline(session.current.model, states, motions, position, { size: 100 }).notes).toEqual(
+            [],
+          );
       }
       session.apply(move);
     }
-    expect([...found].sort()).toEqual(["collapse invariant subforest", "remove valence-2 junctions"]);
+    expect([...found].sort()).toEqual(["collapse invariant subforest", "merge valence-2 lines"]);
   });
 });
 
@@ -123,7 +124,8 @@ describe("the timeline of a cut on the point push", () => {
 
   it("draws the states after a cut without a model for the new G₀ as ribbon graphs (surface not marked closed)", () => {
     const session = atEnd();
-    expect(drawsEveryMoment(session, cutFrom(session)).steps).toHaveLength(3); // (cut in one go)
+    // (cut in one go; then the valence-2 lines are merged before removing B, port note 28)
+    expect(drawsEveryMoment(session, cutFrom(session)).steps).toHaveLength(4);
   });
 
   it("shows the cut branch by branch in the compact polygon after marking the surface as closed", () => {

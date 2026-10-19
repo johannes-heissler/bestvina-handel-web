@@ -6,6 +6,7 @@
  * @module
  */
 import type { CombinatorialMap } from "../../graph/combinatorial-map";
+import { Color } from "../../math/color";
 import { EdgePath } from "../../graph/edge-path";
 import { letterIndex } from "../../graph/names";
 import type { Edge, OrientedEdge, RibbonGraph, Vertex } from "../../graph/ribbon-graph";
@@ -18,6 +19,7 @@ import { imageProng, type Prong, prongs } from "../singular-leaves";
 import type { TrainTrack } from "../train-track";
 import { collapseSubforest } from "./collapse-forest";
 import { tightenMarking } from "./isotopy";
+import { mergeAllValenceTwoLines } from "./valence";
 
 /**
  * The boundary words of the punctures P (p, or the orbit of punctures that a former cut made, port note 26) in the cut
@@ -92,25 +94,7 @@ export function removeAlmostPeripheralCircles(
   const { graph, gPrime: g } = ct;
   const { marking } = options;
   let mu = marking?.mu;
-  const start = (word: EdgePath) =>
-    `${word.letters
-      .slice(0, 6)
-      .map((x) => x.name)
-      .join(" ")}${word.length > 6 ? " …" : ""}`;
-  const [only] = circles;
-  narrate(
-    [
-      circles.length === 1 && only !== undefined
-        ? `The boundary of p is now a circle B of ${only.word.length} branches (${start(only.word)}), attached only at ${only.v.name}. Remove it (Lemma "Removing an almost peripheral subgraph"): its branches are deleted from all images. This fills in p.`
-        : `The boundaries of the ${circles.length} punctures of P are now circles, ${circles
-            .map(({ word, v }) => `of ${word.length} branches (${start(word)}) attached only at ${v.name}`)
-            .join(
-              "; ",
-            )}. Remove them all at once (Lemma "Removing an almost peripheral subgraph", for the orbit; g maps each into the next): their branches are deleted from all images. This fills in P.`,
-      ...(marking === undefined ? [] : [" ", fillingText(marking.remarking)]),
-    ],
-    { before: options.before },
-  );
+  narrate(removalText(circles, marking?.remarking), { before: options.before });
   const circle = new Set(circles.flatMap(({ word }) => word.letters.map((x) => x.edge)));
   // The switches along each circle except its attachment, and where they go.
   const inner = new Map(
@@ -142,6 +126,98 @@ export function removeAlmostPeripheralCircles(
   collapseUncut(surface, options.uncut, options.junctionOf, options.inQ);
   // Without a marking, G₀ is (a copy of) the result itself.
   return mu === undefined ? new FibredSurface({ graph, g }) : surface;
+}
+
+/** The narration of removing the circles B. */
+function removalText(circles: readonly AttachedCircle[], remarking: Remarking | undefined): TextPart[] {
+  const start = (word: EdgePath) =>
+    `${word.letters
+      .slice(0, 6)
+      .map((x) => x.name)
+      .join(" ")}${word.length > 6 ? " …" : ""}`;
+  const circle = (word: EdgePath) =>
+    word.length === 1 ? `the loop ${start(word)}` : `a circle B of ${word.length} branches (${start(word)})`;
+  const [only] = circles;
+  return [
+    circles.length === 1 && only !== undefined
+      ? `The boundary of p is now ${circle(only.word)}, attached only at ${only.v.name}. Remove it (Lemma "Removing an almost peripheral subgraph"): its branches are deleted from all images. This fills in p.`
+      : `The boundaries of the ${circles.length} punctures of P are now circles, ${circles
+          .map(({ word, v }) => `${circle(word)} attached only at ${v.name}`)
+          .join(
+            "; ",
+          )}. Remove them all at once (Lemma "Removing an almost peripheral subgraph", for the orbit; g maps each into the next): their branches are deleted from all images. This fills in P.`,
+    ...(remarking === undefined ? [] : [" ", fillingText(remarking)]),
+  ];
+}
+
+/** The colour of B while it is shown, before it is removed (port note 28). */
+const B_COLOR = Color.fromHex("#ff10f0");
+
+/**
+ * The end of the cut since port note 28: the polygons outside Q are contracted first ({@link collapseUncut}), then the
+ * valence-2 lines are merged, so that each circle B becomes a loop at its attachment junction (drawn in
+ * {@link B_COLOR}), and then the loops are removed. Undefined (with the cut track changed) if B is no longer a circle
+ * attached at one junction after contracting the polygons.
+ */
+function removeCirclesAfterMerging(
+  ct: CutTrack,
+  circles: readonly AttachedCircle[],
+  options: {
+    readonly uncut: ReadonlySet<Edge>;
+    readonly junctionOf: (s: Vertex) => Vertex | undefined;
+    readonly inQ: ReadonlySet<Vertex>;
+    readonly marking?: { mu: CombinatorialMap; remarking: Remarking };
+  },
+): FibredSurface | undefined {
+  const { marking } = options;
+  const surface = new FibredSurface({ graph: ct.graph, g: ct.gPrime, ...(marking && { mu: marking.mu }) });
+  surface.legacyDefaultNames = ct.legacyDefaultNames;
+  collapseUncut(surface, options.uncut, options.junctionOf, options.inQ);
+  const { graph, g } = surface;
+  // Each B is still the boundary word of its puncture, made of the branches of B that are left.
+  const inB = new Set(circles.flatMap(({ word }) => word.letters.map((x) => x.edge)));
+  const words = graph.boundaryWords().filter((w) => w.letters.every((x) => inB.has(x.edge)));
+  const attachments = words.map((word) => {
+    const at = word.letters.map((x) => x.target).filter((s) => graph.valence(s) > 2);
+    return new Set(word.letters.map((x) => x.edge)).size === word.length && at.length === 1
+      ? at[0]
+      : undefined;
+  });
+  if (words.length !== circles.length || attachments.includes(undefined)) return undefined;
+  for (const word of words) for (const x of word.letters) x.edge.color = B_COLOR;
+  tightenMarking(surface);
+
+  mergeAllValenceTwoLines(
+    surface,
+    `The cut left valence-2 lines, among them the boundary B of ${circles.length === 1 ? "p" : "each puncture of P"} (pink). Merge each into one strip:`,
+  );
+  tightenMarking(surface);
+  // B is now one loop at its attachment junction.
+  const loops = graph.edges.filter((e) => inB.has(e));
+  if (
+    loops.length !== circles.length ||
+    loops.some((e) => e.source !== e.target || !attachments.includes(e.source))
+  )
+    return undefined;
+  narrate(
+    removalText(
+      loops.map((e) => ({ word: EdgePath.of(e.forward), v: e.source })),
+      marking?.remarking,
+    ),
+    { before: keepingStates() ? surface.copy() : undefined },
+  );
+  const loopSet = new Set(loops);
+  g.substituteInImages((e) => (loopSet.has(e) ? EdgePath.EMPTY : undefined));
+  for (const e of loops) {
+    graph.removeEdge(e);
+    g.forgetEdge(e);
+  }
+  // Without a marking, G₀ is (a copy of) the result itself.
+  if (marking === undefined) return new FibredSurface({ graph, g });
+  forgetInMarking(surface.mu, loops);
+  const result = new FibredSurface({ graph, g, mu: marking.remarking.filled(surface.mu) });
+  result.legacyDefaultNames = ct.legacyDefaultNames;
+  return result;
 }
 
 /**
@@ -331,7 +407,12 @@ const SHOWN_CUTS = 24;
  * Carries out a cut option: cuts, removes B, and returns the fibred surface on Σ ∖ Q. With `remarking`, the result
  * stays in the original model (port note 22), and the narration shows the cut branch by branch.
  */
-export function cutClosedSurface(tt: TrainTrack, option: CutOption, remarking?: Remarking): ClosedSurfaceCut {
+export function cutClosedSurface(
+  tt: TrainTrack,
+  option: CutOption,
+  remarking?: Remarking,
+  { legacy = false }: { readonly legacy?: boolean } = {},
+): ClosedSurfaceCut {
   const n = option.realBranches;
   const keep = remarking !== undefined && keepingStates();
   const orbit = cutOrbit(tt, option.prong);
@@ -465,19 +546,33 @@ export function cutClosedSurface(tt: TrainTrack, option: CutOption, remarking?: 
       );
     done = count;
   }
-  const full = ct as CutTrack;
+  let full = ct as CutTrack;
   const circles = attachedCircles(full, punctureCount(tt));
   if (circles === undefined) throw new Error("This cut doesn't make the boundaries of P circles");
-  const mu = remarking ? cutMarking(tt, full, remarking) : undefined;
-  const partOf = (e: Edge) => partOfPiece(tt, full.pieces.get(e) as Piece);
-  let surface = removeAlmostPeripheralCircles(full, circles, {
-    uncut: uncutOf(full.graph, (e) => partOf(e).branch),
-    junctionOf: junctionOfSwitch(full.graph, partOf),
-    inQ,
-    ...(mu && remarking && { marking: { mu, remarking } }),
-    ...(before && { before }),
-  });
+  const removalOptions = (track: CutTrack) => {
+    const mu = remarking ? cutMarking(tt, track, remarking) : undefined;
+    const partOf = (e: Edge) => partOfPiece(tt, track.pieces.get(e) as Piece);
+    return {
+      uncut: uncutOf(track.graph, (e) => partOf(e).branch),
+      junctionOf: junctionOfSwitch(track.graph, partOf),
+      inQ,
+      ...(mu && remarking && { marking: { mu, remarking } }),
+    };
+  };
+  let surface = legacy ? undefined : removeCirclesAfterMerging(full, circles, removalOptions(full));
+  if (surface === undefined) {
+    // The order before port note 28: remove B, then contract the polygons outside Q (on a fresh cut, if the new order
+    // was tried and failed).
+    if (!legacy) full = cut(tt, slitsForProng(tt, option.prong, n));
+    const fresh = attachedCircles(full, punctureCount(tt)) as AttachedCircle[];
+    surface = removeAlmostPeripheralCircles(full, fresh, {
+      ...removalOptions(full),
+      ...(before && { before }),
+    });
+  }
   if (remarking !== undefined) surface = finishRemarking(surface, remarking);
+  if (!legacy)
+    mergeAllValenceTwoLines(surface, "Removing B left valence-2 lines. Merge each into one strip:");
   return { surface, prong: option.prong, realBranches: option.realBranches, cut: full };
 }
 

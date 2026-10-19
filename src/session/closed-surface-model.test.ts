@@ -4,7 +4,7 @@ import { layout } from "../embedding/layout";
 import { modelOfSpine } from "../embedding/remark";
 import { withTightMarking } from "../embedding/image";
 import { type PolygonModel, spineOfGraph, type SurfaceModel } from "../examples/models";
-import { DEFAULT_AUTOMATIC, plainText } from "../fibred/suggestions";
+import { DEFAULT_AUTOMATIC, plainText, type Text } from "../fibred/suggestions";
 import { presetNamed } from "../examples/presets";
 import type { FibredSurface } from "../fibred/fibred-surface";
 import type { Move } from "../fibred/move";
@@ -75,7 +75,8 @@ describe("closed-surface moves in the original polygon", () => {
       // The state with p filled in and the wall comes before the slide, as a step of its own.
       const walled = preview.steps.map((step) => modelOfSpine(step.after.spine0));
       expect(walled.some((m) => m?.kind === "polygon" && m.closed && (m.points ?? []).length > 0)).toBe(true);
-      expect(plainText(preview.steps.at(-1)!.text)).toMatch(/^Slide the new puncture/);
+      // The slide comes last, except for merging the valence-2 lines that are left (port note 28).
+      expect(lastBeforeMerging(preview.steps)).toMatch(/^Slide the new puncture/);
       // Every state of the narration can be drawn, and the cut shows several of them.
       for (const step of preview.steps) drawable(step.after, before.model);
       // … with μ tight at every junction (the slits split switches, whose parts may all lie across one chord).
@@ -168,9 +169,15 @@ describe("cutting again (port note 26)", () => {
     // The walled state: P filled in (the vertex and the point), then the walls contracted.
     const models = preview.steps.map((step) => modelOfSpine(step.after.spine0) as PolygonModel | undefined);
     expect(models.some((m) => m?.closed && m.filled?.length === 1)).toBe(true);
-    expect(plainText(preview.steps.at(-1)!.text)).toMatch(/^Contract the walls/);
+    expect(lastBeforeMerging(preview.steps)).toMatch(/^Contract the walls/);
     const result = modelOfSpine(preview.surface!.spine0) as PolygonModel;
     expect(result).toMatchObject({ kind: "polygon", closed: false });
     expect(result.filled).toBeUndefined();
   }, 300_000);
 });
+
+/** The text of the last step that doesn't merge valence-2 lines. */
+function lastBeforeMerging(steps: readonly { readonly text: Text }[]): string {
+  const texts = steps.map((step) => plainText(step.text));
+  return texts.findLast((t) => !/valence-2 lines\. Merge/.test(t)) ?? "";
+}
