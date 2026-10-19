@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { Complex } from "../math/complex";
-import { cellDecomposition } from "./cells";
+import { cellDecomposition, slideIntoCorner } from "./cells";
 import { regularPolygon } from "./hyperbolic";
 
 /** The signed area of a polygon (positive if counterclockwise). */
@@ -73,5 +73,56 @@ describe("cellDecomposition", () => {
     const midpoint = (octagon[0] as Complex).add(octagon[1] as Complex).scale(0.5);
     expect(() => cellDecomposition(octagon, [midpoint])).toThrow(/boundary/);
     expect(() => cellDecomposition(octagon, [new Complex(0.1, 0), new Complex(0.1, 0)])).toThrow(/corner/);
+  });
+});
+
+describe("slideIntoCorner", () => {
+  const octagon = regularPolygon(8, "compact");
+  /** The first chord from a polygon vertex to the point with this index (the wall). */
+  const wallTo = (cells: readonly (readonly number[])[], point: number): number => {
+    for (const cell of cells)
+      for (let i = 0; i < cell.length; i++) {
+        const [a, b] = [cell[i] as number, cell[(i + 1) % cell.length] as number];
+        if (b === point && a < 8) return a;
+      }
+    throw new Error("No chord from a vertex to the point");
+  };
+
+  it("gives back the polygon as one cell when the only point slides into a corner", () => {
+    const { cells } = cellDecomposition(octagon, [Complex.ZERO]);
+    const slid = slideIntoCorner(octagon, [Complex.ZERO], cells, 8, wallTo(cells, 8));
+    expect(slid?.cells).toEqual([[0, 1, 2, 3, 4, 5, 6, 7]]);
+    expect(slid?.cellOf).toEqual(cells.map(() => 0));
+    expect(slid?.pointOf).toEqual([]);
+  });
+
+  it("keeps the other points, convex cells that tile the polygon, and the sides they were", () => {
+    const points = [new Complex(-0.2, 0.05), new Complex(0.25, -0.1), new Complex(0.05, 0.3)];
+    const { cells } = cellDecomposition(octagon, points);
+    const slid = slideIntoCorner(octagon, points, cells, 8, wallTo(cells, 8));
+    expect(slid).toBeDefined();
+    const { corners, cells: after, was, cellOf, pointOf } = slid!;
+    expect(pointOf).toEqual([1, 2]);
+    expect(after.length).toBeLessThanOrEqual(cells.length);
+    for (const cell of after) {
+      const ps = cell.map((i) => corners[i] as Complex);
+      expect(area(ps)).toBeGreaterThan(0);
+      ps.forEach((a, i) => {
+        const [b, c] = [ps[(i + 1) % ps.length] as Complex, ps[(i + 2) % ps.length] as Complex];
+        expect(b.sub(a).re * c.sub(b).im - b.sub(a).im * c.sub(b).re).toBeGreaterThanOrEqual(-1e-9);
+      });
+    }
+    const total = after.reduce((sum, cell) => sum + area(cell.map((i) => corners[i] as Complex)), 0);
+    expect(total).toBeCloseTo(area(octagon), 9);
+    // Every chord is seen from both sides, as the same old side in both directions; polygon sides stay what they were.
+    const sides = was.flat();
+    for (const [k, cell] of after.entries())
+      cell.forEach((a, i) => {
+        const b = cell[(i + 1) % cell.length] as number;
+        const side = was[k]![i]!;
+        if (a < 8 && b === (a + 1) % 8) expect(side).toBe(`${a}>${b}`);
+        else expect(sides).toContain(side.split(">").reverse().join(">"));
+      });
+    expect(cellOf.every((k) => k >= 0 && k < after.length)).toBe(true);
   });
 });

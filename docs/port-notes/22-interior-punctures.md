@@ -56,11 +56,11 @@ determines G₀).
 
 Semantics of `PolygonModel.closed`:
 
-| `closed` | interior points | the vertex class                         | the surface | `isClosed` of the start |
-| -------- | --------------- | ---------------------------------------- | ----------- | ----------------------- |
-| false    | any             | a puncture                               | Σ ∖ ({p} ∪ Q) | false                 |
-| true     | none            | an artificial puncture (as before)       | Σ, via Σ ∖ p | true                   |
-| true     | some            | **filled in** (drawn as a small dot)     | Σ ∖ Q       | false                   |
+| `closed` | interior points | the vertex class                     | the surface   | `isClosed` of the start |
+| -------- | --------------- | ------------------------------------ | ------------- | ----------------------- |
+| false    | any             | a puncture                           | Σ ∖ ({p} ∪ Q) | false                   |
+| true     | none            | an artificial puncture (as before)   | Σ, via Σ ∖ p  | true                    |
+| true     | some            | **filled in** (drawn as a small dot) | Σ ∖ Q         | false                   |
 
 ## 3. The cutting move without losing the surface (phase 3)
 
@@ -144,11 +144,11 @@ would give a 1-pronged singularity, which a pseudo-Anosov doesn't have. Port not
 
 It is used three times, on different graphs:
 
-| Where                           | Γ                                     | ε                                  | Faces that merge     | Applied to                                       |
-| ------------------------------- | ------------------------------------- | ---------------------------------- | -------------------- | ------------------------------------------------ |
-| shortcut, `fillPuncture`        | the blown-up G (source and target of g) | a branch of q's polygon next to p | p and q of G         | g: restricted, and ε ↦ β⁻¹ in its images         |
-| cut, removing the disks         | τ′ ∖ B                                | a branch of an uncut polygon       | a disk and its neighbour | g′ (the disk has no puncture: no face is lost) |
-| step 6 above, and § 2           | Ĝ′ (the target of μ)                  | ε₀, dual to a chord from p to q    | p and q of Ĝ′        | μ: only ε₀ ↦ β⁻¹ in its images                  |
+| Where                    | Γ                                       | ε                                 | Faces that merge         | Applied to                                     |
+| ------------------------ | --------------------------------------- | --------------------------------- | ------------------------ | ---------------------------------------------- |
+| shortcut, `fillPuncture` | the blown-up G (source and target of g) | a branch of q's polygon next to p | p and q of G             | g: restricted, and ε ↦ β⁻¹ in its images       |
+| cut, removing the disks  | τ′ ∖ B                                  | a branch of an uncut polygon      | a disk and its neighbour | g′ (the disk has no puncture: no face is lost) |
+| step 6 above, and § 2    | Ĝ′ (the target of μ)                    | ε₀, dual to a chord from p to q   | p and q of Ĝ′            | μ: only ε₀ ↦ β⁻¹ in its images                 |
 
 μ is a homotopy equivalence between **two** spines of the surface, G and G₀, and filling p changes the surface on both
 ends. So p has to be filled in on both sides:
@@ -220,6 +220,9 @@ faces of p and q exactly as ε₀ does in G₀.
 
 For |Q| > 1 only one point can take p's place, and the others would need chords that are no longer straight; there the
 result is the model `{ ...polygon, closed: true, points: Q }` (§ 2: p filled in, the wall kept).
+
+**Superseded by port note 27:** for |Q| > 1 the other points move along (a Tutte layout), so the wall is contracted
+in every case, as a step of its own after the walled state.
 
 ### Filling p on both sides at once
 
@@ -304,7 +307,6 @@ Now:
 - **Drawing:** a junction of valence 2 no longer limits the strip widths (it is a point on a strip, with no gates to fit,
   and the cut creates many that lie right next to another strip; one of them shrank every strip to nothing).
 - Without a provider (no polygon to keep), μ is reset after the contraction, as before.
-
 
 ## 7. Concrete explanations (author's review, 2026-10-17)
 

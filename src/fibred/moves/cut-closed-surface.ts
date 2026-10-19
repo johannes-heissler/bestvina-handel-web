@@ -439,9 +439,21 @@ export function cutClosedSurface(tt: TrainTrack, option: CutOption, remarking?: 
 /** What filling in p does to the picture (the side of G₀), for the narration. */
 export function fillingText(remarking: Remarking): string {
   const { name, image } = remarking.wall;
-  return remarking.contracts
-    ? `In the picture, the strands crossing the chord ${name} from q to the corner go around the corner instead (${name} ↦ ${image} in μ), and q slides along ${name} into the corner: the surface is drawn in the original polygon, with q at its vertex.`
-    : `In the picture, p is filled in (the dots at the corners): the strands crossing the chord ${name} from p to a new puncture go around p instead (${name} ↦ ${image} in μ).`;
+  return `In the picture, p is filled in (the dots at the corners): the chord ${name} from p to a new puncture becomes a wall, and the strands that crossed it go around p instead (${name} ↦ ${image} in μ).`;
+}
+
+/** The step of the slide after filling in p (port note 27), for the narration. */
+function slideText(remarking: Remarking, slid: NonNullable<ReturnType<Remarking["slide"]>>): string {
+  const { name } = remarking.wall;
+  return [
+    `Slide the new puncture of ${slid.point} along the wall ${name} into the corner, where p was: the wall disappears, and the chords that ended at the puncture now end at the corner (G₀ and μ stay the same).`,
+    slid.merged.length === 0
+      ? ""
+      : ` The cells that collapse or can be joined are merged, so the chords ${slid.merged.join(", ")} drop out of μ.`,
+    slid.pointsLeft === 0
+      ? " The surface is drawn in the original polygon again, with the new puncture at its vertex."
+      : ` The other new ${slid.pointsLeft === 1 ? "puncture is" : "punctures are"} placed anew, each at the average of its neighbours along the chords.`,
+  ].join("");
 }
 
 /** n as a superscript, e.g. −2 as ⁻². */
@@ -451,14 +463,20 @@ function superscript(n: number): string {
 }
 
 /**
- * The surface with μ into the final model, checked, and pulled tight at the junctions (see {@link tightenMarking}); if
- * that fails, μ is reset (the surface is then drawn as its own ribbon graph).
+ * The surface with μ into the final model: p filled in (with the wall), then the new puncture at the wall slid into p's
+ * corner (port note 27; a step of its own, after the walled state), each checked and pulled tight at the junctions (see
+ * {@link tightenMarking}). If the slide doesn't work, the wall stays; if filling in fails, μ is reset (the surface is
+ * then drawn as its own ribbon graph).
  */
 export function finishRemarking(surface: FibredSurface, remarking: Remarking): FibredSurface {
   const finished = remarking.finish(surface);
   if (finished !== undefined) {
     tightenMarking(finished);
-    return finished;
+    const slid = remarking.slide(finished);
+    if (slid === undefined) return finished;
+    narrate([slideText(remarking, slid)], { before: keepingStates() ? finished.copy() : undefined });
+    tightenMarking(slid.surface);
+    return slid.surface;
   }
   surface.reportInconsistency(
     "The new punctures couldn't be drawn in the original model; the surface is drawn as its own ribbon graph.",

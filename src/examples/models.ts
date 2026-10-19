@@ -61,6 +61,17 @@ export interface PolygonModel extends ModelBase {
    * is centred at 0), the coordinates of the vertices for flat ones.
    */
   readonly points?: readonly Point2[];
+  /**
+   * An explicit cell decomposition, used instead of the one computed from the points (port note 27, after a puncture
+   * slid into the vertex): the corners of each cell counterclockwise, as in {@link SpineCell.corners}, in the order of
+   * the vertices of G₀.
+   */
+  readonly cells?: readonly (readonly number[])[];
+  /**
+   * With `cells`: the name of the edge of G₀ that leaves a cell through each chord, keyed "a>b" by the corners of the
+   * chord in the direction the cell runs along it.
+   */
+  readonly exits?: Readonly<Record<string, string>>;
 }
 
 export interface PlaneModel extends ModelBase {
@@ -154,6 +165,19 @@ interface DefaultNaming {
  * s_1, s_2, … in the order they appear.
  */
 function polygonCells(model: PolygonModel, naming: DefaultNaming = {}): PolygonCells {
+  if (model.cells !== undefined) {
+    const n = model.word.length;
+    const names = model.cells.map((cell) =>
+      cell.map((a, i) => {
+        const b = cell[(i + 1) % cell.length] as number;
+        if (a < n && b === (a + 1) % n) return model.word[a] as string;
+        const name = model.exits?.[`${a}>${b}`];
+        if (name === undefined) throw new Error(`The chord from corner ${a} to ${b} has no name`);
+        return name;
+      }),
+    );
+    return { cells: model.cells, names, wall: undefined };
+  }
   if ((model.points ?? []).length === 0)
     return { cells: [model.word.map((_, i) => i)], names: [[...model.word]], wall: undefined };
   const { vertices, points } = polygonCorners(model);

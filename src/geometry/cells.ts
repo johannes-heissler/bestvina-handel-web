@@ -148,23 +148,235 @@ export function cellDecomposition(
   }
 
   // 4. A canonical order.
-  const firstSide = (cell: readonly number[]): [number, number] => {
-    let best: [number, number] = [Infinity, 0];
-    cell.forEach((a, i) => {
-      const b = cell[(i + 1) % cell.length] as number;
-      const rank = a < n && b === (a + 1) % n ? a : n + a * corners.length + b;
-      if (rank < best[0]) best = [rank, i];
-    });
-    return best;
+  return {
+    corners,
+    cells: canonicalOrder(cells, n, corners.length).map(({ cell, start }) => rotate(cell, start)),
   };
-  const ordered = cells
-    .map((cell) => {
-      const [rank, i] = firstSide(cell);
-      return { rank, cell: rotate(cell, i) };
+}
+
+/**
+ * The cells in canonical order, each with the position of its first side: the polygon side with the smallest index if
+ * it has one, else the side from its smallest corner. Polygon sides come first. `index` is the cell's place in `cells`.
+ */
+function canonicalOrder(
+  cells: readonly (readonly number[])[],
+  n: number,
+  cornerCount: number,
+): { cell: readonly number[]; start: number; index: number }[] {
+  return cells
+    .map((cell, index) => {
+      let [rank, start] = [Infinity, 0];
+      cell.forEach((a, i) => {
+        const b = cell[(i + 1) % cell.length] as number;
+        const r = a < n && b === (a + 1) % n ? a : n + a * cornerCount + b;
+        if (r < rank) [rank, start] = [r, i];
+      });
+      return { cell, start, index, rank };
     })
-    .sort((x, y) => x.rank - y.rank)
-    .map((x) => x.cell);
-  return { corners, cells: ordered };
+    .sort((x, y) => x.rank - y.rank);
+}
+
+/** The result of {@link slideIntoCorner}. */
+export interface SlidDecomposition {
+  /** The corners: the polygon's vertices, then the points that are left, at their new places. */
+  readonly corners: readonly Complex[];
+  /** For each point that is left (in order), its index among the old points. */
+  readonly pointOf: readonly number[];
+  /** The cells, counterclockwise, in the canonical order of {@link cellDecomposition}. */
+  readonly cells: readonly (readonly number[])[];
+  /**
+   * For each cell and each of its sides (from corner i to corner i + 1), the side it was before: "a>b" with the old
+   * corners at its ends, in the direction the old cell ran along it.
+   */
+  readonly was: readonly (readonly string[])[];
+  /** For each old cell, the index of the new cell that contains it. */
+  readonly cellOf: readonly number[];
+}
+
+/**
+ * Slides the point `point` (a corner index ≥ n) along the chord from `corner` (a polygon vertex) into that corner (port
+ * note 27): the chord, a wall without an edge of G₀, shrinks to a point. Cells that become digons are merged with the
+ * cell across their side from `point`; the other points are placed anew by a Tutte layout (each at the average of its
+ * neighbours along the chords, the polygon fixed); then cells are merged across chords, longest first, while the union
+ * stays convex. Every merge contracts an edge of the dual graph. Undefined if the result isn't a decomposition into
+ * convex cells (then the wall has to stay).
+ */
+export function slideIntoCorner(
+  polygon: readonly Complex[],
+  points: readonly Complex[],
+  cells: readonly (readonly number[])[],
+  point: number,
+  corner: number,
+): SlidDecomposition | undefined {
+  const n = polygon.length;
+  const position = [...polygon, ...points];
+  const at = (i: number) => position[i] as Complex;
+  const scale = Math.max(...polygon.map((p) => p.abs()), 1);
+  const tolerance = EPS * scale * scale;
+  const ends = (side: string) => side.split(">").map(Number) as [number, number];
+  const reverse = (side: string) => {
+    const [a, b] = ends(side);
+    return `${b}>${a}`;
+  };
+  interface Work {
+    corners: number[];
+    was: string[];
+    members: number[];
+  }
+  let work: Work[] = cells.map((cell, k) => ({
+    corners: cell.map((x) => (x === point ? corner : x)),
+    was: cell.map((a, i) => `${a}>${cell[(i + 1) % cell.length]}`),
+    members: [k],
+  }));
+
+  // 1. The wall shrinks to a point: drop the sides that start and end at the corner.
+  for (const w of work)
+    for (let i = w.corners.length - 1; i >= 0; i--)
+      if (w.corners.length > 1 && w.corners[i] === w.corners[(i + 1) % w.corners.length]) {
+        w.corners.splice(i, 1);
+        w.was.splice(i, 1);
+      }
+
+  // 2. Digons: their two sides now lie on each other. Each is merged with the cell across its side from the point,
+  // which then runs along the digon's other side instead.
+  for (
+    let digon = work.find((w) => w.corners.length < 3);
+    digon;
+    digon = work.find((w) => w.corners.length < 3)
+  ) {
+    if (digon.corners.length !== 2) return undefined;
+    const s = digon.was.findIndex((side) => ends(side).includes(point));
+    if (s < 0) return undefined;
+    const across = reverse(digon.was[s] as string);
+    const neighbour = work.find((w) => w !== digon && w.was.includes(across));
+    if (neighbour === undefined) return undefined;
+    neighbour.was[neighbour.was.indexOf(across)] = digon.was[1 - s] as string;
+    neighbour.members.push(...digon.members);
+    work = work.filter((w) => w !== digon);
+  }
+
+  // 3. The Tutte layout of the other points.
+  const movable = points.map((_, j) => n + j).filter((x) => x !== point);
+  const neighbours = new Map<number, Set<number>>(movable.map((x) => [x, new Set()]));
+  for (const w of work)
+    w.corners.forEach((a, i) => {
+      const b = w.corners[(i + 1) % w.corners.length] as number;
+      neighbours.get(a)?.add(b);
+      neighbours.get(b)?.add(a);
+    });
+  for (let round = 0; round < 10_000; round++) {
+    let change = 0;
+    for (const x of movable) {
+      const around = [...(neighbours.get(x) as Set<number>)];
+      if (around.length === 0) return undefined;
+      const average = around.reduce((sum, y) => sum.add(at(y)), Complex.ZERO).scale(1 / around.length);
+      change = Math.max(change, average.sub(at(x)).abs());
+      position[x] = average;
+    }
+    if (change < 1e-14 * scale) break;
+  }
+  if (
+    !tiles(
+      work.map((w) => w.corners),
+      position,
+      polygon,
+      tolerance,
+    )
+  )
+    return undefined;
+
+  // 4. Merge across chords, longest first, while the union stays convex (as in cellDecomposition).
+  const chords = work
+    .flatMap((w) =>
+      w.was.map((side, i) => ({
+        side,
+        a: w.corners[i] as number,
+        b: w.corners[(i + 1) % w.corners.length] as number,
+      })),
+    )
+    .filter(({ side, a, b }) => !(a < n && b === (a + 1) % n) && ends(side)[0] < ends(side)[1])
+    .sort((x, y) => at(y.b).sub(at(y.a)).abs() - at(x.b).sub(at(x.a)).abs() || x.side.localeCompare(y.side));
+  for (const { side } of chords) {
+    const A = work.find((w) => w.was.includes(side));
+    const B = work.find((w) => w.was.includes(reverse(side)));
+    if (A === undefined || B === undefined || A === B) continue;
+    const [i, j] = [A.was.indexOf(side), B.was.indexOf(reverse(side))];
+    const [a, b] = [A.corners[i] as number, A.corners[(i + 1) % A.corners.length] as number];
+    const fits = [a, b].every(
+      (x) =>
+        x < n ||
+        angleAt(A.corners, A.corners.indexOf(x), position) +
+          angleAt(B.corners, B.corners.indexOf(x), position) <=
+          Math.PI + 1e-9,
+    );
+    if (!fits) continue;
+    // A runs a → b at i, B runs b → a at j: the union is A from b round to a, then B from a round to b.
+    const union: Work = {
+      corners: [...rotate(A.corners, i + 1), ...rotate(B.corners, j + 1).slice(1, -1)],
+      was: [...rotate(A.was, i + 1).slice(0, -1), ...rotate(B.was, j + 1).slice(0, -1)],
+      members: [...A.members, ...B.members],
+    };
+    work = [...work.filter((w) => w !== A && w !== B), union];
+  }
+  if (
+    !tiles(
+      work.map((w) => w.corners),
+      position,
+      polygon,
+      tolerance,
+    )
+  )
+    return undefined;
+
+  // 5. Renumber the points that are left, and order the cells canonically.
+  const renumber = new Map<number, number>(polygon.map((_, i) => [i, i]));
+  movable.forEach((x, k) => renumber.set(x, n + k));
+  const ordered = canonicalOrder(
+    work.map((w) => w.corners.map((x) => renumber.get(x) as number)),
+    n,
+    n + movable.length,
+  );
+  const cellOf: number[] = cells.map(() => -1);
+  ordered.forEach(({ index }, k) => {
+    for (const member of (work[index] as Work).members) cellOf[member] = k;
+  });
+  return {
+    corners: [...polygon, ...movable.map(at)],
+    pointOf: movable.map((x) => x - n),
+    cells: ordered.map(({ cell, start }) => rotate(cell, start)),
+    was: ordered.map(({ index, start }) => rotate((work[index] as Work).was, start)),
+    cellOf,
+  };
+}
+
+/**
+ * Whether the cells (lists of corners) are convex and counterclockwise, with distinct corners, and tile the polygon
+ * (their areas add up to its area).
+ */
+function tiles(
+  cells: readonly (readonly number[])[],
+  position: readonly Complex[],
+  polygon: readonly Complex[],
+  tolerance: number,
+): boolean {
+  const area = (ps: readonly Complex[]) =>
+    ps.reduce((sum, p, i) => {
+      const q = ps[(i + 1) % ps.length] as Complex;
+      return sum + (p.re * q.im - p.im * q.re) / 2;
+    }, 0);
+  let total = 0;
+  for (const cell of cells) {
+    if (cell.length < 3 || new Set(cell).size !== cell.length) return false;
+    const ps = cell.map((x) => position[x] as Complex);
+    const a = area(ps);
+    if (a <= tolerance) return false;
+    const turns = ps.map((p, i) =>
+      orient(p, ps[(i + 1) % ps.length] as Complex, ps[(i + 2) % ps.length] as Complex),
+    );
+    if (turns.some((t) => t < -tolerance)) return false;
+    total += a;
+  }
+  return Math.abs(total - area(polygon)) <= 1e-7 * Math.abs(area(polygon));
 }
 
 function key(a: number, b: number): string {

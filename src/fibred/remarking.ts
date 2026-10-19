@@ -12,8 +12,6 @@ import type { FibredSurface } from "./fibred-surface";
 import type { TrainTrack } from "./train-track";
 
 export interface Remarking {
-  /** Whether a single new puncture is moved to p's place (the original model is kept), see {@link finish}. */
-  readonly contracts: boolean;
   /** The chord from p to a point of Q that filling in p removes (its name in {@link spine}), and what replaces it. */
   readonly wall: { readonly name: string; readonly image: string };
   /** G₀ while both p and Q are punctures: the polygon with the points of Q inside. */
@@ -29,17 +27,24 @@ export interface Remarking {
   /** μ of the way inside the junction of the strip end x, from the junction to the switch of x. */
   toSwitch(x: OrientedEdge): EdgePath;
   /**
-   * μ after filling in p, into the final G₀: the wall from p to a point of Q is replaced by the rest of p's boundary, and
-   * for a single point q, q slides along the wall into p's corner (the chords disappear). The graph of G must have p's
-   * face merged with q's already (B removed, or ε deleted). Always the same final G₀.
+   * μ after filling in p, into the walled G₀: the wall from p to a point of Q is replaced by the rest of p's boundary.
+   * The graph of G must have p's face merged with q's already (B removed, or ε deleted). Always the same walled G₀.
    */
   filled(mu: CombinatorialMap): CombinatorialMap;
   /**
-   * The surface with μ into the final G₀ (converted with {@link filled} if it is still into {@link spine}), if μ comes
-   * from an embedding there: p filled in, and (for a single point q) q moved along the chord to p's place,
-   * so that the original model and G₀ are kept. Undefined if the result is inconsistent.
+   * The surface with μ into the walled G₀ (converted with {@link filled} if it is still into {@link spine}), if μ comes
+   * from an embedding there. Undefined if the result is inconsistent.
    */
   finish(fs: FibredSurface): FibredSurface | undefined;
+  /**
+   * The walled surface (from {@link finish}) after the point q of Q at the wall slid along it into p's corner (port note
+   * 27): the other points of Q are placed anew, and cells that collapse or can be joined are merged, so their chords
+   * (`merged`) drop out of μ. With a single point, that gives back the original model and G₀. Undefined if the slide
+   * doesn't give convex cells, or the result is inconsistent; then the wall stays.
+   */
+  slide(
+    fs: FibredSurface,
+  ): { surface: FibredSurface; point: string; merged: readonly string[]; pointsLeft: number } | undefined;
 }
 
 /** Gives a {@link Remarking} for the closed-surface move on `fs` with the orbit Q of singular junctions (the session). */

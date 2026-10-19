@@ -3,7 +3,8 @@ import { chartOf } from "../embedding/chart";
 import { layout } from "../embedding/layout";
 import { modelOfSpine } from "../embedding/remark";
 import { withTightMarking } from "../embedding/image";
-import { spineOfGraph, type SurfaceModel } from "../examples/models";
+import { type PolygonModel, spineOfGraph, type SurfaceModel } from "../examples/models";
+import { plainText } from "../fibred/suggestions";
 import type { FibredSurface } from "../fibred/fibred-surface";
 import type { Move } from "../fibred/move";
 import { Session } from "./session";
@@ -64,9 +65,16 @@ describe("closed-surface moves in the original polygon", () => {
       if (singlePoint)
         expect(result.spine0).toBe(before.surface.spine0); // q moved to p's place: G₀ unchanged
       else {
+        // One point of Q slid into p's corner, the others are inside, and no wall is left (port note 27).
         const model = modelOfSpine(result.spine0)!;
-        expect(model.kind === "polygon" && model.closed && (model.points ?? []).length > 1).toBe(true);
+        expect(model).toMatchObject({ kind: "polygon", closed: false });
+        expect((model as PolygonModel).points?.length).toBeGreaterThan(0);
+        expect((model as PolygonModel).cells).toBeDefined();
       }
+      // The state with p filled in and the wall comes before the slide, as a step of its own.
+      const walled = preview.steps.map((step) => modelOfSpine(step.after.spine0));
+      expect(walled.some((m) => m?.kind === "polygon" && m.closed && (m.points ?? []).length > 0)).toBe(true);
+      expect(plainText(preview.steps.at(-1)!.text)).toMatch(/^Slide the new puncture/);
       // Every state of the narration can be drawn, and the cut shows several of them.
       for (const step of preview.steps) drawable(step.after, before.model);
       // … with μ tight at every junction (the slits split switches, whose parts may all lie across one chord).

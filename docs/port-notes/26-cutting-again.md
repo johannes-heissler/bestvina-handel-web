@@ -71,26 +71,23 @@ Per point pᵢ, one polygon branch ε of Q′ whose other side is pᵢ's face is
 Each deletion has to merge two different faces. The choice is made one at a time, re-reading the boundary words after
 each deletion. Port note 15 already noted that only branches bordering the puncture to be filled may be used.
 
-### 4. The model (`remark.ts`, `models.ts`) — the main work
+### 4. The model (`remark.ts`) — with the mechanism of port note 27
 
-After the first cut with |Q| ≥ 2, the model is the closed polygon with the points Q inside and the vertex filled in.
-For the second cut:
+After the first cut, port note 27 slides one point of Q into the vertex, so the model is the compact polygon with
+`closed: false`, the vertex is a puncture (artificial, since `fs.isClosed`), and the other points of Q are inside, with
+explicit cells. For the second cut, P is the vertex and these points. Filling in works for any point the same way
+(decided 2026-10-19):
 
-- The mid model has the points P ∪ Q′, and the final one only Q′. The points P have to be **filled in**, as the
-  vertex was in the first cut.
-- Filling in a point removes **one** edge of G₀ per point (a wall, see below). The other chords at that point stay,
-  ending at a point that is no longer a puncture. A model can't express that today: interior points are always
-  punctures, and only the vertex can be filled in. So `PolygonModel` needs **filled points**, e.g.
-  `points: { at: Point2; filled?: true }[]` or a separate list `filledPoints`, each with its wall. They are drawn as
-  dots, like the filled vertex.
-- `filling` in `remark.ts` assumes one wall at the vertex and finds it by comparing edge names with the final model.
-  It must handle several walls, one per point of P, each replaced by the rest of that point's boundary word.
-- `remarkClosedSurface` accepts today only a closed polygon without points. It must accept a closed polygon with
-  points (all of them artificial, i.e. `fs.isClosed`).
-- **The alternative** would be to recompute the cells for Q′ alone (other chords, another G₀) and read μ off the drawing
-  again. The pictures would be tidier (no filled points piling up), but μ would no longer follow from the old one by
-  a homotopy equivalence, and the names of the chords would change. I'd go with filled points.
-- The "contracts" case (|Q′| = 1, q′ slides into a filled place) generalizes poorly. I'd keep it only for the vertex.
+- **Filling in a point p** deletes one edge of G₀ on p's face: its chord, from p to a neighbour x, becomes a wall, and
+  p's face merges with x's (wall ↦ the rest of p's boundary word, in μ).
+- **Contracting the wall:** an interior p moves to x and disappears (its other chords now end at x); the vertex can't
+  move, so x slides into it (port note 27).
+- **Several points at once:** one wall per point of P, chosen so that the merged faces form trees, each containing
+  exactly one point of Q′ (outward from Q′ through the chord graph). The walls are then contracted along the trees.
+- Then the degenerate cells are merged and the remaining points placed by the Tutte layout, as in port note 27. No
+  filled points stay in the model.
+- `remarkClosedSurface` must accept a polygon with points whose punctures are all artificial (`fs.isClosed`), and
+  `filling` must handle several walls.
 
 ### 5. Finding an example — open
 
@@ -135,7 +132,8 @@ same step with an interior point in place of the vertex, hence the filled points
 ## Open questions
 
 1. Does the growth argument of the Lemma "Removing an almost peripheral subgraph" hold for an orbit of circles (math § 3)?
-2. Filled points in the model (§ 4), or recompute the cells and re-read μ?
+2. ~~Filled points in the model, or recompute the cells and re-read μ?~~ Neither: walls only as an intermediate
+   state, contracted as in port note 27 (§ 4).
 3. Should the wrong classification (pseudo-Anosov with 1-prongs at an orbit of artificial punctures) be fixed first, on
    its own? A minimal fix: detect it and say "τ has one cusp at each of the artificial punctures; cutting again is not
    implemented yet", instead of claiming pseudo-Anosov.

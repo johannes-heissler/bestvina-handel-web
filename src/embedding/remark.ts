@@ -14,6 +14,7 @@ import { CombinatorialMap } from "../graph/combinatorial-map";
 import { EdgePath } from "../graph/edge-path";
 import type { Edge, OrientedEdge, RibbonGraph, Vertex } from "../graph/ribbon-graph";
 import { Complex } from "../math/complex";
+import { slideIntoCorner } from "../geometry/cells";
 import { denormalizeLike } from "../geometry/normalize";
 import {
   polygonCorners,
@@ -236,17 +237,26 @@ function build(
       );
   }
 
-  const contracts = orbit.length === 1;
-  const { fill: filled, wall } = filling({
-    model: mid,
-    spine: midSpine,
+  const {
+    fill: filled,
+    wall,
+    walled,
+    wallEdge,
+  } = filling({ model: mid, spine: midSpine, naming: finalNaming });
+  const slide = sliding({
+    original: model,
+    mid,
+    midSpine,
+    walled,
+    wallEdge,
     naming: finalNaming,
     oldSpine,
-    contracts,
+    toModel,
+    orbit,
   });
   return {
-    contracts,
     wall,
+    slide,
     spine: midSpine.graph,
     part: (b, from, to) =>
       EdgePath.from((crossings.get(b) ?? []).filter((c) => c.t > from && c.t <= to).map((c) => c.letter)),
@@ -300,18 +310,18 @@ function inside(polygon: readonly Complex[], z: Complex): boolean {
 }
 
 /**
- * μ after filling in p (see {@link Remarking.filled}): the wall is replaced by the rest of p's boundary, and for a single
- * point q the chords are dropped (q slides into p's corner, and merging the cells deletes them). The G₀ it maps into is
- * built once, so that all states share it.
+ * μ after filling in p (see {@link Remarking.filled}): the wall is replaced by the rest of p's boundary. The walled G₀ it
+ * maps into is built once, so that all states share it.
  */
-function filling(context: {
-  model: PolygonModel;
-  spine: Spine;
-  naming: SpineNames;
-  oldSpine: Spine;
-  contracts: boolean;
-}): { fill: (old: CombinatorialMap) => CombinatorialMap; wall: { name: string; image: string } } {
-  const { spine, oldSpine, contracts } = context;
+function filling(context: { model: PolygonModel; spine: Spine; naming: SpineNames }): {
+  fill: (old: CombinatorialMap) => CombinatorialMap;
+  wall: { name: string; image: string };
+  /** The walled G₀ (of the closed model with the points). */
+  walled: Spine;
+  /** The wall, an edge of the mid G₀. */
+  wallEdge: Edge;
+} {
+  const { spine } = context;
   const midGraph = spine.graph;
   const finalModel: PolygonModel = { ...context.model, closed: true };
   const finalSpine = spineOf(finalModel, context.naming);
@@ -331,30 +341,134 @@ function filling(context: {
     path.letters.flatMap((y) =>
       y.edge === wall ? (y.isForward ? forwardImage : forwardImage.inverse).letters : [y],
     );
-  const target = contracts ? oldSpine.graph : finalSpine.graph;
-  if (!contracts) models.set(finalSpine.graph, finalModel);
-  const oldSides = oldSpine.sides as readonly OrientedEdge[];
-  const midSides = spine.sides as readonly OrientedEdge[];
+  models.set(finalSpine.graph, finalModel);
   const byName = new Map(finalSpine.graph.orientedEdges.map((y) => [y.name, y]));
   const vertexOf = new Map(midGraph.vertices.map((v, i) => [v, finalSpine.graph.vertices[i] as Vertex]));
-  const letter = (y: OrientedEdge): OrientedEdge[] => {
-    if (!contracts) return [byName.get(y.name) as OrientedEdge];
-    const side = midSides.indexOf(y);
-    return side < 0 ? [] : [oldSides[side] as OrientedEdge];
-  };
   const wallText = { name: wall.forward.name, image: forwardImage.toString() || "(nothing)" };
   const fill = (old: CombinatorialMap) => {
-    const mu = new CombinatorialMap(old.source, target);
-    for (const v of old.source.vertices)
-      mu.setVertexImage(
-        v,
-        contracts ? (target.vertices[0] as Vertex) : (vertexOf.get(old.vertexImage(v)) as Vertex),
-      );
+    const mu = new CombinatorialMap(old.source, finalSpine.graph);
+    for (const v of old.source.vertices) mu.setVertexImage(v, vertexOf.get(old.vertexImage(v)) as Vertex);
     for (const e of old.source.edges)
-      mu.setImage(e.forward, EdgePath.from(substituted(old.image(e.forward)).flatMap(letter)).reduced());
+      mu.setImage(
+        e.forward,
+        EdgePath.from(
+          substituted(old.image(e.forward)).map((y) => byName.get(y.name) as OrientedEdge),
+        ).reduced(),
+      );
     return mu;
   };
-  return { fill, wall: wallText };
+  return { fill, wall: wallText, walled: finalSpine, wallEdge: wall };
+}
+
+/**
+ * The slide after filling in p (see {@link Remarking.slide}, port note 27): the point of Q at the wall slides along it
+ * into p's corner, the other points of Q are placed anew, and μ maps letter by letter into the G₀ of the explicit cells
+ * that {@link slideIntoCorner} leaves (contracted edges of G₀ drop out). Without points left, that is the original
+ * model with its own G₀. Undefined (for every surface) if the slide doesn't give convex cells.
+ */
+function sliding(context: {
+  original: PolygonModel;
+  mid: PolygonModel;
+  midSpine: Spine;
+  walled: Spine;
+  wallEdge: Edge;
+  naming: SpineNames;
+  oldSpine: Spine;
+  toModel: (z: Complex) => Point2;
+  orbit: readonly Vertex[];
+}): Remarking["slide"] {
+  const { mid, midSpine, walled, oldSpine } = context;
+  const cells = midSpine.cells ?? [];
+  const n = mid.word.length;
+  // The wall's ends: a corner of the polygon and a point of Q.
+  let ends: [number, number] | undefined;
+  const exitName = new Map<string, string>();
+  for (const cell of cells)
+    cell.exits.forEach((x, i) => {
+      const [a, b] = [cell.corners[i] as number, cell.corners[(i + 1) % cell.corners.length] as number];
+      if (x === undefined) return;
+      exitName.set(`${a}>${b}`, x.name);
+      if (x.edge === context.wallEdge) ends = a < n ? [a, b] : [b, a];
+    });
+  if (ends === undefined) return () => undefined;
+  const [corner, point] = ends;
+  const { vertices, points } = polygonCorners(mid);
+  const slid = slideIntoCorner(
+    vertices,
+    points,
+    cells.map((cell) => cell.corners),
+    point,
+    corner,
+  );
+  if (slid === undefined) return () => undefined;
+
+  // The model and G₀ after the slide, and how the walled G₀ maps into it.
+  let target: RibbonGraph;
+  let letter: (y: OrientedEdge) => OrientedEdge | undefined;
+  if (slid.pointOf.length === 0 && slid.cells.length === 1) {
+    // Back to the original model and its G₀ (the chords have all been merged away).
+    target = oldSpine.graph;
+    const walledSides = walled.sides as readonly OrientedEdge[];
+    const oldSides = oldSpine.sides as readonly OrientedEdge[];
+    letter = (y) => {
+      const side = walledSides.indexOf(y);
+      return side < 0 ? undefined : oldSides[side];
+    };
+  } else {
+    const exits: Record<string, string> = {};
+    slid.cells.forEach((cell, k) =>
+      cell.forEach((a, i) => {
+        const b = cell[(i + 1) % cell.length] as number;
+        if (a < n && b === (a + 1) % n) return;
+        exits[`${a}>${b}`] = exitName.get((slid.was[k] as string[])[i] as string) as string;
+      }),
+    );
+    const model: PolygonModel = {
+      ...mid,
+      closed: false,
+      points: slid.corners.slice(n).map(context.toModel),
+      cells: slid.cells,
+      exits,
+    };
+    const spine = spineOf(model, context.naming);
+    models.set(spine.graph, model);
+    target = spine.graph;
+    const byName = new Map(spine.graph.orientedEdges.map((y) => [y.name, y]));
+    letter = (y) => byName.get(y.name);
+  }
+  const vertexOf = new Map(
+    walled.graph.vertices.map((v, k) => [v, target.vertices[slid.cellOf[k] as number] as Vertex]),
+  );
+  const merged = walled.graph.edges
+    .filter((e) => letter(e.forward) === undefined && !(walled.sides ?? []).some((x) => x.edge === e))
+    .map((e) => e.name);
+  const pointName = context.orbit[point - n]?.name ?? "q";
+  return (surface) => {
+    if (surface.spine0 !== walled.graph) return undefined;
+    const mu = new CombinatorialMap(surface.graph, target);
+    for (const v of surface.graph.vertices)
+      mu.setVertexImage(v, vertexOf.get(surface.mu.vertexImage(v)) as Vertex);
+    for (const e of surface.graph.edges)
+      mu.setImage(
+        e.forward,
+        EdgePath.from(
+          surface.mu.image(e.forward).letters.flatMap((y) => {
+            const z = letter(y);
+            return z === undefined ? [] : [z];
+          }),
+        ).reduced(),
+      );
+    const result = new FibredSurface({
+      graph: surface.graph,
+      g: surface.g,
+      mu,
+      peripheral: surface.peripheral,
+    });
+    result.onError = surface.onError;
+    result.reductionCurves.push(...surface.reductionCurves);
+    const ok = checked(result);
+    return ok && { surface: ok, point: pointName, merged, pointsLeft: slid.pointOf.length };
+  };
 }
 
 /** The surface if its μ comes from an embedding into the final model, else undefined (reported). */
