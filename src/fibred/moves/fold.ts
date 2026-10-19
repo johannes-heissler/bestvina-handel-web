@@ -190,7 +190,9 @@ export function foldInitialSegments(
     narrate([
       "Subdivide ",
       { strip: point.edge.edge.name },
-      ...(fs.legacyNames ? [] : [" into ", { strip: segmentName(fs, originalName) }, " and ", { strip: originalName }]), // (as named below)
+      ...(fs.legacyNames
+        ? []
+        : [" into ", { strip: segmentName(fs, originalName) }, " and ", { strip: originalName }]), // (as named below)
       ": g(",
       { strip: end.name },
       ") = ",
@@ -285,9 +287,12 @@ export function foldInitialSegments(
       fs.graph.edges.filter((x) => x !== kept.edge).map((x) => x.color),
     );
   }
-  narrate(["Fold ", ...nameList(foldedNames), " at ", { junction: v.name }, " into ", { strip: kept.name }, "."], {
-    before: beforeFold,
-  });
+  narrate(
+    ["Fold ", ...nameList(foldedNames), " at ", { junction: v.name }, " into ", { strip: kept.name }, "."],
+    {
+      before: beforeFold,
+    },
+  );
   const image = fs.g.image(kept).letters;
   explain([
     "g(",
@@ -378,6 +383,14 @@ export function foldOptions(fs: FibredSurface, edges: readonly OrientedEdge[], i
   const v = (edges[0] as OrientedEdge).source;
   const fullLoop = edges.find((e) => fs.g.image(e).length === i && e.target === v);
   if (fullLoop !== undefined) return loopFoldOptions(fs, edges, i, fullLoop);
+  // Whether the fold can be done at all doesn't depend on c here (only for a loop folded completely): one real fold on
+  // a copy checks it, and the side crossings of each choice of c are computed from μ alone.
+  const { copy, correspondence } = fs.copyWithCorrespondence();
+  try {
+    quietly(() => foldInitialSegments(copy, edges.map(correspondence.orient), i));
+  } catch {
+    return []; // e.g. initial segments at both ends of a strip
+  }
   const seen = new Set<string>();
   const options: { option: FoldOption; centrality: number }[] = [];
   for (const [position, preferred] of ordered.entries()) {
@@ -386,23 +399,12 @@ export function foldOptions(fs: FibredSurface, edges: readonly OrientedEdge[], i
       const c = mu.slice(0, l);
       if (seen.has(c.key)) continue;
       seen.add(c.key);
-      const { copy, correspondence } = fs.copyWithCorrespondence();
-      try {
-        quietly(() =>
-          foldInitialSegments(copy, edges.map(correspondence.orient), i, {
-            c, // c lives in G₀, which the copy shares
-            kept: correspondence.orient(preferred),
-          }),
-        );
-      } catch {
-        continue; // e.g. an unsupported loop fold
-      }
       options.push({
         option: {
           preferred,
           l,
           c,
-          sideCrossings: copy.mu.totalLength(),
+          sideCrossings: sideCrossingsAfterFold(fs, edges, i, c, preferred),
           isotopies: isotopiesOf(fs, edges, i, c),
         },
         centrality: Math.abs(position - (ordered.length - 1) / 2),
@@ -412,6 +414,80 @@ export function foldOptions(fs: FibredSurface, edges: readonly OrientedEdge[], i
   return options
     .sort((x, y) => x.option.sideCrossings - y.option.sideCrossings || x.centrality - y.centrality)
     .map((x) => x.option);
+}
+
+/**
+ * The total length of μ (the side crossings of all strips) after {@link foldInitialSegments} with c, computed from μ
+ * alone, as the fold changes it:
+ * - a strip folded partly is split after the longest prefix of its μ that c shares; its first part gets μ = c (its new
+ *   junction moves along the rest c₂ of c), its second part c₂⁻¹ (the rest of its μ), reduced;
+ * - for a strip folded completely, in turn, its end moves along γ = μ(e)⁻¹ c: every strip end there gets γ⁻¹ in front;
+ * - the folded segments become one, with the μ of the kept one.
+ */
+export function sideCrossingsAfterFold(
+  fs: FibredSurface,
+  edges: readonly OrientedEdge[],
+  i: number,
+  c: EdgePath,
+  kept: OrientedEdge,
+): number {
+  /** A strip, or a part of a split one: its ends (new junctions are fresh objects) and its μ from source to target. */
+  interface Piece {
+    source: object;
+    target: object;
+    mu: EdgePath;
+  }
+  const v = (edges[0] as OrientedEdge).source;
+  const pieceOf = new Map<Edge, Piece>(
+    fs.graph.edges.map((e) => [e, { source: e.source, target: e.target, mu: fs.mu.image(e.forward) }]),
+  );
+  const pieces = new Set(pieceOf.values());
+  /** For each folded strip end at v: the piece it is on now, and whether it is the piece's source. */
+  const endAt = new Map(
+    edges.map((e) => [e, { piece: pieceOf.get(e.edge) as Piece, atSource: e.isForward }]),
+  );
+  /** The initial segments that are folded into one. */
+  const segments = new Map<OrientedEdge, Piece>();
+  const full = edges.filter((e) => fs.g.image(e).length === i);
+  for (const e of edges) {
+    const end = endAt.get(e) as { piece: Piece; atSource: boolean };
+    if (full.includes(e)) {
+      segments.set(e, end.piece);
+      continue;
+    }
+    // Split after the longest prefix of μ that c shares; the new junction moves along the rest of c. (A strip with both
+    // ends folded is split twice, the second time on what the first left.)
+    const mu = end.atSource ? end.piece.mu : end.piece.mu.inverse; // from v
+    let shared = 0;
+    while (shared < c.length && shared < mu.length && mu.at(shared) === c.at(shared)) shared++;
+    const junction = {};
+    const rest = c.slice(shared).inverse.concat(mu.slice(shared)).reduced(); // from the new junction on
+    const first: Piece = { source: v, target: junction, mu: c };
+    const second: Piece = end.atSource
+      ? { source: junction, target: end.piece.target, mu: rest }
+      : { source: end.piece.source, target: junction, mu: rest.inverse };
+    const split = end.piece;
+    pieces.delete(split);
+    pieces.add(first).add(second);
+    for (const other of endAt.values()) if (other.piece === split) other.piece = second;
+    segments.set(e, first);
+  }
+  for (const e of full) {
+    const end = endAt.get(e) as { piece: Piece; atSource: boolean };
+    const mu = end.atSource ? end.piece.mu : end.piece.mu.inverse;
+    const gamma = mu.inverse.concat(c).reduced(); // e's target moves along it
+    if (gamma.isEmpty) continue;
+    for (const p of pieces) {
+      if (p.source === e.target) p.mu = gamma.inverse.concat(p.mu).reduced();
+      if (p.target === e.target) p.mu = p.mu.concat(gamma).reduced();
+    }
+  }
+  // The folded segment is a strip folded completely (it keeps its name), else the kept one.
+  const keptSegment = segments.get(full[0] ?? kept) as Piece;
+  const folding = new Set(segments.values());
+  let total = 0;
+  for (const p of pieces) if (!folding.has(p) || p === keptSegment) total += p.mu.length;
+  return total;
 }
 
 /** {@link foldOptions} when the loop `loop` is folded completely: one option per move γ of its junction. */

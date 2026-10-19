@@ -2,10 +2,12 @@ import { describe, expect, it } from "vitest";
 import { nameTable, parseEdgePath } from "../../graph/path-parser";
 import { EdgePoint } from "../edge-point";
 import { FibredSurface } from "../fibred-surface";
-import { foldInitialSegments, foldOptions, foldPair, inCyclicOrder } from "./fold";
+import { foldInitialSegments, foldOptions, foldPair, inCyclicOrder, sideCrossingsAfterFold } from "./fold";
+import { foldCandidates } from "./inefficiency";
+import { buildPreset, presetNamed } from "../../examples/presets";
 import { subdivide } from "./subdivide";
-import { narrated } from "../narration";
-import { plainText } from "../suggestions";
+import { narrated, quietly } from "../narration";
+import { autopilot, plainText } from "../suggestions";
 
 const torus = (map: string) => FibredSurface.fromText([["a", "b", "A", "B"]], map);
 const edge = (fs: FibredSurface, name: string) => fs.graph.orientedEdges.find((e) => e.name === name)!;
@@ -124,13 +126,15 @@ describe("folding initial segments", () => {
   it("subdivides after the side crossings that μ shares with c, so that only the others are isotoped", () => {
     const fs = make();
     const c = parseEdgePath("b", nameTable(fs.spine0));
-    const { result: folded, steps } = narrated(() =>
-      foldInitialSegments(fs, [edge(fs, "a"), edge(fs, "b")], 1, { c }).folded,
+    const { result: folded, steps } = narrated(
+      () => foldInitialSegments(fs, [edge(fs, "a"), edge(fs, "b")], 1, { c }).folded,
     );
     // μ(b) = b starts with c: its new junction sits after the crossing and doesn't move. Only a's crosses b.
     const isotopies = steps.filter((s) => plainText(s.text).startsWith("Isotopy"));
     expect(isotopies.map((s) => plainText(s.text))).toEqual([
-      expect.stringMatching(/^Isotopy: move the new junction \S+ along b, the sides that the folded strip crosses\.$/),
+      expect.stringMatching(
+        /^Isotopy: move the new junction \S+ along b, the sides that the folded strip crosses\.$/,
+      ),
     ]);
     expect(isotopies.every((s) => s.note)).toBe(true); // (the crossings are the steps)
     expect(steps.filter((s) => s.motion).map((s) => plainText(s.text))).toEqual([
@@ -161,5 +165,50 @@ describe("folding initial segments", () => {
     const fs = make();
     expect(() => foldInitialSegments(fs, [edge(fs, "a"), edge(fs, "B")], 1)).toThrow(/doesn't start with/);
     expect(() => foldPair(fs, edge(fs, "a"), edge(fs, "b"))).toThrow(/g\(a\) ≠ g\(b\)/);
+  });
+});
+
+describe("the side crossings of a fold option", () => {
+  it("are the total length of μ after folding a copy, for every fold and every choice of c", () => {
+    let compared = 0;
+    for (const name of [
+      "Bestvina–Handel example 6.1",
+      "Closed genus 2",
+      "Point push",
+      "Anosov map of the torus",
+    ]) {
+      const states: FibredSurface[] = [];
+      const start = buildPreset(presetNamed(name)!);
+      start.onError = () => {};
+      autopilot(start, { maxSteps: 60, onStep: (_, surface) => void states.push(surface.copy()) });
+      for (const fs of states)
+        for (const candidate of foldCandidates(fs)) {
+          const edges = candidate.edgesToFold;
+          if (edges.some((e) => fs.g.image(e).length === candidate.initialSegment && e.target === e.source))
+            continue;
+          for (const preferred of edges) {
+            const mu = fs.mu.image(preferred);
+            for (let l = 0; l <= mu.length; l++) {
+              const c = mu.slice(0, l);
+              const { copy, correspondence } = fs.copyWithCorrespondence();
+              try {
+                quietly(() =>
+                  foldInitialSegments(copy, edges.map(correspondence.orient), candidate.initialSegment, {
+                    c,
+                    kept: correspondence.orient(preferred),
+                  }),
+                );
+              } catch {
+                continue;
+              }
+              expect(sideCrossingsAfterFold(fs, edges, candidate.initialSegment, c, preferred)).toBe(
+                copy.mu.totalLength(),
+              );
+              compared++;
+            }
+          }
+        }
+    }
+    expect(compared).toBeGreaterThan(50);
   });
 });

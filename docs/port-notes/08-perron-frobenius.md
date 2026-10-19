@@ -39,6 +39,36 @@ strip to remove at a valence-2 junction.
   taken over positive entries only (fixing 2), and everything is double precision (fixing 1). This was Q2 of port note 01.
 - The normalizations of the widths and lengths are the same as in C#.
 
+## Update (2026-10-19): without a full eigen-decomposition
+
+The eigen-decomposition (`EigenvalueDecomposition` of ml-matrix, the QR algorithm of JAMA) computes all eigenvalues and
+eigenvectors of M and of Mᵀ, in O(n³) each. Two problems showed up after the closed-surface moves:
+
+- **It can hang.** Its QR iteration has no iteration limit and doesn't converge for some matrices: a near-permutation
+  matrix with a zero column (g maps most strips to single strips, one to the empty path) kept it running for hours.
+- **It is slow where only λ is needed.** The suggestion "move vertices" computes λ for every junction and every first
+  letter of its images on a copy (O(n) candidates, so O(n⁴) per suggestion): 52 % of the time after a cut.
+
+M is non-negative, so the Perron–Frobenius theory gives simpler, always convergent methods:
+
+1. **λ = ρ(M), the spectral radius,** is the largest of the spectral radii of the diagonal blocks of the strongly
+   connected components of M (the graph with an arrow e → f when f occurs in g(e)); a component of a single strip that
+   doesn't occur in its own image has ρ = 0. A block B of a component is irreducible, so B + I is primitive: its
+   Perron eigenvalue ρ(B) + 1 is simple and strictly larger in modulus than all its other eigenvalues (the shift by I
+   is what breaks the tie for periodic blocks, like a permutation, whose eigenvalues all lie on a circle). The power
+   iteration x ← (B + I) x / ‖(B + I) x‖, from x = (1, …, 1), converges to the Perron vector, and for every positive x
+   the Collatz–Wielandt bounds min (Bx)ᵢ/xᵢ ≤ ρ(B) ≤ max (Bx)ᵢ/xᵢ enclose ρ(B); the iteration stops when they agree to
+   10⁻¹³ (relatively). It only needs products with the sparse block, and can't run forever (it also has a cap).
+2. **The eigenvectors** (widths and lengths) by inverse iteration with the shift λ′ = λ + δ just above λ (δ = 10⁻⁹ ·
+   max(λ, 1)): x ← (λ′ I − M)⁻¹ x, normalized, from x = (1, …, 1), a few times. Since λ′ > ρ(M), the inverse is the
+   Neumann series Σ Mᵏ / λ′ᵏ⁺¹, a non-negative matrix, so x stays non-negative; it multiplies the components of the
+   eigenvalue λ by 1/δ and the others by at most 1/(λ′ − |μ|), so x converges to a non-negative eigenvector for λ,
+   also when λ is multiple or has a Jordan block (reducible matrices, e.g. a ↦ a, b ↦ b a). This takes one LU
+   decomposition (Gaussian elimination, which always terminates) of M and one of Mᵀ.
+3. **`growthRate(fs, …)`** computes step 1 only, for the callers that need only λ (the candidates of "move vertices").
+
+The tolerance for zero entries, the sign and the scalings stay as they are.
+
 ## Tests
 
 `src/fibred/perron-frobenius.test.ts` (4 tests): the Anosov map a ↦ ab, b ↦ bab (λ = φ², both eigenvectors

@@ -135,3 +135,13 @@ possible every strip has its own colour.
   that were changed at the end of the fold, so the explanation "the second part keeps the name" was only true
   afterwards. Saved sessions store moves by strip names, so sessions of format 1 replay with the old names
   (`FibredSurface.legacyNames`, carried through copies); new sessions and links are saved as format 2.
+
+## Update (2026-10-19): the side crossings of a fold option without a copy
+
+`foldOptions` rated each choice of c by folding a copy of the surface and counting μ afterwards: about 40 % of the time
+of the algorithm after a closed-surface move. Now `sideCrossingsAfterFold` computes the same number from μ alone, as
+the fold changes it (a strip folded partly is split after the prefix of its μ that c shares, its new junction moves along
+the rest of c; the end of a strip folded completely moves along μ(e)⁻¹ c; the segments become one). A strip with both
+ends folded is split twice, in the same order as the fold does it. One real fold on a copy still checks that the fold
+can be done at all, which doesn't depend on c (loops folded completely have their own options). A test compares the
+result with folding a copy for every fold candidate and every c along the autopilot of four presets.

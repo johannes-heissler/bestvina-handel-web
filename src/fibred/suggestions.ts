@@ -30,7 +30,7 @@ import { EdgePoint } from "./edge-point";
 import { findGates } from "./gates";
 import { type NarratedStep, narrated, quietly } from "./narration";
 import { invariantPunctureCircles, peripheryCandidates, peripheryProblems } from "./periphery";
-import { perronFrobenius } from "./perron-frobenius";
+import { growthRate, perronFrobenius } from "./perron-frobenius";
 import { prongs } from "./singular-leaves";
 import { type Slit, slitsForProng } from "./cut-along-leaf";
 import { lettersText } from "./text-parts";
@@ -218,7 +218,7 @@ function withSwitchedOffVertexMoves(
 export function vertexMoves(fs: FibredSurface): MoveOption[] {
   const growth = (surface: FibredSurface) => {
     try {
-      return perronFrobenius(surface, { essentialOnly: true }).growth;
+      return growthRate(surface, { essentialOnly: true });
     } catch {
       return undefined;
     }
@@ -649,7 +649,7 @@ function disconnectedTrainTrack(fs: FibredSurface, junctions: readonly Vertex[])
     copy.onError = () => {};
     try {
       splitJunctions(copy, (offered) => offered[i] as SplitPiece);
-      return perronFrobenius(copy, { essentialOnly: true }).growth;
+      return growthRate(copy, { essentialOnly: true });
     } catch {
       return undefined;
     }
