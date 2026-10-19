@@ -1,6 +1,6 @@
 /**
- * Cutting the half-translation surface TS(τ) along a singular leaf L and its preimages (the thesis, Move "Cutting
- * along a singular leaf"), giving a new track τ′ with a carrying map g′ for the same f and the same growth λ.
+ * Cutting along a singular leaf L and its preimages (the thesis, Move "Cutting along a singular leaf"), giving a new
+ * graph G′ with a map g′ for the same f and the same growth λ.
  *
  * The cut is carried out on the rectangles of TS(τ):
  * 1. Real branches are subdivided (lengthwise) where a preimage slit ends inside them.
@@ -11,8 +11,9 @@
  * 4. g′ maps each piece along the image strand of its branch (see `strands.ts`). Since f⁻¹ of the cut set lies in
  *    the cut set, the image of each piece fits exactly into whole pieces.
  *
- * Only the junctions in `blownUp` are cut as the polygons of TS(τ) (port note 29): those of the new punctures Q. Every
- * other junction stays a junction of G: the slits through it are chords of its disk, from one strip end to another,
+ * Only the junctions in `blownUp` are cut as the polygons of TS(τ) (port note 29): those of the new punctures Q. Before,
+ * all of TS(τ) was cut, and the other polygons were contracted again afterwards. Every other junction stays a junction
+ * of G: the slits through it are chords of its disk, from one strip end to another,
  * and split it into parts, each a junction of the result (its infinitesimal polygon, a disk, lies in one of them and is
  * not represented). Its infinitesimal branches get no pieces, and they are left out of the images.
  *
@@ -170,21 +171,15 @@ interface PieceDraft {
 }
 
 /**
- * Cuts TS(τ) along the slits; see the module documentation.
+ * Cuts along the slits; see the module documentation.
  *
- * @param options.blownUp The junctions of G that are cut as their polygons of TS(τ); all of them by default (the cut
- *   before port note 29, for replaying older sessions).
+ * @param blownUp The junctions of G that are cut as their polygons of TS(τ): those of the new punctures Q.
  */
-export function cut(
-  tt: TrainTrack,
-  slits: readonly Slit[],
-  options: { readonly blownUp?: ReadonlySet<Vertex> } = {},
-): CutTrack {
+export function cut(tt: TrainTrack, slits: readonly Slit[], blownUp: ReadonlySet<Vertex>): CutTrack {
   const widths = tt.widths as ReadonlyMap<Edge, number>;
   const lengthOf = (e: Edge) => tt.lengths.get(e) as number;
   const widthOf = (e: Edge) => widths.get(e) as number;
-  const isBlownUp = (s: Vertex) =>
-    options.blownUp === undefined || options.blownUp.has(tt.junctionOf.get(s) as Vertex);
+  const isBlownUp = (s: Vertex) => blownUp.has(tt.junctionOf.get(s) as Vertex);
   /** The branches that get pieces: the real ones, and the infinitesimal ones of the junctions that are blown up. */
   const hasPieces = (e: Edge) => tt.kind.get(e) === "real" || isBlownUp(e.source);
 

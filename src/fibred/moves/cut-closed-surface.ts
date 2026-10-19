@@ -10,7 +10,7 @@ import { CombinatorialMap } from "../../graph/combinatorial-map";
 import { Color } from "../../math/color";
 import { EdgePath } from "../../graph/edge-path";
 import { letterIndex } from "../../graph/names";
-import type { Edge, OrientedEdge, RibbonGraph, Vertex } from "../../graph/ribbon-graph";
+import type { Edge, OrientedEdge, Vertex } from "../../graph/ribbon-graph";
 import {
   cut,
   type CutTrack,
@@ -20,12 +20,11 @@ import {
   traceProngThroughBranches,
 } from "../cut-along-leaf";
 import { FibredSurface } from "../fibred-surface";
-import { keepingStates, narrate, quietly } from "../narration";
-import { type BranchPart, forgetInMarking, markParts, markTrack, type Remarking } from "../remarking";
+import { keepingStates, narrate } from "../narration";
+import { type BranchPart, forgetInMarking, type Remarking } from "../remarking";
 import type { TextPart } from "../suggestions";
 import { imageProng, type Prong, prongs } from "../singular-leaves";
 import type { TrainTrack } from "../train-track";
-import { collapseSubforest } from "./collapse-forest";
 import { tightenMarking } from "./isotopy";
 import { mergeAllValenceTwoLines } from "./valence";
 
@@ -78,66 +77,6 @@ export function attachmentSwitch(ct: CutTrack, word: EdgePath): Vertex | undefin
   return attached.length === 1 ? attached[0] : undefined;
 }
 
-/**
- * Removes the circles B attached at their switches v (one for each puncture of P, all at once, since g maps each into
- * the next): everything mapped into a circle is isotoped into its v, i.e. the branches of the circles are deleted from
- * all images (and switches mapped into a circle are mapped to its v), then the circles are deleted except for the v.
- * Filling in P, this is a homotopy equivalence, so the result is a spine of Σ ∖ Q carrying the same f. Then the
- * polygons of the junctions outside Q, which never needed to be blown up, are contracted back into their junctions
- * ({@link collapseUncut}). μ is reset, unless a marking is given (it is filled in together with P).
- *
- * This is the end of the cut before port notes 28 and 29, for replaying older sessions, on a cut of all of TS(τ).
- */
-export function removeAlmostPeripheralCircles(
-  ct: CutTrack,
-  circles: readonly AttachedCircle[],
-  options: {
-    readonly uncut: ReadonlySet<Edge>;
-    readonly junctionOf: (s: Vertex) => Vertex | undefined;
-    /** The junctions of the new punctures Q. */
-    readonly inQ: ReadonlySet<Vertex>;
-    readonly marking?: { mu: CombinatorialMap; remarking: Remarking };
-    /** The state shown before this step (for the narration). */
-    readonly before?: FibredSurface;
-  },
-): FibredSurface {
-  const { graph, gPrime: g } = ct;
-  const { marking } = options;
-  let mu = marking?.mu;
-  narrate(removalText(circles, marking?.remarking), { before: options.before });
-  const circle = new Set(circles.flatMap(({ word }) => word.letters.map((x) => x.edge)));
-  // The switches along each circle except its attachment, and where they go.
-  const inner = new Map(
-    circles.flatMap(({ word, v }) =>
-      word.letters
-        .map((x) => x.target)
-        .filter((s) => s !== v)
-        .map((s) => [s, v] as const),
-    ),
-  );
-  g.substituteInImages((e) => (circle.has(e) ? EdgePath.EMPTY : undefined));
-  for (const s of graph.vertices) {
-    const to = inner.get(g.vertexImage(s));
-    if (to !== undefined) g.setVertexImage(s, to);
-  }
-  for (const e of circle) {
-    graph.removeEdge(e);
-    g.forgetEdge(e);
-  }
-  for (const s of inner.keys()) {
-    graph.removeVertex(s);
-    g.forgetVertex(s);
-  }
-  forgetInMarking(mu, circle, inner.keys());
-  // Filling in P on the side of G₀ too, at the same time (port note 22, § 4).
-  if (marking !== undefined && mu !== undefined) mu = marking.remarking.filled(mu);
-  const surface = new FibredSurface({ graph, g, ...(mu && { mu }) });
-  surface.legacyDefaultNames = ct.legacyDefaultNames;
-  collapseUncut(surface, options.uncut, options.junctionOf, options.inQ);
-  // Without a marking, G₀ is (a copy of) the result itself.
-  return mu === undefined ? new FibredSurface({ graph, g }) : surface;
-}
-
 /** The narration of removing the circles B. */
 function removalText(circles: readonly AttachedCircle[], remarking: Remarking | undefined): TextPart[] {
   const start = (word: EdgePath) =>
@@ -164,7 +103,7 @@ function removalText(circles: readonly AttachedCircle[], remarking: Remarking | 
 const B_COLOR = Color.fromHex("#ff10f0");
 
 /**
- * The end of the cut since port notes 28 and 29: the valence-2 lines are merged, so that each circle B becomes a loop at
+ * The end of the cut (port notes 28 and 29): the valence-2 lines are merged, so that each circle B becomes a loop at
  * its attachment junction (drawn in {@link B_COLOR} before), and then the loops are removed. μ is reset, unless a
  * marking is given (it is filled in together with P).
  */
@@ -214,7 +153,7 @@ function removeCirclesAfterMerging(
 }
 
 /**
- * Names the junctions of a cut that only blew up Q after the junctions of G they come from (see
+ * Names the junctions of a cut after the junctions of G they come from (see
  * {@link junctionPartName}): numbered where the slits split one (v, v_2, …), lettered for the corners of the polygons of
  * Q (w_a, w_b, …). The points inside a branch, where a slit ends, keep their names.
  */
@@ -226,47 +165,6 @@ export function nameParts(ct: CutTrack, inQ: ReadonlySet<Vertex>): void {
     const junction = ct.junctionOf.get(s);
     if (junction !== undefined)
       s.name = junctionPartName(junction, inQ.has(junction), used, ct.legacyDefaultNames);
-  }
-}
-
-/**
- * Contracts the infinitesimal branches in `uncut` (those at the junctions outside Q) back into junctions: their polygons
- * bound disks, not punctures, so these junctions never needed to be blown up (port note 22, § 6). Each polygon loses
- * one branch ε, which is homotopic to the rest of the polygon reversed (that replaces ε in all images); the rest is a
- * forest and is collapsed. The junctions get the names of the junctions of G they come from (`junctionOf`): numbered
- * where the slits split one (v, v_2, …), and lettered for the corners of the polygons of Q (w_a, w_b, …).
- *
- * Only for the cut before port note 29 (replaying older sessions), which cut all of TS(τ).
- */
-export function collapseUncut(
-  surface: FibredSurface,
-  uncut: ReadonlySet<Edge>,
-  junctionOf: (s: Vertex) => Vertex | undefined,
-  inQ: ReadonlySet<Vertex>,
-): void {
-  const { graph, g } = surface;
-  const origin = new Map(graph.vertices.map((s) => [s, junctionOf(s)] as const));
-  const present = () => new Set(graph.edges.filter((e) => uncut.has(e)));
-  const findDisk = () => {
-    const edges = present();
-    return graph.boundaryWords().find((w) => w.letters.every((x) => edges.has(x.edge)));
-  };
-  for (let disk = findDisk(); disk !== undefined; disk = findDisk()) {
-    const [x] = disk.letters as [OrientedEdge];
-    const rest = disk.slice(1);
-    const forwardImage = x.isForward ? rest.inverse : rest;
-    g.substituteInImages((e) => (e === x.edge ? forwardImage : undefined));
-    graph.removeEdge(x.edge);
-    g.forgetEdge(x.edge);
-    surface.mu.forgetEdge(x.edge);
-  }
-  const forest = present();
-  if (forest.size > 0) quietly(() => collapseSubforest(surface, forest));
-  const used = new Set(graph.vertices.filter((s) => origin.get(s) === undefined).map((s) => s.name));
-  for (const s of graph.vertices) {
-    const junction = origin.get(s);
-    if (junction === undefined) continue;
-    s.name = junctionPartName(junction, inQ.has(junction), used, surface.legacyDefaultNames);
   }
 }
 
@@ -334,18 +232,12 @@ export interface CutOption {
 
 /**
  * For each candidate prong, the shortest L that makes B a circle attached at one junction, sorted by that length.
- * `legacy`: decided on the cut of all of TS(τ), as before port note 29.
  *
  * To avoid cutting for every length, each prong is traced once to find where it first comes within ε (the width of the
  * narrowest infinitesimal branch) of the boundary: from there it runs parallel to all of p's boundary (the thesis), so
  * a cut succeeds about one lap later. Cuts are tried from one lap before that point to three laps after it.
  */
-export function cutOptions(
-  tt: TrainTrack,
-  candidates: readonly Prong[],
-  maxRealBranches = 500,
-  { legacy = false }: { readonly legacy?: boolean } = {},
-): CutOption[] {
+export function cutOptions(tt: TrainTrack, candidates: readonly Prong[], maxRealBranches = 500): CutOption[] {
   const widths = tt.widths as ReadonlyMap<Edge, number>;
   const infinitesimal = tt.graph.edges.filter((e) => tt.kind.get(e) === "infinitesimal");
   // ε, the width of the narrowest infinitesimal branch: once L is closer than ε to the boundary, it runs parallel to
@@ -374,7 +266,7 @@ export function cutOptions(
       if (firstWithinε === undefined && Math.min(y, w - y) < ε) firstWithinε = realIndex;
     });
     if (firstWithinε === undefined) continue;
-    const blownUp = legacy ? {} : { blownUp: new Set(cutOrbit(tt, prong)) };
+    const blownUp = new Set(cutOrbit(tt, prong));
     const from = Math.max(1, firstWithinε - lap);
     for (let count = from; count <= Math.min(maxRealBranches, firstWithinε + 3 * lap); count++) {
       let ct: CutTrack;
@@ -406,17 +298,12 @@ export function cutOrbit(tt: TrainTrack, prong: Prong): Vertex[] {
   return junctions;
 }
 
-/** μ of a cut of all of TS(τ), from the parts of the branches of τ that its pieces are (before port note 29). */
-function cutMarking(tt: TrainTrack, ct: CutTrack, remarking: Remarking): CombinatorialMap {
-  return markParts(ct.graph, (e) => partOfPiece(tt, ct.pieces.get(e) as Piece), remarking);
-}
-
 /**
- * μ of a cut that only blew up Q: each piece runs along its part of its branch of τ, and from a part of a junction
+ * μ of a cut: each piece runs along its part of its branch of τ, and from a part of a junction
  * outside Q through the inside of the junction to the switch of its gate first (as for the blown-up graph of the
  * shortcut, `markBlownUp`). The parts of such a junction are in its cell.
  */
-function cutMarkingOnG(tt: TrainTrack, ct: CutTrack, remarking: Remarking): CombinatorialMap {
+function cutMarking(tt: TrainTrack, ct: CutTrack, remarking: Remarking): CombinatorialMap {
   const stripOf = new Map([...tt.realBranch].map(([strip, branch]) => [branch, strip]));
   const mu = new CombinatorialMap(ct.graph, remarking.spine);
   const atPart = (s: Vertex) => ct.junctionParts.has(s);
@@ -453,12 +340,7 @@ const SHOWN_CUTS = 24;
  * Carries out a cut option: cuts, removes B, and returns the fibred surface on Σ ∖ Q. With `remarking`, the result
  * stays in the original model (port note 22), and the narration shows the cut branch by branch.
  */
-export function cutClosedSurface(
-  tt: TrainTrack,
-  option: CutOption,
-  remarking?: Remarking,
-  { legacy = false }: { readonly legacy?: boolean } = {},
-): ClosedSurfaceCut {
+export function cutClosedSurface(tt: TrainTrack, option: CutOption, remarking?: Remarking): ClosedSurfaceCut {
   const n = option.realBranches;
   const keep = remarking !== undefined && keepingStates();
   const orbit = cutOrbit(tt, option.prong);
@@ -475,12 +357,21 @@ export function cutClosedSurface(
     list.flatMap((x, i) => [...(i === 0 ? [] : [" "]), { strip: x.name }]);
   const name = (j: number) => (j === 0 ? "L" : `f${superscript(-j)}(L)`);
 
-  // Only the junctions of Q are blown up into their polygons (the new punctures sit inside them; port note 29). Before
-  // port note 29 (`legacy`), the cut ran on all of TS(τ), and the polygons at the other junctions were contracted again
-  // in the states shown and at the end.
+  // Only the junctions of Q are blown up into their polygons: the new punctures sit inside them (port note 29).
   const inQ = new Set(orbit);
-  const steps = legacy ? legacySteps(tt, inQ, remarking) : stepsOnG(tt, inQ, remarking);
-  const track = (count: number) => steps.track(slitsForProng(tt, option.prong, count));
+  const track = (slits: readonly Slit[]) => {
+    const ct = cut(tt, slits, inQ);
+    nameParts(ct, inQ);
+    return ct;
+  };
+  /** A state to show: a copy, with μ pulled tight (see {@link tightenMarking}). */
+  const shown = (ct: CutTrack) => {
+    const mu = remarking && cutMarking(tt, ct, remarking);
+    const copy = new FibredSurface({ graph: ct.graph, g: ct.gPrime, ...(mu && { mu }) }).copy();
+    copy.legacyDefaultNames = tt.legacyDefaultNames;
+    tightenMarking(copy);
+    return copy;
+  };
 
   // The cut branch by branch (only for showing it): each count is a valid cut of its own.
   const counts = keep
@@ -492,7 +383,8 @@ export function cutClosedSurface(
         ),
       ]
     : [n];
-  let before = keep ? steps.initial() : undefined;
+  // The state before the cut: G with Q blown up.
+  let before = keep ? shown(track([])) : undefined;
   let previous: { real: readonly OrientedEdge[]; partial: boolean }[] = [];
   let done = 0;
   let ct: CutTrack | undefined;
@@ -541,122 +433,21 @@ export function cutClosedSurface(
       { before },
     );
     previous = now;
-    ct = track(count);
-    if (keep) before = steps.shown(ct);
+    ct = track(slitsForProng(tt, option.prong, count));
+    if (keep) before = shown(ct);
     done = count;
   }
   const full = ct as CutTrack;
   const circles = attachedCircles(full, punctureCount(tt));
   if (circles === undefined) throw new Error("This cut doesn't make the boundaries of P circles");
-  let surface = steps.remove(full, circles, before);
+  let surface = removeCirclesAfterMerging(
+    full,
+    circles,
+    remarking && { mu: cutMarking(tt, full, remarking), remarking },
+  );
   if (remarking !== undefined) surface = finishRemarking(surface, remarking);
-  if (!legacy)
-    mergeAllValenceTwoLines(surface, "Removing B left valence-2 lines. Merge each into one strip:");
+  mergeAllValenceTwoLines(surface, "Removing B left valence-2 lines. Merge each into one strip:");
   return { surface, prong: option.prong, realBranches: option.realBranches, cut: full };
-}
-
-/** How {@link cutClosedSurface} cuts, shows the states and removes B. */
-interface CutSteps {
-  /** The cut along the slits. */
-  track(slits: readonly Slit[]): CutTrack;
-  /** The state before the cut, to show. */
-  initial(): FibredSurface;
-  /** A state to show (a copy, with μ pulled tight, see {@link tightenMarking}). */
-  shown(ct: CutTrack): FibredSurface;
-  /** Removes the circles B; `before` is the state shown before. */
-  remove(ct: CutTrack, circles: readonly AttachedCircle[], before: FibredSurface | undefined): FibredSurface;
-}
-
-/** The cut since port note 29: on G with only Q blown up. */
-function stepsOnG(tt: TrainTrack, inQ: ReadonlySet<Vertex>, remarking: Remarking | undefined): CutSteps {
-  const track = (slits: readonly Slit[]) => {
-    const ct = cut(tt, slits, { blownUp: inQ });
-    nameParts(ct, inQ);
-    return ct;
-  };
-  const shown = (ct: CutTrack) => {
-    const mu = remarking && cutMarkingOnG(tt, ct, remarking);
-    const copy = new FibredSurface({ graph: ct.graph, g: ct.gPrime, ...(mu && { mu }) }).copy();
-    copy.legacyDefaultNames = tt.legacyDefaultNames;
-    tightenMarking(copy);
-    return copy;
-  };
-  return {
-    track,
-    initial: () => shown(track([])),
-    shown,
-    remove: (ct, circles) =>
-      removeCirclesAfterMerging(
-        ct,
-        circles,
-        remarking && { mu: cutMarkingOnG(tt, ct, remarking), remarking },
-      ),
-  };
-}
-
-/** The cut before port note 29 (for replaying older sessions): on all of TS(τ), contracting the polygons outside Q. */
-function legacySteps(tt: TrainTrack, inQ: ReadonlySet<Vertex>, remarking: Remarking | undefined): CutSteps {
-  const uncutOf = (graph: RibbonGraph, branchOf: (e: Edge) => Edge) =>
-    new Set(
-      graph.edges.filter(
-        (e) =>
-          tt.kind.get(branchOf(e)) === "infinitesimal" &&
-          !inQ.has(tt.junctionOf.get(branchOf(e).source) as Vertex),
-      ),
-    );
-  /** The junction of G that a switch belongs to (undefined for a point inside a branch, where a slit ends). */
-  const junctionOfSwitch =
-    (graph: RibbonGraph, partOf: (e: Edge) => BranchPart) =>
-    (s: Vertex): Vertex | undefined => {
-      for (const x of graph.star(s)) {
-        const { branch, from, to } = partOf(x.edge);
-        const at = x.isForward ? from : to;
-        const end =
-          tt.kind.get(branch) === "infinitesimal" || at === 0
-            ? branch.source
-            : at === 1
-              ? branch.target
-              : undefined;
-        if (end === undefined) continue;
-        return tt.junctionOf.get(end);
-      }
-      return undefined;
-    };
-  /** A state to show: a copy with the polygons outside Q contracted, and μ pulled tight. */
-  const show = (
-    graph: RibbonGraph,
-    g: CombinatorialMap,
-    mu: CombinatorialMap,
-    partOf: (e: Edge) => BranchPart,
-  ): FibredSurface => {
-    const { copy, correspondence } = new FibredSurface({ graph, g, mu }).copyWithCorrespondence();
-    copy.legacyDefaultNames = tt.legacyDefaultNames;
-    const back = new Map([...correspondence.vertexMap].map(([a, b]) => [b, a]));
-    const junctionOf = junctionOfSwitch(graph, partOf);
-    const uncut = [...uncutOf(graph, (e) => partOf(e).branch)].map(
-      (e) => correspondence.edgeMap.get(e) as Edge,
-    );
-    collapseUncut(copy, new Set(uncut), (s) => junctionOf(back.get(s) as Vertex), inQ);
-    tightenMarking(copy);
-    return copy;
-  };
-  const partOf = (ct: CutTrack) => (e: Edge) => partOfPiece(tt, ct.pieces.get(e) as Piece);
-  return {
-    track: (slits) => cut(tt, slits),
-    initial: () =>
-      show(tt.graph, tt.gTau, markTrack(tt, remarking as Remarking), (b) => ({ branch: b, from: 0, to: 1 })),
-    shown: (ct) => show(ct.graph, ct.gPrime, cutMarking(tt, ct, remarking as Remarking), partOf(ct)),
-    remove: (ct, circles, before) => {
-      const mu = remarking ? cutMarking(tt, ct, remarking) : undefined;
-      return removeAlmostPeripheralCircles(ct, circles, {
-        uncut: uncutOf(ct.graph, (e) => partOf(ct)(e).branch),
-        junctionOf: junctionOfSwitch(ct.graph, partOf(ct)),
-        inQ,
-        ...(mu && remarking && { marking: { mu, remarking } }),
-        ...(before && { before }),
-      });
-    },
-  };
 }
 
 /** What filling in P does to the picture (the side of G₀), for the narration. */

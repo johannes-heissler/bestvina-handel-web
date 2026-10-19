@@ -106,7 +106,8 @@ went from 4.2282 to 4.2280 for p and stayed at 4.2921 for q.)
 5. **The shortcut** (`replacePunctureBySingularity`): merge all lines at the end.
 6. **Saved sessions.** The cut and the shortcut now give other strips and names, so the moves saved after them would
    no longer apply. The file format goes to 5, and `FibredSurface.legacyCut` (set for files of version < 5) keeps the
-   old cut and shortcut.
+   old cut and shortcut. _Dropped (author, 2026-10-19, with port note 29): no saved sessions with a cut are known, so
+   the format stays 4 and the old cut is gone._
 7. **Tests** (`valence.test.ts`, `cut-closed-surface.test.ts`, `session`):
    - `valenceTwoLines` on a torus with a strip subdivided twice: one line of three strips; a loop junction is no line.
    - `mergeValenceTwoLine` gives the same g, μ and cyclic order as removing the inner junctions one by one with the

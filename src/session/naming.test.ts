@@ -51,7 +51,6 @@ describe("default names (port note 25)", () => {
   it("replays sessions saved before format 4 with the old names", { timeout: 60_000 }, () => {
     for (const preset of presets) {
       const old = Session.create({ kind: "preset", preset }, true);
-      old.root.surface.legacyCut = true; // (format 3 is also before port note 28)
       old.runAutopilot();
       expect(old.root.surface.graph.vertices.map((v) => v.name)).toContain("v0");
       const file = { ...old.toFile(), version: 3 };

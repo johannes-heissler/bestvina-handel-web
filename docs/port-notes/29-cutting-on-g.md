@@ -65,21 +65,21 @@ its gate (`Remarking.toSwitch`). The parts lie in the junction's cell.
 
 ## Saved sessions
 
-Sessions of format < 5 (`FibredSurface.legacyCut`) keep the old cut: all of TS(τ), the old order, contracting with
-`collapseUncut` (`legacySteps` in `cut-closed-surface.ts`). Format 5 (port note 28) isn't released yet, so both notes
-share it. The old code stays for that only.
+Not kept (author, 2026-10-19): no saved sessions with a cut are known, so compatibility isn't worth the old code.
+The cut of all of TS(τ), `collapseUncut`, `removeAlmostPeripheralCircles` and the flag `FibredSurface.legacyCut` (with
+the session format 5 of port note 28) are removed; the format stays 4. A saved session with a cut replays with the new
+cut, and the moves after it may be skipped.
 
 ## Tests
 
-- `cut-along-leaf.test.ts`: for the cuts at p and at q of "Closed genus 2", the new cut has the same stars and the
-  same g′ as the old cut followed by `collapseUncut`, with the real pieces matched by their place in τ (branch, height,
-  start). Checked once also for the cut at w, with 583 junctions.
-- `cut-closed-surface.test.ts`: `cutOptions` finds the same lengths with and without `legacy` (p and q). The tests of
-  port note 28 (B pink, merged into a loop and removed) and of the closed-surface model (every state drawable in the
-  original polygon) pass unchanged.
+- Before the old cut was removed: for the cuts at p, q and w of "Closed genus 2" (w with 583 junctions), the new cut
+  had the same stars and the same g′ as the old cut followed by `collapseUncut`, with the real pieces matched by their
+  place in τ (branch, height, start), and `cutOptions` found the same lengths (16 and 18 for p and q).
+- `cut-along-leaf.test.ts`: g′ is continuous and has the same growth, and the switches (of Q and inside branches)
+  satisfy the switch equation, for every prong and short lengths.
+- The tests of port note 28 (B pink, merged into a loop and removed, 6 junctions of valence 3 left) and of the
+  closed-surface model (every state drawable in the original polygon) pass unchanged.
 
 ## Open points
 
 - The disk picture assumes that the gates of a junction are contiguous blocks of its star, as τ's construction does.
-- `collapseUncut`, `removeAlmostPeripheralCircles` and the cut of all of TS(τ) stay only for replaying older
-  sessions. They could go if replaying format < 5 sessions with a cut is given up.

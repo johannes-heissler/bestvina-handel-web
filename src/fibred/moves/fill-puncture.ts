@@ -136,8 +136,7 @@ export function replacePunctureBySingularity(
   for (const side of fillings)
     filled = fillPuncture(filled, side.edge, { keepMarking: remarking !== undefined, side });
   const result = remarking === undefined ? filled : finishRemarking(filled, remarking);
-  if (!fs.legacyCut)
-    mergeAllValenceTwoLines(result, "Filling in left valence-2 lines. Merge each into one strip:");
+  mergeAllValenceTwoLines(result, "Filling in left valence-2 lines. Merge each into one strip:");
   return result;
 }
 

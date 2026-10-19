@@ -505,9 +505,7 @@ function applyMoveQuietly(fs: FibredSurface, move: Move, hooks: MoveHooks = {}):
       const option =
         move.prong !== undefined && move.realBranches !== undefined
           ? { prong: prongs(tt)[move.prong], realBranches: move.realBranches }
-          : cutOptions(tt, prongsOfOrbit(tt, junction(fs, move.junction)), undefined, {
-              legacy: fs.legacyCut,
-            })[0];
+          : cutOptions(tt, prongsOfOrbit(tt, junction(fs, move.junction)))[0];
       if (option?.prong === undefined)
         throw new Error(`No cut found for the singularity at ${move.junction}`);
       const remarking = hooks.remark?.(fs, tt, cutOrbit(tt, option.prong));
@@ -515,7 +513,6 @@ function applyMoveQuietly(fs: FibredSurface, move: Move, hooks: MoveHooks = {}):
         tt,
         { prong: option.prong, realBranches: option.realBranches },
         remarking,
-        { legacy: fs.legacyCut },
       );
       return keepFlags(fs, surface);
     }
@@ -573,7 +570,6 @@ function keepFlags(from: FibredSurface, to: FibredSurface): FibredSurface {
   to.legacyNames = from.legacyNames;
   to.legacyPeripheralNames = from.legacyPeripheralNames;
   to.legacyDefaultNames = from.legacyDefaultNames;
-  to.legacyCut = from.legacyCut;
   to.onError = from.onError;
   return to;
 }

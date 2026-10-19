@@ -323,7 +323,6 @@ export class Session {
     const session = Session.create(file.start, file.version < 4);
     if (file.version < 2) session.root.surface.legacyNames = true;
     if (file.version < 3) session.root.surface.legacyPeripheralNames = true;
-    if (file.version < 5) session.root.surface.legacyCut = true;
     let skipped = 0;
     const replay = (node: HistoryNode, saved: SavedNode): HistoryNode[] =>
       saved.children.map((child) => {
@@ -379,10 +378,8 @@ export const FILE_FORMAT = "bestvina-handel-session";
  * (`FibredSurface.legacyPeripheralNames`).
  * 4: default names from lists or with subscripts: v, w, … instead of v0, v1, …, the chords and lassos from the edge
  * names, Greek peripheral lassos from γ, v_a and v_α in τ, … (`FibredSurface.legacyDefaultNames`, port note 25).
- * 5: the closed-surface moves merge the valence-2 lines, the cut before removing B, and the cut blows up only Q
- * (`FibredSurface.legacyCut`, port notes 28 and 29).
  */
-export const FILE_VERSION = 5;
+export const FILE_VERSION = 4;
 
 export interface SavedNode {
   readonly move?: Move;

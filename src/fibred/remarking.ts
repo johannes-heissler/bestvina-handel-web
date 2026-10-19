@@ -74,30 +74,11 @@ export function markTrack(tt: TrainTrack, remarking: Remarking): CombinatorialMa
   return mu;
 }
 
-/** The part of a piece of τ′ (or a whole branch) as fractions of its branch. */
+/** The part of a piece of a cut (or a whole branch) as fractions of its branch of τ. */
 export interface BranchPart {
   readonly branch: Edge;
   readonly from: number;
   readonly to: number;
-}
-
-/** μ of a graph whose edges are parts of branches of τ, running along them (e.g. the cut track τ′). */
-export function markParts(
-  graph: RibbonGraph,
-  partOf: (e: Edge) => BranchPart,
-  remarking: Remarking,
-): CombinatorialMap {
-  const mu = new CombinatorialMap(graph, remarking.spine);
-  for (const e of graph.edges) {
-    const { branch, from, to } = partOf(e);
-    mu.setImage(e.forward, remarking.part(branch, from, to).reduced());
-  }
-  for (const v of graph.vertices) {
-    const x = graph.star(v)[0] as OrientedEdge;
-    const { branch, from, to } = partOf(x.edge);
-    mu.setVertexImage(v, remarking.cellAt(branch, x.isForward ? from : to));
-  }
-  return mu;
 }
 
 /** μ with the edges in `edges` forgotten (deleted from the graph). */

@@ -8,6 +8,7 @@ import { trainTrack } from "../train-track";
 import {
   circleDefects,
   cutClosedSurface,
+  cutOrbit,
   cutOptions,
   junctionPartName,
   prongsOfOrbit,
@@ -33,10 +34,10 @@ describe("closed surfaces: cutting along a singular leaf (the thesis's move)", (
   it("prolongs L until the boundary of p is a circle attached at one switch, and removes it", () => {
     const [option] = cutOptions(tt, prongsOfOrbit(tt, p));
     expect(option).toBeDefined();
-    expect(circleDefects(cut(tt, slitsForProng(tt, option!.prong, option!.realBranches)))).toHaveLength(1); // only the attachment switch
-    expect(
-      circleDefects(cut(tt, slitsForProng(tt, option!.prong, option!.realBranches - 1)))!.length,
-    ).toBeGreaterThan(1);
+    const cutAt = (count: number) =>
+      cut(tt, slitsForProng(tt, option!.prong, count), new Set(cutOrbit(tt, option!.prong)));
+    expect(circleDefects(cutAt(option!.realBranches))).toHaveLength(1); // only the attachment junction
+    expect(circleDefects(cutAt(option!.realBranches - 1))!.length).toBeGreaterThan(1);
     const { surface, realBranches } = cutClosedSurface(tt, option!);
     expect(realBranches).toBe(16);
     expect(surface.checkIntegrity()).toEqual([]);
@@ -69,18 +70,6 @@ describe("closed surfaces: cutting along a singular leaf (the thesis's move)", (
     expect(surface.checkIntegrity()).toEqual([]);
     expect(surface.g.preservesBoundaryWords()).toBe(true);
     expect(surface.graph.vertices).toHaveLength(6);
-
-    // Before port note 28 (saved sessions of format < 5): the valence-2 junctions stay.
-    const legacy = cutClosedSurface(tt, option!, undefined, { legacy: true }).surface;
-    expect(valenceTwoJunctions(legacy)).toHaveLength(17);
-  });
-
-  it("finds the same cuts as on all of TS(τ), before port note 29", { timeout: 60_000 }, () => {
-    for (const v of original.graph.vertices.filter((x) => ["p", "q"].includes(x.name))) {
-      const lengths = (legacy: boolean) =>
-        cutOptions(tt, prongsOfOrbit(tt, v), undefined, { legacy }).map((o) => o.realBranches);
-      expect(lengths(false)).toEqual(lengths(true));
-    }
   });
 
   it("reaches the same growth when cutting at the singularity q (period 2)", { timeout: 30_000 }, () => {
