@@ -225,6 +225,9 @@ export interface CutOption {
  * To avoid cutting for every length, each prong is traced once to find where it first comes within ε (the width of the
  * narrowest infinitesimal branch) of the boundary: from there it runs parallel to all of p's boundary (the thesis), so
  * a cut succeeds about one lap later. Cuts are tried from one lap before that point to three laps after it.
+ *
+ * Prongs that would need at least twice as many real branches as the best option found so far are skipped: the prongs
+ * are tried in the order of their first approach, and each stops below twice the best length.
  */
 export function cutOptions(tt: TrainTrack, candidates: readonly Prong[], maxRealBranches = 500): CutOption[] {
   const widths = tt.widths as ReadonlyMap<Edge, number>;
@@ -237,13 +240,12 @@ export function cutOptions(tt: TrainTrack, candidates: readonly Prong[], maxReal
     .filter((b) => !b.infinitesimal)
     .reduce((n, b) => n + b.word.length, 0);
   const punctures = punctureCount(tt);
-  const options: CutOption[] = [];
-  for (const prong of candidates) {
+  const approaches = candidates.flatMap((prong) => {
     let L;
     try {
       L = traceProngThroughBranches(tt, prong, maxRealBranches);
     } catch {
-      continue; // the leaf runs into a singularity
+      return []; // the leaf runs into a singularity
     }
     let realIndex = 0;
     let firstWithinε: number | undefined;
@@ -254,10 +256,16 @@ export function cutOptions(tt: TrainTrack, candidates: readonly Prong[], maxReal
       const y = L.heights[k] as number;
       if (firstWithinε === undefined && Math.min(y, w - y) < ε) firstWithinε = realIndex;
     });
-    if (firstWithinε === undefined) continue;
-    const blownUp = new Set(cutOrbit(tt, prong));
+    return firstWithinε === undefined ? [] : [{ prong, firstWithinε }];
+  });
+  const options: CutOption[] = [];
+  let best = Infinity;
+  for (const { prong, firstWithinε } of approaches.sort((a, b) => a.firstWithinε - b.firstWithinε)) {
     const from = Math.max(1, firstWithinε - lap);
-    for (let count = from; count <= Math.min(maxRealBranches, firstWithinε + 3 * lap); count++) {
+    const to = Math.min(maxRealBranches, firstWithinε + 3 * lap, 2 * best - 1);
+    if (from > to) continue;
+    const blownUp = new Set(cutOrbit(tt, prong));
+    for (let count = from; count <= to; count++) {
       let ct: CutTrack;
       try {
         ct = cut(tt, slitsForProng(tt, prong, count), blownUp);
@@ -266,6 +274,7 @@ export function cutOptions(tt: TrainTrack, candidates: readonly Prong[], maxReal
       }
       if (attachedCircles(ct, punctures) !== undefined) {
         options.push({ prong, realBranches: count });
+        best = Math.min(best, count);
         break;
       }
     }
