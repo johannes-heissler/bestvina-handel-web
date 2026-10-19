@@ -28,7 +28,7 @@ import { finiteOrder, type ReductionCandidate, reductionCandidates } from "./mov
 import { valenceTwoJunctions } from "./moves/valence";
 import { EdgePoint } from "./edge-point";
 import { findGates } from "./gates";
-import { narrated, quietly } from "./narration";
+import { type NarratedStep, narrated, quietly } from "./narration";
 import { invariantPunctureCircles, peripheryCandidates, peripheryProblems } from "./periphery";
 import { perronFrobenius } from "./perron-frobenius";
 import { prongs } from "./singular-leaves";
@@ -849,7 +849,7 @@ export function variants(fs: FibredSurface, move: Move): MoveOption[] {
               const copy = fs.copy();
               copy.onError = () => {};
               return narrated(() => applyMove(copy, remove)).steps.some((t) =>
-                plainText(t).startsWith("Case 2"),
+                plainText(t.text).startsWith("Case 2"),
               );
             } catch {
               return false;
@@ -1060,7 +1060,7 @@ export interface AutopilotOptions {
   readonly automatic?: ReadonlySet<SuggestionKind>;
   readonly maxSteps?: number;
   /** Called after each move with the resulting surface, e.g. to add it to the history (copy it there). */
-  readonly onStep?: (move: Move, surface: FibredSurface, steps: readonly Text[]) => void;
+  readonly onStep?: (move: Move, surface: FibredSurface, steps: readonly NarratedStep[]) => void;
   /** Keeps the model through the closed-surface moves (see `MoveHooks.remark`). */
   readonly remark?: RemarkingProvider;
 }

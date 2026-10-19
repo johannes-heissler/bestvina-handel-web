@@ -44,7 +44,8 @@ describe("contracting strips as isotopies", () => {
         if (motions.some(Boolean)) {
           found.add(move.kind);
           const texts = preview.steps.map((x) => plainText(x.text));
-          expect(texts.some((t) => t.startsWith("Isotopy: slide the junction"))).toBe(true);
+          const notes = preview.explanation.flatMap((x) => ("note" in x ? [plainText(x.note)] : []));
+          expect(notes.some((t) => t.startsWith("Isotopy: slide "))).toBe(true);
           expect(
             texts.some((t) =>
               t.startsWith(move.kind === "remove valence-2 junctions" ? "Merge" : "Contract"),

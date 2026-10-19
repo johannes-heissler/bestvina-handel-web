@@ -7,7 +7,7 @@
 import { EdgePath } from "../../graph/edge-path";
 import type { Edge, OrientedEdge, Vertex } from "../../graph/ribbon-graph";
 import type { FibredSurface } from "../fibred-surface";
-import { narrate } from "../narration";
+import { explain, narrate } from "../narration";
 import { perronFrobenius } from "../perron-frobenius";
 import { lettersText } from "../text-parts";
 import { slideAlong } from "./isotopy";
@@ -30,28 +30,20 @@ export function removeValenceOneJunction(fs: FibredSurface, v: Vertex): void {
   const e = star[0] as OrientedEdge;
   const w = e.target;
   slideAlong(fs, v, e, [
-    "Isotopy: slide the junction ",
+    "Isotopy: slide ",
     { junction: v.name },
-    " (of valence 1) along its strip ",
+    " along its strip ",
     { strip: e.name },
-    ` (μ = ${String(fs.mu.image(e))}) towards `,
+    " to ",
     { junction: w.name },
     ".",
   ]);
-  narrate([
-    "Retract ",
-    { strip: e.name },
-    " into ",
-    { junction: w.name },
-    ": the junction ",
-    { junction: v.name },
-    " and the strip disappear, and so do the letters ",
+  narrate(["Retract ", { strip: e.name }, " into ", { junction: w.name }, "."]);
+  explain([
     { strip: e.name },
     " and ",
     { strip: e.reversed.name },
-    " from all images (an image entering ",
-    { junction: v.name },
-    " leaves it at once, so it contains ",
+    " disappear from all images (they only occur as ",
     { strip: e.reversed.name },
     " ",
     { strip: e.name },
@@ -97,35 +89,39 @@ export function removeValenceTwoJunction(fs: FibredSurface, v: Vertex, removed?:
   const k = r === s0 ? s1 : s0;
   const u = r.target;
   slideAlong(fs, v, r, [
-    "Isotopy: slide the junction ",
+    "Isotopy: slide ",
     { junction: v.name },
     " along ",
     { strip: r.name },
-    ` (μ = ${String(fs.mu.image(r))}) towards `,
+    " to ",
     { junction: u.name },
     ", so that ",
     { strip: r.name },
     " crosses no side.",
   ]);
   const merged = fs.g.image(r).inverse.concat(fs.g.image(k)).letters;
+  const mergedName = k.edge.name.toLowerCase().startsWith(r.edge.name.toLowerCase()) ? r.edge.name : k.edge.name;
   narrate([
     "Merge ",
     { strip: r.reversed.name },
     " and ",
     { strip: k.name },
-    " at the junction ",
+    " at ",
     { junction: v.name },
-    " of valence 2 into one strip ",
-    { strip: k.edge.name.toLowerCase().startsWith(r.edge.name.toLowerCase()) ? r.edge.name : k.edge.name },
-    " from ",
-    { junction: u.name },
-    ": its image is g(",
+    " into ",
+    { strip: mergedName },
+    ".",
+  ]);
+  explain([
+    "g(",
+    { strip: mergedName },
+    ") = g(",
     { strip: r.reversed.name },
     ") g(",
     { strip: k.name },
     ") = ",
     ...lettersText(merged),
-    " (not yet cancelled), and ",
+    " (not yet cancelled); ",
     { strip: r.name },
     " disappears from all images.",
   ]);

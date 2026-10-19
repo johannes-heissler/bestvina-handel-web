@@ -6,8 +6,8 @@
 import { EdgePath } from "../../graph/edge-path";
 import type { Edge, OrientedEdge, Vertex } from "../../graph/ribbon-graph";
 import type { FibredSurface } from "../fibred-surface";
-import { narrate } from "../narration";
-import { junctionsText, stripsText } from "../text-parts";
+import { explain, narrate } from "../narration";
+import { stripsText } from "../text-parts";
 import { slideAlong } from "./isotopy";
 
 /**
@@ -168,26 +168,16 @@ export function collapseSubforest(
     const pathFromCenter = pathsInTree(center, component.edges);
     const others = [...pathFromCenter.keys()].filter((v) => v !== center); // nearest first
     const treeStrips = [...component.edges].map((e) => e.name);
-    narrate([
-      component.edges.size === 1 ? "Collapse the strip " : "Collapse the tree ",
-      ...stripsText(treeStrips),
-      " onto the junction ",
-      { junction: center.name },
-      ...(others.length > 1
-        ? [" (its other junctions are ", ...junctionsText(others.map((v) => v.name)), ")"]
-        : []),
-      ".",
-    ]);
     // The isotopy that contracts the tree: each junction slides along the tree strip towards the centre (the nearest
     // first), so that no strip of the tree crosses a side any more.
     for (const x of others) {
       const t = (pathFromCenter.get(x) as EdgePath).letters.at(-1)?.reversed as OrientedEdge; // x → its parent
       slideAlong(fs, x, t, [
-        "Isotopy: slide the junction ",
+        "Isotopy: slide ",
         { junction: x.name },
         " along ",
         { strip: t.name },
-        ` (μ = ${String(fs.mu.image(t))}) towards `,
+        " to ",
         { junction: center.name },
         ", so that ",
         { strip: t.name },
@@ -195,24 +185,17 @@ export function collapseSubforest(
       ]);
     }
     const leaving = fs.graph.starOfSubgraph(center, component.edges).filter((e) => e.source !== center);
-    narrate([
-      "Contract the tree to ",
-      { junction: center.name },
-      ": its strips disappear from all images",
-      ...(leaving.length > 0
-        ? [
-            ", and ",
-            ...stripsText(leaving.map((e) => e.name)),
-            leaving.length === 1 ? " now starts at " : " now start at ",
-            { junction: center.name },
-            leaving.length === 1
-              ? ", its image under g prolonged by the image of the path in the tree from "
-              : ", their images under g prolonged by the image of the path in the tree from ",
-            { junction: center.name },
-          ]
-        : []),
-      ".",
-    ]);
+    narrate(["Contract ", ...stripsText(treeStrips), " into ", { junction: center.name }, "."]);
+    if (leaving.length > 0)
+      explain([
+        ...stripsText(leaving.map((e) => e.name)),
+        leaving.length === 1 ? " now starts at " : " now start at ",
+        { junction: center.name },
+        ": g of the path from ",
+        { junction: center.name },
+        " in the tree is put in front of ",
+        leaving.length === 1 ? "its image." : "their images.",
+      ]);
     const star = fs.graph.starOfSubgraph(center, component.edges);
 
     // Prolong every strip end leaving the tree by the path from the centre (loops get both ends prolonged).

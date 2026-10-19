@@ -8,10 +8,10 @@ import { CombinatorialMap } from "../../graph/combinatorial-map";
 import { EdgePath } from "../../graph/edge-path";
 import { type Edge, type OrientedEdge, RibbonGraph, type Vertex } from "../../graph/ribbon-graph";
 import { FibredSurface } from "../fibred-surface";
-import { keepingStates, narrate } from "../narration";
+import { explain, keepingStates, narrate } from "../narration";
 import type { Remarking } from "../remarking";
 import type { TextPart } from "../suggestions";
-import { fillingText, finishRemarking, junctionPartName } from "./cut-closed-surface";
+import { blowUpText, fillingText, finishRemarking, junctionPartName } from "./cut-closed-surface";
 import { tightenMarking } from "./isotopy";
 import { trainTrack, type TrainTrack } from "../train-track";
 
@@ -78,6 +78,7 @@ export function replacePunctureBySingularity(
   tt: TrainTrack = trainTrack(fs),
 ): FibredSurface {
   const blownUp = blowUpOrbit(fs, q, tt);
+  narrate(blowUpText([...blownUp.polygons.keys()].map((v) => v.name)));
   const first = blownUp.polygons.get(q.junction)?.[0];
   if (first === undefined) throw new Error(`${q.junction} has no infinitesimal polygon`);
   const keep = remarking !== undefined && keepingStates();
@@ -112,25 +113,31 @@ export function replacePunctureBySingularity(
     const { x, forwardImage } = fillingWord(surface, side.edge, side);
     narrate(
       [
-        "Fill in p: the branch ",
+        "Fill in p: replace ",
         { strip: side.edge.name },
-        " lies between the polygon of ",
-        { junction: q.junction.name },
-        ` and p, so with p filled in it is homotopic to ${(x.isForward ? forwardImage : forwardImage.inverse).toString() || "a point"} (the rest of p's boundary, backwards). It is replaced by that in all images and deleted; the faces of p and q merge.`,
-        ...(remarking === undefined ? [] : [" ", fillingText(remarking)]),
+        ` by ${(x.isForward ? forwardImage : forwardImage.inverse).toString() || "·"} in all images.`,
       ],
       { before },
     );
-  } else
+    explain([
+      "With p filled in, ",
+      { strip: side.edge.name },
+      " is homotopic to the rest of p's boundary, backwards; the faces of p and ",
+      { junction: q.junction.name },
+      " merge.",
+    ]);
+  } else {
     narrate(
       [
-        `Fill in the ${fillings.length} punctures of P: on the boundary of each lies a branch of a polygon of Q (`,
+        "Fill in the punctures of P: replace ",
         ...fillings.flatMap((x, i): TextPart[] => [...(i === 0 ? [] : [", "]), { strip: x.edge.name }]),
-        "), which, with the puncture filled in, is homotopic to the rest of the puncture's boundary, backwards. Each is replaced by that in all images and deleted; the faces of P merge with those of Q.",
-        ...(remarking === undefined ? [] : [" ", fillingText(remarking)]),
+        " by the rest of each boundary, backwards, in all images.",
       ],
       { before },
     );
+    explain(["The faces of P merge with those of Q."]);
+  }
+  if (remarking !== undefined) explain([fillingText(remarking)]);
   let filled = surface;
   for (const side of fillings)
     filled = fillPuncture(filled, side.edge, { keepMarking: remarking !== undefined, side });

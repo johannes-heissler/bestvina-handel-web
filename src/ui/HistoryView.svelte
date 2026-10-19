@@ -4,6 +4,8 @@
 -->
 <script lang="ts">
   import { perronFrobenius } from "../fibred/perron-frobenius";
+  import type { NarratedStep } from "../fibred/narration";
+  import type { Text } from "../fibred/suggestions";
   import { describeMove } from "../session/describe";
   import type { HistoryNode } from "../session/session";
   import { stripColors } from "./colors";
@@ -93,6 +95,12 @@
     return list.some((n) => n.steps?.length) ? list : [];
   });
 
+  /** The steps of a move with their numbers; the notes between them (which change nothing) have none. */
+  function numbered(steps: readonly NarratedStep[]): { text: Text; number?: number }[] {
+    let k = 0;
+    return steps.map((s) => (s.note ? { text: s.text } : { text: s.text, number: ++k }));
+  }
+
   let container = $state<HTMLDivElement | undefined>(undefined);
   $effect(() => {
     void tree;
@@ -130,9 +138,14 @@
               {#if step.move}<TextView text={describeMove(step.move)} surface={step.parent?.surface} />{/if}
             </div>
             {#if step.steps?.length}
-              <ol>
-                {#each step.steps as text, i (i)}<li><TextView text={text} surface={step.surface} /></li>{/each}
-              </ol>
+              <ul>
+                {#each numbered(step.steps) as { text, number }, i (i)}
+                  <li class:explanation={number === undefined}>
+                    {#if number !== undefined}<span class="number">{number}.</span>{/if}
+                    <span><TextView {text} surface={step.surface} /></span>
+                  </li>
+                {/each}
+              </ul>
             {/if}
           </div>
         {/each}

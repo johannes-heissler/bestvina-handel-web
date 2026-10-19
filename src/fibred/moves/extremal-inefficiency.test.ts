@@ -28,10 +28,12 @@ describe("gatewise extremal junctions of valence 2", () => {
 
     const preview = session.preview(first?.move ?? expect.fail("no move"));
     expect(preview.error).toBeUndefined();
-    const texts = preview.steps.map((s) => plainText(s.text));
-    expect(texts[0]).toContain("g(b₁ b) = b | a X B B₁ Z");
-    expect(texts.join("\n")).toContain("the initial segment is called b_1_1"); // b₁ (= b_1) is taken
-    expect(texts.at(-1)).toContain("backtracking (order 0)");
+    const texts = preview.explanation.map((x) =>
+      plainText("note" in x ? x.note : (preview.steps[x.step] ?? expect.fail("no step")).text),
+    );
+    expect(texts[0]).toContain("g(b₁ b) = b | a X B B₁ …");
+    expect(texts.join("\n")).toContain("Subdivide b into b_2 and b"); // b₁ (= b_1) is taken
+    expect(texts.at(-1)).toContain("now a backtracking");
     session.commit(preview);
     expect(session.suggestion().kind).toBe("pull tight");
   });

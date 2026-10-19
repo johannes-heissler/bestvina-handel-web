@@ -128,8 +128,13 @@ describe("folding initial segments", () => {
       foldInitialSegments(fs, [edge(fs, "a"), edge(fs, "b")], 1, { c }).folded,
     );
     // μ(b) = b starts with c: its new junction sits after the crossing and doesn't move. Only a's crosses b.
-    expect(steps.filter((s) => plainText(s).startsWith("Isotopy")).map(plainText)).toEqual([
-      "Isotopy: move the new junction along c = b in G₀, so that the initial segment crosses the sides like the folded segment will (μ = c). It crosses the side b first.",
+    const isotopies = steps.filter((s) => plainText(s.text).startsWith("Isotopy"));
+    expect(isotopies.map((s) => plainText(s.text))).toEqual([
+      expect.stringMatching(/^Isotopy: move the new junction \S+ along b, the sides that the folded strip crosses\.$/),
+    ]);
+    expect(isotopies.every((s) => s.note)).toBe(true); // (the crossings are the steps)
+    expect(steps.filter((s) => s.motion).map((s) => plainText(s.text))).toEqual([
+      expect.stringMatching(/^Move \S+ across the side b\.$/),
     ]);
     expect(String(fs.mu.image(folded))).toBe("b");
     expect(images(fs, "mu")).toBe("c:b, a:B a, b:");

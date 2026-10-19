@@ -563,13 +563,26 @@ details.panel > summary h2 {
 .happened-move {
   font-style: italic;
 }
-.happened ol {
-  margin: 0.2rem 0 0 1.2rem;
+.happened ul {
+  margin: 0.2rem 0 0;
   padding: 0;
+  list-style: none;
   font-size: 0.85rem;
 }
 .happened li {
+  display: flex;
+  gap: 0.3rem;
   margin: 0.15rem 0;
+}
+.happened .number {
+  flex: none;
+  min-width: 1.3rem;
+  text-align: right;
+}
+.happened li.explanation {
+  padding-left: 1.6rem;
+  color: var(--muted);
+  font-size: 0.8rem;
 }
 
 /* The choices of an option, under it. */
@@ -601,19 +614,32 @@ details.panel > summary h2 {
 .timeline-controls .step-count {
   white-space: nowrap;
 }
-ol.will-happen {
+/* The steps are numbered by hand: the notes between them have no number. */
+ul.will-happen {
   margin: 0;
-  padding-left: 1.6rem;
+  padding: 0;
+  list-style: none;
   font-size: 0.85rem;
 }
 .will-happen li {
   margin: 0.15rem 0;
 }
+.will-happen li.explanation {
+  padding-left: 1.6rem;
+  color: var(--muted);
+  font-size: 0.8rem;
+}
 .will-happen button.step {
   all: unset;
   cursor: pointer;
-  display: block;
+  display: flex;
+  gap: 0.3rem;
   border-radius: 3px;
+}
+.will-happen .number {
+  flex: none;
+  min-width: 1.3rem;
+  text-align: right;
 }
 .will-happen button.step:hover {
   background: color-mix(in srgb, var(--accent) 7%, transparent);

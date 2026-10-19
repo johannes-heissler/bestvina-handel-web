@@ -1,7 +1,8 @@
 /**
  * Explanations of what a move does, step by step (subdivisions, isotopies of junctions, folds, …), collected while
- * the move is applied: the moves call {@link narrate}, and {@link narrated} collects the steps. Trying moves on copies
- * (to rate options) runs {@link quietly}, so that it doesn't add to the explanation.
+ * the move is applied: the moves call {@link narrate} for each step that changes the surface, and {@link explain}
+ * for notes in between that change nothing (why a step is done, what it led to). {@link narrated} collects both.
+ * Trying moves on copies (to rate options) runs {@link quietly}, so that it doesn't add to the explanation.
  *
  * With `states`, {@link narrated} also keeps a copy of the surface at each step, as it was before the step (the
  * surface the move works on, see {@link about}), for showing the move step by step. A step that is narrated after
@@ -25,9 +26,13 @@ export interface Motion {
   readonly along?: string;
 }
 
-/** One step of an explanation, the surface before it (if kept), and a motion it consists of (if any). */
+/**
+ * One step of an explanation, the surface before it (if kept), and a motion it consists of (if any); or a note that
+ * changes nothing (no state).
+ */
 export interface NarratedStep {
   readonly text: Text;
+  readonly note?: true;
   readonly before?: FibredSurface;
   readonly motion?: Motion;
 }
@@ -38,8 +43,8 @@ let keepStates = false;
 let subject: FibredSurface | undefined;
 
 /**
- * Adds a step to the explanation being collected (if any), with the surface as it is before the step, or `before`
- * for a step narrated after it happened.
+ * Adds a step that changes the surface to the explanation being collected (if any), with the surface as it is before
+ * the step, or `before` for a step narrated after it happened.
  */
 export function narrate(
   step: Text,
@@ -48,6 +53,21 @@ export function narrate(
   if (steps === undefined) return;
   const before = options.before ?? stateNow();
   steps.push({ text: step, ...(before && { before }), ...(options.motion && { motion: options.motion }) });
+}
+
+/** Adds a note that changes nothing to the explanation being collected (if any). */
+export function explain(note: Text): void {
+  steps?.push({ text: note, note: true });
+}
+
+/** Whether an explanation is being collected (only then is it worth composing). */
+export function narrating(): boolean {
+  return steps !== undefined;
+}
+
+/** Adds steps collected by a nested {@link narrated} to the explanation being collected (if any), as they are. */
+export function retell(told: readonly NarratedStep[]): void {
+  steps?.push(...told);
 }
 
 /** A copy of the surface now, if the steps keep their states (to pass to a later {@link narrate}). */
@@ -71,18 +91,14 @@ export function about<T>(fs: FibredSurface, action: () => T): T {
   }
 }
 
-/** Runs `action` and returns the steps it narrated (nested calls collect their own steps). */
-export function narrated<T>(
-  action: () => T,
-  options: { states?: boolean } = {},
-): { result: T; steps: Text[]; narrated: NarratedStep[] } {
+/** Runs `action` and returns the steps and notes it narrated (nested calls collect their own). */
+export function narrated<T>(action: () => T, options: { states?: boolean } = {}): { result: T; steps: NarratedStep[] } {
   const [saved, savedKeep] = [steps, keepStates];
   const collected: NarratedStep[] = [];
   steps = collected;
   keepStates = options.states ?? false;
   try {
-    const result = action();
-    return { result, steps: collected.map((s) => s.text), narrated: collected };
+    return { result: action(), steps: collected };
   } finally {
     steps = saved;
     keepStates = savedKeep;

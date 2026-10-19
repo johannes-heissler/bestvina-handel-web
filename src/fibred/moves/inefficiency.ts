@@ -13,7 +13,7 @@ import { findGates } from "../gates";
 import { type FoldOption, foldInitialSegments, foldOptions, type PointTransform } from "./fold";
 import { pullTight, pullTightExtremalJunction } from "./pull-tight";
 import { subdivide } from "./subdivide";
-import { narrate, stateNow } from "../narration";
+import { explain, narrate, stateNow } from "../narration";
 import type { TextPart } from "../suggestions";
 
 /**
@@ -123,51 +123,46 @@ const bestOption: FoldChoice = (options) => options[0] as FoldOption;
  * One step of removing an inefficiency of order k ≥ 1: folds the initial segments of `edgesToFold`, after which
  * the followed point is an inefficiency of order k − 1, which is returned. A backtrack (order 0), or an extremal
  * junction of valence 2, is pulled tight instead, and `undefined` is returned (the C# `RemoveInefficiencyInSteps`).
+ * `continued`: the step after another one, whose explanation already said where the inefficiency is now.
  */
 export function removeInefficiencyStep(
   fs: FibredSurface,
   p: Inefficiency,
   choose: FoldChoice = bestOption,
+  continued = false,
 ): Inefficiency | undefined {
   const source = p.edgesToFold[0]?.source;
   const junction = p.point.vertex(fs);
   if (p.order === 0 && junction !== undefined) {
-    narrate([
-      "The strips at the junction ",
-      { junction: junction.name },
-      " of valence 2 have the same image direction: pull tight there.",
-    ]);
+    explain(["The images at ", { junction: junction.name }, " (valence 2) start alike: pull tight there."]);
     pullTightExtremalJunction(fs, junction);
     return undefined;
   }
   if (p.order === 0 || source === undefined) {
-    narrate([
-      "The inefficiency at ",
-      ...p.point.describeText(fs),
-      " has order 0: it is a backtracking. Pull it tight.",
-    ]);
+    if (!continued) explain(["Backtracking at ", ...p.point.describeText(fs, 4), ": pull it tight."]);
     pullTight(fs, new Set([p.point.dgAfter(fs) as OrientedEdge]));
     return undefined;
   }
   if (p.edgesToFold.length === fs.graph.valence(source)) {
-    narrate([
-      "All images at the junction ",
-      { junction: source.name },
-      " start alike, so instead of folding them, pull tight there (move the junction along their common start).",
-    ]);
+    explain(["All images at ", { junction: source.name }, " start alike: pull tight there instead of folding."]);
     pullTightExtremalJunction(fs, source); // all images at the junction start alike: pull tight instead of folding
     return undefined;
   }
-  narrate([
-    `Inefficiency of order ${p.order}: `,
-    ...p.point.describeText(fs),
-    ...turnChain(fs, p),
-    " (a backtracking). Removing it starts by folding the initial segments of ",
+  explain([
+    ...(continued
+      ? ["The images of "]
+      : [`Inefficiency of order ${p.order}: `, ...p.point.describeText(fs, 4), ...turnChain(fs, p), "; the images of "]),
     ...stripList(p.edgesToFold.map((e) => e.name)),
     " at ",
     { junction: source.name },
-    ...sharedStart(fs, p.edgesToFold, p.initialSegment),
-    ".",
+    " start with ",
+    ...(p.initialSegment > 6
+      ? [
+          ...letterList(fs.g.image(p.edgesToFold[0] as OrientedEdge).letters.slice(0, 4)),
+          ` … (${p.initialSegment} letters)`,
+        ]
+      : letterList(fs.g.image(p.edgesToFold[0] as OrientedEdge).letters.slice(0, p.initialSegment))),
+    ": fold them.",
   ]);
 
   let point = p.point.normalized(fs);
@@ -176,19 +171,17 @@ export function removeInefficiencyStep(
   let i = p.initialSegment;
   while (i > 0 && edgesToFold.some((e) => new EdgePoint(e, i).equals(point, fs))) i--;
   if (i > 0 && i < p.initialSegment)
-    narrate([
-      `Folding all ${p.initialSegment} letters would put a subdivision point exactly onto the inefficiency point (the point that is mapped to the backtracking), and the next step could not continue there. So fold only the first ${i}.`,
+    explain([
+      `Fold only ${i} of the ${p.initialSegment} letters: folding all would put a subdivision point onto the inefficiency point.`,
     ]);
   if (i === 0) {
     const c = fs.g.derivative(edgesToFold[0] as OrientedEdge) as OrientedEdge;
-    narrate([
-      "Case 2 of the thesis: the images of ",
-      ...stripList(edgesToFold.map((e) => e.name)),
-      " agree only in their first letter ",
+    explain([
+      "Case 2: the images agree only in ",
       { strip: c.name },
-      ", and folding it would put the new junction exactly onto the inefficiency point, so that the next fold would undo it. So first ",
+      ", and folding it would put the new junction onto the inefficiency point. So ",
       { strip: c.name },
-      " is made shorter: it is subdivided after the first letter of its image, and then only its first part is folded.",
+      " is subdivided first, and only its initial part is folded.",
     ]);
     // Split c = Dg(edgesToFold) (or, if g(c) is a single strip, its first iterate with a longer image) after one
     // letter, so that the images to fold start with a shorter strip.
@@ -207,15 +200,11 @@ export function removeInefficiencyStep(
 
   const next = inefficiencyAt(fs, transform(point));
   if (next !== undefined && next.order === p.order - 1)
-    narrate(
+    explain([
       next.order === 0
-        ? ["The point is now a backtracking (order 0): pulling tight removes it."]
-        : [
-            `The point is now an inefficiency of order ${next.order}, at `,
-            ...next.point.describeText(fs),
-            ": fold again there next.",
-          ],
-    );
+        ? "The inefficiency is now a backtracking: pulling tight removes it."
+        : `The inefficiency now has order ${next.order}.`,
+    ]);
   if (next === undefined || next.order !== p.order - 1)
     fs.reportInconsistency(
       `Folding did not lower the order of the inefficiency at ${p.point.describe(fs)} from ${p.order} to ${p.order - 1}`,
@@ -230,7 +219,7 @@ export function removeInefficiency(
   choose: FoldChoice = bestOption,
 ): void {
   for (let q: Inefficiency | undefined = p, steps = 0; q !== undefined && steps <= p.order; steps++)
-    q = removeInefficiencyStep(fs, q, choose);
+    q = removeInefficiencyStep(fs, q, choose, steps > 0);
 }
 
 /**
@@ -251,17 +240,17 @@ function splitFirstStrip(
       "All iterates of the strip have images of length 1: g permutes the strips and is efficient",
     );
   if (chain.length > 1)
-    narrate([
-      "Its image is a single strip, g(",
+    explain([
+      "g(",
       { strip: (chain.at(-1) as OrientedEdge).name },
       ") = ",
       { strip: (chain.at(-2) as OrientedEdge).name },
-      chain.length > 2 ? ", and so on" : "",
-      ", so the subdivision has to start with ",
-      { strip: (chain[0] as OrientedEdge).name },
-      ", whose image is longer: ",
+      chain.length > 2 ? ", … is a single strip" : " is a single strip",
+      ", so subdivide ",
       ...stripList(chain.map((x) => x.name)),
-      " are subdivided one after the other (each after the first letter of its image, which the previous one made shorter).",
+      " one after the other, starting with ",
+      { strip: (chain[0] as OrientedEdge).name },
+      ", whose image is longer.",
     ]);
 
   const transforms: PointTransform[] = [];
@@ -285,17 +274,17 @@ function splitFirstStrip(
       [
         "Subdivide ",
         { strip: name },
-        " after the first letter of its image: g(",
+        " into ",
+        { strip: initial.name },
+        " and ",
+        { strip: rest.name },
+        ": g(",
         { strip: endName },
         ") = ",
         { strip: image[0] as string },
         " | ",
-        ...image.slice(1).flatMap((x, i): TextPart[] => [...(i === 0 ? [] : [" "]), { strip: x }]),
-        ". The initial part is called ",
-        { strip: initial.name },
-        ", the rest ",
-        { strip: rest.name },
-        ".",
+        ...image.slice(1, 4).flatMap((x, i): TextPart[] => [...(i === 0 ? [] : [" "]), { strip: x }]),
+        image.length > 4 ? " …" : ".",
       ],
       {
         before,
@@ -464,19 +453,7 @@ function turnChain(fs: FibredSurface, p: Inefficiency): TextPart[] {
   return parts;
 }
 
-/** ", whose images start with the same strip: Dg(a) = Dg(b) = c" (or with the same n strips). */
-function sharedStart(fs: FibredSurface, edges: readonly OrientedEdge[], n: number): TextPart[] {
-  const first = edges[0];
-  if (first === undefined) return [];
-  const common = fs.g.image(first).letters.slice(0, n);
-  if (n === 1)
-    return [
-      ", whose images start with the same strip: ",
-      ...edges.flatMap((e): TextPart[] => ["Dg(", { strip: e.name }, ") = "]),
-      { strip: (common[0] as OrientedEdge).name },
-    ];
-  return [
-    `, whose images start with the same ${n} strips `,
-    ...common.flatMap((x, i): TextPart[] => [...(i === 0 ? [] : [" "]), { strip: x.name }]),
-  ];
+/** A path as structured text: "a B c". */
+function letterList(letters: readonly OrientedEdge[]): TextPart[] {
+  return letters.flatMap((x, i): TextPart[] => [...(i === 0 ? [] : [" "]), { strip: x.name }]);
 }

@@ -160,9 +160,12 @@ exchanges the two sides; the header button shows or hides the history tree.
 
 ### What will happen: previews, the timeline, explanations for every move
 
-- **Explanations for every move** (`move.ts`): each move starts with a sentence on what it does and why; the folds
-  then narrate their own steps, and the other moves list what they changed (strips and junctions removed and added,
-  and the images under g and μ that changed, with their old values).
+- **Explanations for every move** (`move.ts`): a move with steps of its own (folds, isotopies, cutting, …) narrates
+  them; any other move has its title as its one step. The other moves then list what they changed (strips and
+  junctions removed and added, and the images under g and μ that changed, with their old values).
+- **Steps and notes:** a step changes the surface (`narrate`) and has a short text in the names of the current state;
+  why it is done, and what it led to, are notes (`explain`), which change nothing. The timeline numbers only the steps
+  and only they can be clicked; the notes are shown between them, smaller and without a number.
 - **Choices under their option:** the choices of the focused option are listed under it and are only selected by a
   click; Apply applies the selected choice (or the option with its default). Fold choices are labelled in the names
   of the state shown (they were labelled with names from after a Case 2 subdivision, e.g. "keep z1"), and say which
