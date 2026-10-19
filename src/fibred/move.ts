@@ -273,7 +273,7 @@ function introduction(fs: FibredSurface, move: Move): Text {
       return [
         "Cut along a leaf from the singularity of ",
         { junction: move.junction },
-        ": τ has only one cusp at p, so p can't simply be filled in. Instead the surface is punctured at this singularity (×; with its orbit under f): its junction is blown up into its infinitesimal polygon, with the new puncture inside.",
+        ": τ has only one cusp at each artificial puncture, so they can't simply be filled in. Instead the surface is punctured at this singularity (×; with its orbit under f): its junction is blown up into its infinitesimal polygon, with the new puncture inside.",
       ];
     case "replace puncture by singularity":
       return [

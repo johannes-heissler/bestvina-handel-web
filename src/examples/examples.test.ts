@@ -272,3 +272,28 @@ describe("the closed model of a once-punctured surface", () => {
     expect(closedModel(plane)).toBeUndefined();
   });
 });
+
+describe("G₀ of a polygon with points and reversed edges", () => {
+  it("records the exits and sides after reversing, so that each leaves its own cell", () => {
+    const model: SurfaceModel = {
+      kind: "polygon",
+      name: "",
+      description: "",
+      word: ["a", "b", "A", "B", "c", "d", "C", "D"],
+      geometry: { kind: "compact" },
+      closed: false,
+      points: [[0.35, -0.08]],
+    };
+    const spine = spineOf(model, { reversed: ["a", "b"] });
+    for (const cell of spine.cells ?? [])
+      for (const x of cell.exits) if (x !== undefined) expect(x.source).toBe(cell.vertex);
+    (spine.sides ?? []).forEach((x, k) => {
+      const cell = (spine.cells ?? []).find((c) =>
+        c.corners.some((corner, i) => corner === k && c.corners[(i + 1) % c.corners.length] === (k + 1) % 8),
+      );
+      expect(x.source).toBe(cell?.vertex);
+    });
+    // The reversed edges have the names of the inverses where the default leaves.
+    expect((spine.sides ?? []).map((x) => x.name).slice(0, 4)).toEqual(["A", "B", "a", "b"]);
+  });
+});

@@ -4,7 +4,8 @@ import { layout } from "../embedding/layout";
 import { modelOfSpine } from "../embedding/remark";
 import { withTightMarking } from "../embedding/image";
 import { type PolygonModel, spineOfGraph, type SurfaceModel } from "../examples/models";
-import { plainText } from "../fibred/suggestions";
+import { DEFAULT_AUTOMATIC, plainText } from "../fibred/suggestions";
+import { presetNamed } from "../examples/presets";
 import type { FibredSurface } from "../fibred/fibred-surface";
 import type { Move } from "../fibred/move";
 import { Session } from "./session";
@@ -119,4 +120,57 @@ describe("marking a once-punctured surface as closed", () => {
       closed: true,
     });
   });
+});
+
+describe("cutting again (port note 26)", () => {
+  // A point push composed with Dehn twists, found by a search: after the first closed-surface move, both new punctures
+  // have one cusp, so the move is needed again, with the orbit P of two punctures.
+  const MAPS = [
+    "b ↦ c D C d A b a",
+    "c ↦ b A B a D c d",
+    "a ↦ B a D c d C b",
+    "b ↦ a D c d C b A",
+    "d ↦ C d",
+    "a ↦ B a D c d C b",
+    "a ↦ a D b, c ↦ d B c",
+    "b ↦ b A",
+  ];
+  const automatic = new Set([...DEFAULT_AUTOMATIC].filter((k) => k !== "closed surface"));
+
+  it("fills in an orbit of punctures in the polygon, and contracts the walls", () => {
+    const base = presetNamed("Point push as a composition")!;
+    const session = Session.create({
+      kind: "model",
+      model: base.model,
+      options: base.options!,
+      map: MAPS[0]!,
+    });
+    for (const text of MAPS.slice(1)) session.apply({ kind: "edit map", text, mode: "postcompose" });
+    session.runAutopilot({ automatic });
+    session.apply({ kind: "mark as closed" });
+    const first = session.suggestion().options.find((o) => o.move.kind === "cut along a singular leaf")!;
+    session.commit(session.preview(first.move));
+    session.runAutopilot({ automatic });
+
+    // Both punctures have one cusp: the closed-surface move again, not "pseudo-Anosov".
+    const again = session.suggestion();
+    expect(again.kind).toBe("closed surface");
+    expect(plainText(again.description)).toContain("each of the 2 artificial punctures");
+    const before = session.current;
+    expect((before.model as PolygonModel).points).toHaveLength(1); // the other new puncture is in the vertex
+
+    const cut = again.options.find((o) => o.move.kind === "cut along a singular leaf")!;
+    const preview = session.preview(cut.move);
+    expect(preview.error).toBeUndefined();
+    expect(preview.surface!.checkIntegrity()).toEqual([]);
+    expect(preview.steps.length).toBeGreaterThan(5); // cut branch by branch
+    for (const step of preview.steps) drawable(step.after, before.model);
+    // The walled state: P filled in (the vertex and the point), then the walls contracted.
+    const models = preview.steps.map((step) => modelOfSpine(step.after.spine0) as PolygonModel | undefined);
+    expect(models.some((m) => m?.closed && m.filled?.length === 1)).toBe(true);
+    expect(plainText(preview.steps.at(-1)!.text)).toMatch(/^Contract the walls/);
+    const result = modelOfSpine(preview.surface!.spine0) as PolygonModel;
+    expect(result).toMatchObject({ kind: "polygon", closed: false });
+    expect(result.filled).toBeUndefined();
+  }, 300_000);
 });

@@ -4,7 +4,7 @@
 working it out (port note 15, former Q3).
 **Target:** `src/fibred/moves/fill-puncture.ts` (detection, shortcut), `src/fibred/moves/cut-closed-surface.ts` (the cut),
 `src/fibred/suggestions.ts`, `src/examples/models.ts` and `src/embedding/remark.ts` (the model)
-**Status:** ✍️ note awaiting review
+**Status:** 🔍 implemented (2026-10-19), decisions in the conversation; see § Implementation
 
 ## The situation
 
@@ -28,8 +28,9 @@ polygons.
    today, but the check has to cover all of them.
 3. **Removing the circles.** g′(Bᵢ) = αᵢ Bᵢ₊₁ ᾱᵢ. Filling in all of P, each Bᵢ bounds a disk, so deleting all of them
    from the graph and from all images at once is a homotopy equivalence (Lemma "Removing an almost peripheral
-   subgraph", applied to the orbit). The growth argument of the lemma should carry over unchanged, but the thesis
-   doesn't state it for an orbit. **To check.**
+   subgraph", applied to the orbit). The growth argument carries over (author, 2026-10-19): as in the thesis and
+   in Bestvina–Handel, each circle is glued into a long line with a valence-1 vertex at its end, and pulling tight
+   lowers the growth. (Not by "a principal submatrix has smaller growth", which isn't true in general.)
 4. The leaf L starts at a singularity of the new orbit Q′ (at least 3 prongs), never at a point of P (a 1-prong).
 
 ## What exists today
@@ -98,8 +99,19 @@ There is no example yet that needs a second cut with |Q| ≥ 2. A first search (
 - 40 random genus-2 classes (10 Dehn twists each): none even ends with one cusp at its puncture (cusps 2–8 when
   pseudo-Anosov), so none needs a first cut.
 
-Examples have to be constructed or searched for more specifically (e.g. maps built to fix a 1-prong, or the
-pieces after a reduction). Without one, items 2–4 can only be tested on constructed cases.
+A second search found examples: random words in the four point pushes of "Point push as a composition", their inverses
+and the Lickorish twists (in the strip names of the point push), marked closed and cut by the autopilot.
+
+| word                                           | what happens                                                             |
+| ---------------------------------------------- | ------------------------------------------------------------------------ |
+| P_β̄⁻¹ P_γ⁻¹ P_α⁻¹ P_β̄ D_d⁻¹ P_α⁻¹ D_c₁⁻¹ D_a⁻¹ | after one cut, 2 punctures with one cusp each (λ 6.45 → 1.88 → 1.40 → …) |
+| P_β̄ P_β̄ P_γ⁻¹ P_δ D_c₁ D_d D_c                 | after two cuts, 5 punctures with one cusp each                           |
+| P_β̄ P_β̄⁻¹ D_d D_c₁⁻¹ D_b⁻¹ P_α D_c D_a⁻¹       | two cuts (the second with \|Q\| = 1), then reducible, finite order       |
+| D_b⁻¹ D_d⁻¹ D_a⁻¹ D_d⁻¹ P_δ D_c₁ P_δ P_δ       | three cuts, then pseudo-Anosov with 4 cusps (18 minutes)                 |
+
+Before this change, the first two ended with a wrong "pseudo-Anosov". The first is the test case
+(`closed-surface-model.test.ts`). Cutting again can take many rounds: with the first word, P grows to 6 punctures
+and then to an orbit of period 10, with the growth dropping each time.
 
 ### 6. Floating point
 
@@ -131,16 +143,44 @@ same step with an interior point in place of the vertex, hence the filled points
 
 ## Open questions
 
-1. Does the growth argument of the Lemma "Removing an almost peripheral subgraph" hold for an orbit of circles (math § 3)?
+1. ~~Does the growth argument of the Lemma hold for an orbit of circles?~~ Yes (math § 3).
 2. ~~Filled points in the model, or recompute the cells and re-read μ?~~ Neither: walls only as an intermediate
    state, contracted as in port note 27 (§ 4).
-3. Should the wrong classification (pseudo-Anosov with 1-prongs at an orbit of artificial punctures) be fixed first, on
-   its own? A minimal fix: detect it and say "τ has one cusp at each of the artificial punctures; cutting again is not
-   implemented yet", instead of claiming pseudo-Anosov.
+3. ~~Fix the wrong classification first, on its own?~~ Fixed by implementing the move.
 4. "Mark as closed" for "All punctures inside" with a single interior point (port note 24 currently falls back to the
    ribbon model): the vertex is already filled there, so the model can stay **unchanged** and only `fs.isClosed` is set.
    The cut then needs § 4 (an artificial interior point is filled in), but the marking itself does not. Take this
    correction into note 24 now?
+
+## Implementation (2026-10-19)
+
+- **Detection:** `oneCuspPunctures` counts the punctures if all have one cusp; the closed-surface suggestion appears
+  for any number of them on a closed surface. "Mark as closed" stays for a single puncture.
+- **The cut:** `punctureWords`, `attachedCircles` (all of P, checked together), `removeAlmostPeripheralCircles` (all at
+  once). **The shortcut:** one polygon branch ε per puncture of P, each identified by its letter on that puncture's face.
+- **The remarking** (`remark.ts`) accepts a polygon whose punctures are its vertex and its points (`fs.isClosed`):
+  - **The mid model keeps the old cells:** each old cell with points of Q inside is cut into cells around them
+    (`cellDecomposition` of that cell). The old chords keep their names, and a strip's crossings of them are the letters
+    of its μ; only the new chords are read off the drawing. Recomputing all cells from the points gave crossings that
+    don't come from an embedding.
+  - **The walls** are chosen outward from Q, one per puncture of P (all polygon corners count as the vertex), and
+    filled in from the outside in, each by the current boundary word of its child's face. The walled model keeps the
+    mid cells explicitly; walls are chords without a name, and the filled-in points are drawn as dots (`filled`).
+  - **Contracting** (`contractWalls`): each tree of walls collapses towards the vertex if it contains it, else towards
+    its point of Q; a filled-in point moves into its neighbour, and a point of Q into the vertex.
+  - **Checks:** the μ of τ read off the drawing must have a strand order (else the nudges are tried, then the move
+    falls back to the ribbon model, as before).
+- **Bugs found on the way:**
+  - `spineOf` recorded the exits and sides before reversing edges (`reversed` in the naming), so with several cells an
+    exit could leave the wrong cell. Invisible with one cell; it broke the first cut in the polygon for every point-push
+    model with interior points in the mid model.
+  - Reading the drawing: the stubs of the ports (a little beyond each port) could cross chords out of order; the pieces
+    now end at their ports. A point of Q is placed at its junction when the centroid of the switches lies outside their
+    polygon.
+- **Still open:** the pictures of later cuts are crowded (hundreds of strips, junctions close to the polygon's sides),
+  and in such a layout reading the drawing can fail, so the move falls back to the ribbon model. The search also hit
+  integrity errors in the pieces after a reduction ("After absorb into periphery", "g can't be lifted to the complement
+  of K", "After pull tight"), which have nothing to do with this move.
 
 ## Tests
 

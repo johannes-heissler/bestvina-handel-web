@@ -66,6 +66,12 @@ timeline shows filling in p (with the wall) and the slide as two steps.
   `remarkClosedSurface` doesn't accept yet. That needs filling in interior points (the same trick) and comes next.
 - An animated slide. The steps are discrete states.
 
+## Later: several walls (port note 26)
+
+`slideIntoCorner` is now a case of `contractWalls`, which contracts a list of walls in order: a filled-in interior
+point moves into its neighbour, a point of Q into the vertex. The remarking fills in all punctures of P (the vertex
+and the points of the old model), with one wall each, and contracts them along their trees.
+
 ## Tests
 
 - `slideIntoCorner` on the octagon with one point (gives the single cell) and with two points (one point left, convex

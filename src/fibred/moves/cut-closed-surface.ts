@@ -20,14 +20,41 @@ import { collapseSubforest } from "./collapse-forest";
 import { tightenMarking } from "./isotopy";
 
 /**
- * The boundary word of p in the cut track: the one that contains a real branch and runs along no slit (the sides
- * of the slits belong to the new punctures at the singularities). `undefined` if there isn't exactly one.
+ * The boundary words of the punctures P (p, or the orbit of punctures that a former cut made, port note 26) in the cut
+ * track: those that contain a real branch and run along no slit (the sides of the slits belong to the new punctures at
+ * the singularities).
  */
-export function punctureWord(ct: CutTrack): EdgePath | undefined {
-  const words = ct.graph
+export function punctureWords(ct: CutTrack): EdgePath[] {
+  return ct.graph
     .boundaryWords()
     .filter((w) => w.letters.some((x) => ct.kind.get(x.edge) === "real") && !w.letters.some(ct.isOnSlit));
-  return words.length === 1 ? words[0] : undefined;
+}
+
+/** How many punctures τ has (its boundary words that aren't infinitesimal polygons): the size of P. */
+export function punctureCount(tt: TrainTrack): number {
+  return tt.boundaryWords().filter((b) => !b.infinitesimal).length;
+}
+
+/** A circle B of the Lemma "Removing an almost peripheral subgraph": the boundary word of a puncture of P, attached at v. */
+export interface AttachedCircle {
+  readonly word: EdgePath;
+  readonly v: Vertex;
+}
+
+/**
+ * The boundary words of all `count` punctures of P, if each is a circle attached at a single switch (see
+ * {@link attachmentSwitch}); else undefined. They become circles together (port note 26, § 2), but all are checked.
+ */
+export function attachedCircles(ct: CutTrack, count: number): AttachedCircle[] | undefined {
+  const words = punctureWords(ct);
+  if (words.length !== count) return undefined;
+  const circles: AttachedCircle[] = [];
+  for (const word of words) {
+    const v = attachmentSwitch(ct, word);
+    if (v === undefined) return undefined;
+    circles.push({ word, v });
+  }
+  return circles;
 }
 
 /**
@@ -42,16 +69,16 @@ export function attachmentSwitch(ct: CutTrack, word: EdgePath): Vertex | undefin
 }
 
 /**
- * Removes the circle B attached at the switch v: everything mapped into B is isotoped into v, i.e. the branches of B
- * are deleted from all images (and switches mapped into B are mapped to v), then B is deleted except for v. Filling
- * in p, this is a homotopy equivalence, so the result is a spine of Σ ∖ Q carrying the same f. Then the polygons of
- * the junctions outside Q, which never needed to be blown up, are contracted back into their junctions
- * ({@link collapseUncut}). μ is reset, unless a marking is given (it is filled in together with p).
+ * Removes the circles B attached at their switches v (one for each puncture of P, all at once, since g maps each into
+ * the next): everything mapped into a circle is isotoped into its v, i.e. the branches of the circles are deleted from
+ * all images (and switches mapped into a circle are mapped to its v), then the circles are deleted except for the v.
+ * Filling in P, this is a homotopy equivalence, so the result is a spine of Σ ∖ Q carrying the same f. Then the
+ * polygons of the junctions outside Q, which never needed to be blown up, are contracted back into their junctions
+ * ({@link collapseUncut}). μ is reset, unless a marking is given (it is filled in together with P).
  */
-export function removeAlmostPeripheralCircle(
+export function removeAlmostPeripheralCircles(
   ct: CutTrack,
-  word: EdgePath,
-  v: Vertex,
+  circles: readonly AttachedCircle[],
   options: {
     readonly uncut: ReadonlySet<Edge>;
     readonly junctionOf: (s: Vertex) => Vertex | undefined;
@@ -65,32 +92,50 @@ export function removeAlmostPeripheralCircle(
   const { graph, gPrime: g } = ct;
   const { marking } = options;
   let mu = marking?.mu;
+  const start = (word: EdgePath) =>
+    `${word.letters
+      .slice(0, 6)
+      .map((x) => x.name)
+      .join(" ")}${word.length > 6 ? " …" : ""}`;
+  const [only] = circles;
   narrate(
     [
-      `The boundary of p is now a circle B of ${word.length} branches (${word.letters
-        .slice(0, 6)
-        .map((x) => x.name)
-        .join(
-          " ",
-        )}${word.length > 6 ? " …" : ""}), attached only at ${v.name}. Remove it (Lemma "Removing an almost peripheral subgraph"): its branches are deleted from all images. This fills in p.`,
+      circles.length === 1 && only !== undefined
+        ? `The boundary of p is now a circle B of ${only.word.length} branches (${start(only.word)}), attached only at ${only.v.name}. Remove it (Lemma "Removing an almost peripheral subgraph"): its branches are deleted from all images. This fills in p.`
+        : `The boundaries of the ${circles.length} punctures of P are now circles, ${circles
+            .map(({ word, v }) => `of ${word.length} branches (${start(word)}) attached only at ${v.name}`)
+            .join(
+              "; ",
+            )}. Remove them all at once (Lemma "Removing an almost peripheral subgraph", for the orbit; g maps each into the next): their branches are deleted from all images. This fills in P.`,
       ...(marking === undefined ? [] : [" ", fillingText(marking.remarking)]),
     ],
     { before: options.before },
   );
-  const circle = new Set(word.letters.map((x) => x.edge));
-  const inner = new Set(word.letters.map((x) => x.target).filter((s) => s !== v));
+  const circle = new Set(circles.flatMap(({ word }) => word.letters.map((x) => x.edge)));
+  // The switches along each circle except its attachment, and where they go.
+  const inner = new Map(
+    circles.flatMap(({ word, v }) =>
+      word.letters
+        .map((x) => x.target)
+        .filter((s) => s !== v)
+        .map((s) => [s, v] as const),
+    ),
+  );
   g.substituteInImages((e) => (circle.has(e) ? EdgePath.EMPTY : undefined));
-  for (const s of graph.vertices) if (inner.has(g.vertexImage(s))) g.setVertexImage(s, v);
+  for (const s of graph.vertices) {
+    const to = inner.get(g.vertexImage(s));
+    if (to !== undefined) g.setVertexImage(s, to);
+  }
   for (const e of circle) {
     graph.removeEdge(e);
     g.forgetEdge(e);
   }
-  for (const s of inner) {
+  for (const s of inner.keys()) {
     graph.removeVertex(s);
     g.forgetVertex(s);
   }
-  forgetInMarking(mu, circle, inner);
-  // Filling in p on the side of G₀ too, at the same time (port note 22, § 4).
+  forgetInMarking(mu, circle, inner.keys());
+  // Filling in P on the side of G₀ too, at the same time (port note 22, § 4).
   if (marking !== undefined && mu !== undefined) mu = marking.remarking.filled(mu);
   const surface = new FibredSurface({ graph, g, ...(mu && { mu }) });
   surface.legacyDefaultNames = ct.legacyDefaultNames;
@@ -184,13 +229,14 @@ export function cutTooFine(tt: TrainTrack, junction: Vertex): boolean {
 }
 
 /**
- * The switches along the boundary word of p that still have valence > 2, i.e. where the cut hasn't yet separated
- * a thin ring along p's boundary; empty when B is a circle attached at one switch plus that one switch. For showing
- * the progress while L is prolonged. `undefined` if p's boundary word can't be identified.
+ * The switches along the boundary words of P that still have valence > 2, i.e. where the cut hasn't yet separated
+ * a thin ring along a boundary; one per puncture (its attachment switch) when every boundary is a circle attached at
+ * one switch. For showing the progress while L is prolonged. `undefined` if no boundary word of P can be identified.
  */
 export function circleDefects(ct: CutTrack): Vertex[] | undefined {
-  const word = punctureWord(ct);
-  return word?.letters.map((x) => x.target).filter((s) => ct.graph.valence(s) > 2);
+  const words = punctureWords(ct);
+  if (words.length === 0) return undefined;
+  return words.flatMap((word) => word.letters.map((x) => x.target).filter((s) => ct.graph.valence(s) > 2));
 }
 
 /** A way to cut: along `prong` through `realBranches` real branches, after which B is a circle attached at one switch. */
@@ -216,6 +262,7 @@ export function cutOptions(tt: TrainTrack, candidates: readonly Prong[], maxReal
     .boundaryWords()
     .filter((b) => !b.infinitesimal)
     .reduce((n, b) => n + b.word.length, 0);
+  const punctures = punctureCount(tt);
   const options: CutOption[] = [];
   for (const prong of candidates) {
     let L;
@@ -242,8 +289,7 @@ export function cutOptions(tt: TrainTrack, candidates: readonly Prong[], maxReal
       } catch {
         continue;
       }
-      const word = punctureWord(ct);
-      if (word !== undefined && attachmentSwitch(ct, word) !== undefined) {
+      if (attachedCircles(ct, punctures) !== undefined) {
         options.push({ prong, realBranches: count });
         break;
       }
@@ -420,12 +466,11 @@ export function cutClosedSurface(tt: TrainTrack, option: CutOption, remarking?: 
     done = count;
   }
   const full = ct as CutTrack;
-  const word = punctureWord(full);
-  const v = word === undefined ? undefined : attachmentSwitch(full, word);
-  if (word === undefined || v === undefined) throw new Error("This cut doesn't make p's boundary a circle");
+  const circles = attachedCircles(full, punctureCount(tt));
+  if (circles === undefined) throw new Error("This cut doesn't make the boundaries of P circles");
   const mu = remarking ? cutMarking(tt, full, remarking) : undefined;
   const partOf = (e: Edge) => partOfPiece(tt, full.pieces.get(e) as Piece);
-  let surface = removeAlmostPeripheralCircle(full, word, v, {
+  let surface = removeAlmostPeripheralCircles(full, circles, {
     uncut: uncutOf(full.graph, (e) => partOf(e).branch),
     junctionOf: junctionOfSwitch(full.graph, partOf),
     inQ,
@@ -436,17 +481,27 @@ export function cutClosedSurface(tt: TrainTrack, option: CutOption, remarking?: 
   return { surface, prong: option.prong, realBranches: option.realBranches, cut: full };
 }
 
-/** What filling in p does to the picture (the side of G₀), for the narration. */
+/** What filling in P does to the picture (the side of G₀), for the narration. */
 export function fillingText(remarking: Remarking): string {
-  const { name, image } = remarking.wall;
-  return `In the picture, p is filled in (the dots at the corners): the chord ${name} from p to a new puncture becomes a wall, and the strands that crossed it go around p instead (${name} ↦ ${image} in μ).`;
+  const [only] = remarking.walls;
+  if (remarking.walls.length === 1 && only !== undefined) {
+    const { name, image } = only;
+    return `In the picture, p is filled in (the dots at the corners): the chord ${name} from p to a new puncture becomes a wall, and the strands that crossed it go around p instead (${name} ↦ ${image} in μ).`;
+  }
+  return `In the picture, P is filled in (the dots): from each of its punctures a chord to a neighbour becomes a wall, and the strands that crossed it go around the filled-in point instead (${remarking.walls
+    .map(({ name, image }) => `${name} ↦ ${image}`)
+    .join("; ")} in μ).`;
 }
 
-/** The step of the slide after filling in p (port note 27), for the narration. */
+/** The step of contracting the walls after filling in P (port notes 26, 27), for the narration. */
 function slideText(remarking: Remarking, slid: NonNullable<ReturnType<Remarking["slide"]>>): string {
-  const { name } = remarking.wall;
+  const walls = remarking.walls.map(({ name }) => name).join(", ");
   return [
-    `Slide the new puncture of ${slid.point} along the wall ${name} into the corner, where p was: the wall disappears, and the chords that ended at the puncture now end at the corner (G₀ and μ stay the same).`,
+    slid.filledPoints === 0
+      ? `Slide the new puncture of ${slid.point ?? "q"} along the wall ${walls} into the corner, where p was: the wall disappears, and the chords that ended at the puncture now end at the corner (G₀ and μ stay the same).`
+      : `Contract the walls ${walls}: each filled-in point moves along its wall into its neighbour${
+          slid.point === undefined ? "" : `, and the new puncture of ${slid.point} slides into the corner`
+        }. The walls disappear, and the chords that ended at a moved point now end where it went (G₀ and μ stay the same).`,
     slid.merged.length === 0
       ? ""
       : ` The cells that collapse or can be joined are merged, so the chords ${slid.merged.join(", ")} drop out of μ.`,

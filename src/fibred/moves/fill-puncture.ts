@@ -10,6 +10,7 @@ import { type Edge, type OrientedEdge, RibbonGraph, type Vertex } from "../../gr
 import { FibredSurface } from "../fibred-surface";
 import { keepingStates, narrate } from "../narration";
 import type { Remarking } from "../remarking";
+import type { TextPart } from "../suggestions";
 import { fillingText, finishRemarking, junctionPartName } from "./cut-closed-surface";
 import { tightenMarking } from "./isotopy";
 import { trainTrack, type TrainTrack } from "../train-track";
@@ -22,12 +23,19 @@ export interface Singularity {
 }
 
 /**
- * Whether the fibred surface is in the situation of the thesis's Lemma "oneCusp": a single puncture (no
- * periphery, one boundary word), growth > 1, and the boundary word of τ at the puncture has exactly one cusp.
+ * How many punctures are in the situation of the thesis's Lemma "oneCusp": no periphery, growth > 1, and the boundary
+ * word of τ at every puncture has exactly one cusp. 0 if that isn't the case. After a closed-surface move the punctures
+ * are an orbit, so they all have one cusp or none does; then the move is needed again (port note 26).
  */
-export function hasOneCuspPuncture(fs: FibredSurface, tt: TrainTrack = trainTrack(fs)): boolean {
+export function oneCuspPunctures(fs: FibredSurface, tt: TrainTrack = trainTrack(fs)): number {
   const real = tt.boundaryWords().filter((b) => !b.infinitesimal);
-  return fs.peripheral.size === 0 && tt.growth > 1 + 1e-9 && real.length === 1 && real[0]?.cusps === 1;
+  const all = fs.peripheral.size === 0 && tt.growth > 1 + 1e-9 && real.every((b) => b.cusps === 1);
+  return all ? real.length : 0;
+}
+
+/** Whether the surface has a single puncture, with one cusp (see {@link oneCuspPunctures}). */
+export function hasOneCuspPuncture(fs: FibredSurface, tt: TrainTrack = trainTrack(fs)): boolean {
+  return oneCuspPunctures(fs, tt) === 1;
 }
 
 /**
@@ -70,8 +78,8 @@ export function replacePunctureBySingularity(
   tt: TrainTrack = trainTrack(fs),
 ): FibredSurface {
   const blownUp = blowUpOrbit(fs, q, tt);
-  const epsilon = blownUp.polygons.get(q.junction)?.[0];
-  if (epsilon === undefined) throw new Error(`${q.junction} has no infinitesimal polygon`);
+  const first = blownUp.polygons.get(q.junction)?.[0];
+  if (first === undefined) throw new Error(`${q.junction} has no infinitesimal polygon`);
   const keep = remarking !== undefined && keepingStates();
   const surface =
     remarking === undefined
@@ -84,19 +92,48 @@ export function replacePunctureBySingularity(
         });
   surface.onError = fs.onError;
   surface.legacyDefaultNames = fs.legacyDefaultNames;
-  const { x, forwardImage } = fillingWord(surface, epsilon);
-  narrate(
-    [
-      "Fill in p: the branch ",
-      { strip: epsilon.name },
-      " lies between the polygon of ",
-      { junction: q.junction.name },
-      ` and p, so with p filled in it is homotopic to ${(x.isForward ? forwardImage : forwardImage.inverse).toString() || "a point"} (the rest of p's boundary, backwards). It is replaced by that in all images and deleted; the faces of p and q merge.`,
-      ...(remarking === undefined ? [] : [" ", fillingText(remarking)]),
-    ],
-    { before: keep ? shown(surface) : undefined },
-  );
-  const filled = fillPuncture(surface, epsilon, { keepMarking: remarking !== undefined });
+  // One branch ε of a polygon of Q on the boundary of each puncture of P, by its letter on that face (with a single
+  // puncture p: the first branch of q's polygon, whose other side is p's face).
+  const faces = surface.graph
+    .boundaryWords()
+    .filter((w) => w.letters.some((x) => !surface.peripheral.has(x.edge)));
+  const fillings = faces.map((face) => {
+    const x =
+      faces.length === 1
+        ? face.letters.find((y) => y.edge === first)
+        : face.letters.find((y) => surface.peripheral.has(y.edge));
+    if (x === undefined)
+      throw new Error(`The puncture with the boundary ${face} doesn't border a polygon of Q`);
+    return x;
+  });
+  const before = keep ? shown(surface) : undefined;
+  if (fillings.length === 1) {
+    const [side] = fillings as [OrientedEdge];
+    const { x, forwardImage } = fillingWord(surface, side.edge, side);
+    narrate(
+      [
+        "Fill in p: the branch ",
+        { strip: side.edge.name },
+        " lies between the polygon of ",
+        { junction: q.junction.name },
+        ` and p, so with p filled in it is homotopic to ${(x.isForward ? forwardImage : forwardImage.inverse).toString() || "a point"} (the rest of p's boundary, backwards). It is replaced by that in all images and deleted; the faces of p and q merge.`,
+        ...(remarking === undefined ? [] : [" ", fillingText(remarking)]),
+      ],
+      { before },
+    );
+  } else
+    narrate(
+      [
+        `Fill in the ${fillings.length} punctures of P: on the boundary of each lies a branch of a polygon of Q (`,
+        ...fillings.flatMap((x, i): TextPart[] => [...(i === 0 ? [] : [", "]), { strip: x.edge.name }]),
+        "), which, with the puncture filled in, is homotopic to the rest of the puncture's boundary, backwards. Each is replaced by that in all images and deleted; the faces of P merge with those of Q.",
+        ...(remarking === undefined ? [] : [" ", fillingText(remarking)]),
+      ],
+      { before },
+    );
+  let filled = surface;
+  for (const side of fillings)
+    filled = fillPuncture(filled, side.edge, { keepMarking: remarking !== undefined, side });
   return remarking === undefined ? filled : finishRemarking(filled, remarking);
 }
 
@@ -228,13 +265,20 @@ export function blowUpOrbit(fs: FibredSurface, q: Singularity, tt: TrainTrack = 
 
 /**
  * The boundary word x β of p's face through ε (x = ε in some orientation), and what ε (forward) is homotopic to once p
- * is filled in: β⁻¹ for x = ε, β for x = ε̄.
+ * is filled in: β⁻¹ for x = ε, β for x = ε̄. With several punctures (port note 26), `side` is the letter x of ε on the
+ * face of the puncture to fill in (each oriented edge lies on exactly one face).
  */
-export function fillingWord(fs: FibredSurface, epsilon: Edge): { x: OrientedEdge; forwardImage: EdgePath } {
+export function fillingWord(
+  fs: FibredSurface,
+  epsilon: Edge,
+  side?: OrientedEdge,
+): { x: OrientedEdge; forwardImage: EdgePath } {
   const puncture = fs.graph
     .boundaryWords()
-    .find(
-      (w) => w.letters.some((x) => x.edge === epsilon) && w.letters.some((x) => !fs.peripheral.has(x.edge)),
+    .find((w) =>
+      side !== undefined
+        ? w.letters.includes(side)
+        : w.letters.some((x) => x.edge === epsilon) && w.letters.some((x) => !fs.peripheral.has(x.edge)),
     );
   if (puncture === undefined) throw new Error(`${epsilon} doesn't lie on the boundary of the puncture`);
   const k = puncture.letters.findIndex((x) => x.edge === epsilon);
@@ -254,9 +298,9 @@ export function fillingWord(fs: FibredSurface, epsilon: Edge): { x: OrientedEdge
 export function fillPuncture(
   fs: FibredSurface,
   epsilon: Edge,
-  options: { keepMarking?: boolean } = {},
+  options: { keepMarking?: boolean; side?: OrientedEdge } = {},
 ): FibredSurface {
-  const { forwardImage } = fillingWord(fs, epsilon);
+  const { forwardImage } = fillingWord(fs, epsilon, options.side);
   fs.g.substituteInImages((e) => (e === epsilon ? forwardImage : undefined));
   fs.graph.removeEdge(epsilon);
   fs.g.forgetEdge(epsilon);

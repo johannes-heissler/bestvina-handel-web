@@ -195,11 +195,7 @@ export interface SlidDecomposition {
 
 /**
  * Slides the point `point` (a corner index ≥ n) along the chord from `corner` (a polygon vertex) into that corner (port
- * note 27): the chord, a wall without an edge of G₀, shrinks to a point. Cells that become digons are merged with the
- * cell across their side from `point`; the other points are placed anew by a Tutte layout (each at the average of its
- * neighbours along the chords, the polygon fixed); then cells are merged across chords, longest first, while the union
- * stays convex. Every merge contracts an edge of the dual graph. Undefined if the result isn't a decomposition into
- * convex cells (then the wall has to stay).
+ * note 27); see {@link contractWalls}.
  */
 export function slideIntoCorner(
   polygon: readonly Complex[],
@@ -207,6 +203,24 @@ export function slideIntoCorner(
   cells: readonly (readonly number[])[],
   point: number,
   corner: number,
+): SlidDecomposition | undefined {
+  return contractWalls(polygon, points, cells, [[point, corner]]);
+}
+
+/**
+ * Contracts walls (port notes 26, 27): each `[from, to]` moves the corner `from` (a point, ≥ n) along the chord to
+ * `to` (a polygon vertex, or another point) into it, in this order; a corner moved before stands for where it went.
+ * The chord, a wall without an edge of G₀, shrinks to a point. Cells that become digons are merged with the cell across
+ * their side that moved; the points that are left are placed anew by a Tutte layout (each at the average of its
+ * neighbours along the chords, the polygon fixed); then cells are merged across chords, longest first, while the union
+ * stays convex. Every merge contracts an edge of the dual graph. Undefined if the result isn't a decomposition into
+ * convex cells (then the walls have to stay).
+ */
+export function contractWalls(
+  polygon: readonly Complex[],
+  points: readonly Complex[],
+  cells: readonly (readonly number[])[],
+  contractions: readonly (readonly [number, number])[],
 ): SlidDecomposition | undefined {
   const n = polygon.length;
   const position = [...polygon, ...points];
@@ -224,39 +238,54 @@ export function slideIntoCorner(
     members: number[];
   }
   let work: Work[] = cells.map((cell, k) => ({
-    corners: cell.map((x) => (x === point ? corner : x)),
+    corners: [...cell],
     was: cell.map((a, i) => `${a}>${cell[(i + 1) % cell.length]}`),
     members: [k],
   }));
+  // Where each moved corner went, and the old corners each corner stands for now.
+  const movedTo = new Map<number, number>();
+  const now = (x: number): number => (movedTo.has(x) ? now(movedTo.get(x) as number) : x);
+  const standsFor = new Map<number, Set<number>>();
+  const originals = (x: number) => standsFor.get(x) ?? new Set([x]);
 
-  // 1. The wall shrinks to a point: drop the sides that start and end at the corner.
-  for (const w of work)
-    for (let i = w.corners.length - 1; i >= 0; i--)
-      if (w.corners.length > 1 && w.corners[i] === w.corners[(i + 1) % w.corners.length]) {
-        w.corners.splice(i, 1);
-        w.was.splice(i, 1);
-      }
+  for (const [from, to] of contractions) {
+    const [a, b] = [now(from), now(to)];
+    if (a === b) continue;
+    if (a < n) return undefined; // a polygon vertex doesn't move
+    const moving = originals(a);
+    movedTo.set(a, b);
+    standsFor.set(b, new Set([...originals(b), ...moving]));
+    for (const w of work) w.corners = w.corners.map((x) => (x === a ? b : x));
 
-  // 2. Digons: their two sides now lie on each other. Each is merged with the cell across its side from the point,
-  // which then runs along the digon's other side instead.
-  for (
-    let digon = work.find((w) => w.corners.length < 3);
-    digon;
-    digon = work.find((w) => w.corners.length < 3)
-  ) {
-    if (digon.corners.length !== 2) return undefined;
-    const s = digon.was.findIndex((side) => ends(side).includes(point));
-    if (s < 0) return undefined;
-    const across = reverse(digon.was[s] as string);
-    const neighbour = work.find((w) => w !== digon && w.was.includes(across));
-    if (neighbour === undefined) return undefined;
-    neighbour.was[neighbour.was.indexOf(across)] = digon.was[1 - s] as string;
-    neighbour.members.push(...digon.members);
-    work = work.filter((w) => w !== digon);
+    // 1. The wall shrinks to a point: drop the sides that start and end at the same corner.
+    for (const w of work)
+      for (let i = w.corners.length - 1; i >= 0; i--)
+        if (w.corners.length > 1 && w.corners[i] === w.corners[(i + 1) % w.corners.length]) {
+          w.corners.splice(i, 1);
+          w.was.splice(i, 1);
+        }
+
+    // 2. Digons: their two sides now lie on each other. Each is merged with the cell across its side that moved,
+    // which then runs along the digon's other side instead.
+    for (
+      let digon = work.find((w) => w.corners.length < 3);
+      digon;
+      digon = work.find((w) => w.corners.length < 3)
+    ) {
+      if (digon.corners.length !== 2) return undefined;
+      const s = digon.was.findIndex((side) => ends(side).some((x) => moving.has(x)));
+      if (s < 0) return undefined;
+      const across = reverse(digon.was[s] as string);
+      const neighbour = work.find((w) => w !== digon && w.was.includes(across));
+      if (neighbour === undefined) return undefined;
+      neighbour.was[neighbour.was.indexOf(across)] = digon.was[1 - s] as string;
+      neighbour.members.push(...digon.members);
+      work = work.filter((w) => w !== digon);
+    }
   }
 
-  // 3. The Tutte layout of the other points.
-  const movable = points.map((_, j) => n + j).filter((x) => x !== point);
+  // 3. The Tutte layout of the points that are left.
+  const movable = points.map((_, j) => n + j).filter((x) => !movedTo.has(x));
   const neighbours = new Map<number, Set<number>>(movable.map((x) => [x, new Set()]));
   for (const w of work)
     w.corners.forEach((a, i) => {

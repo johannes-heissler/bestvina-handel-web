@@ -12,7 +12,7 @@ import { applyMove, type FollowUp, type FoldRef, foldRef, type Move, type MoveKi
 import { needsAbsorbing } from "./moves/absorb-periphery";
 import { candidateCenters, invariantSubforests, isPeripheryFriendlyForest } from "./moves/collapse-forest";
 import { cutOptions, cutTooFine, preimageShrinking, prongsOfOrbit } from "./moves/cut-closed-surface";
-import { hasOneCuspPuncture, polygonSingularities } from "./moves/fill-puncture";
+import { oneCuspPunctures, polygonSingularities } from "./moves/fill-puncture";
 import type { FoldOption } from "./moves/fold";
 import {
   type FoldCandidate,
@@ -502,12 +502,14 @@ function nextStep(fs: FibredSurface, context: SuggestionContext): Suggestion {
       multiple: false,
     };
 
-  const oneCusp = hasOneCuspPuncture(fs);
-  if (fs.isClosed && oneCusp)
+  const oneCusp = oneCuspPunctures(fs);
+  if (fs.isClosed && oneCusp > 0)
     return {
       kind: "closed surface",
       description: [
-        "The map is efficient, but τ has only one cusp at the artificial puncture. Replace it by the orbit of a singularity q.",
+        oneCusp === 1
+          ? "The map is efficient, but τ has only one cusp at the artificial puncture. Replace it by the orbit of a singularity q."
+          : `The map is efficient, but τ has only one cusp at each of the ${oneCusp} artificial punctures (an orbit). Replace them by the orbit of a singularity q.`,
       ],
       options: closedSurfaceOptions(fs),
       multiple: false,
@@ -530,7 +532,7 @@ function nextStep(fs: FibredSurface, context: SuggestionContext): Suggestion {
   );
   // With a single cusp at the only puncture, the puncture might be one that the surface doesn't really have: offer to
   // mark the surface as closed, to see what the mapping class is on the closed surface (port note 24).
-  if (!oneCusp) return result;
+  if (oneCusp !== 1 || fs.isClosed) return result;
   return {
     ...result,
     description: [

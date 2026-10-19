@@ -69,9 +69,14 @@ export interface PolygonModel extends ModelBase {
   readonly cells?: readonly (readonly number[])[];
   /**
    * With `cells`: the name of the edge of G₀ that leaves a cell through each chord, keyed "a>b" by the corners of the
-   * chord in the direction the cell runs along it.
+   * chord in the direction the cell runs along it. A chord without a name is a wall: it has no edge of G₀ (port note 26).
    */
   readonly exits?: Readonly<Record<string, string>>;
+  /**
+   * The indices of the points that are filled in (no punctures, drawn as dots), each with a wall: only in the state
+   * between filling in the punctures of a closed-surface move and contracting the walls (port notes 26, 27).
+   */
+  readonly filled?: readonly number[];
 }
 
 export interface PlaneModel extends ModelBase {
@@ -146,8 +151,11 @@ interface PolygonCells {
   readonly cells: readonly (readonly number[])[];
   /** Before renaming: the side label for a polygon side, a chord name (lowercase leaving the earlier cell) for a chord. */
   readonly names: readonly (readonly string[])[];
-  /** The forward name of the chord that a filled-in vertex removes (port note 22). */
-  readonly wall: string | undefined;
+  /**
+   * The forward names (lowercase) of the walls: the chord that a filled-in vertex removes (port note 22), or the chords
+   * without a name in explicit cells (port note 26). Their edges are not in G₀.
+   */
+  readonly walls: ReadonlySet<string>;
 }
 
 /** How the edges of G₀ that the model itself doesn't name are named. */
@@ -167,19 +175,23 @@ interface DefaultNaming {
 function polygonCells(model: PolygonModel, naming: DefaultNaming = {}): PolygonCells {
   if (model.cells !== undefined) {
     const n = model.word.length;
+    const walls = new Set<string>();
     const names = model.cells.map((cell) =>
       cell.map((a, i) => {
         const b = cell[(i + 1) % cell.length] as number;
         if (a < n && b === (a + 1) % n) return model.word[a] as string;
         const name = model.exits?.[`${a}>${b}`];
-        if (name === undefined) throw new Error(`The chord from corner ${a} to ${b} has no name`);
-        return name;
+        if (name !== undefined) return name;
+        // A wall: a name of its own, only to pair up its two sides (its edge is removed from G₀).
+        const wall = `wall_${Math.min(a, b)}_${Math.max(a, b)}`;
+        walls.add(wall);
+        return a < b ? wall : invertName(wall);
       }),
     );
-    return { cells: model.cells, names, wall: undefined };
+    return { cells: model.cells, names, walls };
   }
   if ((model.points ?? []).length === 0)
-    return { cells: [model.word.map((_, i) => i)], names: [[...model.word]], wall: undefined };
+    return { cells: [model.word.map((_, i) => i)], names: [[...model.word]], walls: new Set() };
   const { vertices, points } = polygonCorners(model);
   const n = vertices.length;
   const { cells } = cellDecomposition(vertices, points);
@@ -218,13 +230,13 @@ function polygonCells(model: PolygonModel, naming: DefaultNaming = {}): PolygonC
       return name;
     }),
   );
-  if (!model.closed || wall === undefined) return { cells, names, wall: undefined };
-  return { cells, names, wall: (names[wall.k] as string[])[wall.i]?.toLowerCase() };
+  if (!model.closed || wall === undefined) return { cells, names, walls: new Set() };
+  return { cells, names, walls: new Set([(names[wall.k] as string[])[wall.i]?.toLowerCase() as string]) };
 }
 
-/** Whether the exit with this name is the wall. */
+/** Whether the exit with this name is a wall. */
 function isWall(cells: PolygonCells, name: string): boolean {
-  return cells.wall !== undefined && name.toLowerCase() === cells.wall;
+  return cells.walls.has(name.toLowerCase());
 }
 
 /** The oriented edge names at each vertex of G₀ (before renaming). */
@@ -279,8 +291,7 @@ export function spineOf(model: SurfaceModel, naming: SpineNames = {}, legacy = f
         isWall(decomposition, name) ? undefined : (byName.get(name) as OrientedEdge),
       ),
     }));
-    if (decomposition.wall !== undefined)
-      graph.removeEdge((byName.get(decomposition.wall) as OrientedEdge).edge);
+    for (const wall of decomposition.walls) graph.removeEdge((byName.get(wall) as OrientedEdge).edge);
   }
   const lassos =
     model.kind === "plane"
@@ -288,10 +299,20 @@ export function spineOf(model: SurfaceModel, naming: SpineNames = {}, legacy = f
         // counterclockwise around its point.
         model.points.map((_, i) => byName.get(lassoName(i, legacy)) as OrientedEdge)
       : undefined;
+  const inverted = new Set<Edge>();
   for (const name of naming.reversed ?? []) {
     const e = byName.get(name);
     if (e === undefined || !isForwardName(name)) throw new Error(`G₀ has no edge ${name}`);
     graph.invertEdge(e.edge);
+    inverted.add(e.edge);
+  }
+  // After inverting an edge its oriented edges run the other way: the exits, sides and lassos recorded above are
+  // their reverses now (with several cells, an exit would otherwise leave the wrong cell).
+  const same = (x: OrientedEdge) => (inverted.has(x.edge) ? x.reversed : x);
+  if (inverted.size > 0) {
+    sides?.splice(0, sides.length, ...sides.map(same));
+    cells = cells?.map((cell) => ({ ...cell, exits: cell.exits.map((x) => x && same(x)) }));
+    lassos?.splice(0, lassos.length, ...lassos.map(same));
   }
   for (const [from, to] of Object.entries(naming.names ?? {})) {
     const e = byName.get(from);

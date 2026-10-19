@@ -12,9 +12,10 @@
  */
 import { CombinatorialMap } from "../graph/combinatorial-map";
 import { EdgePath } from "../graph/edge-path";
+import { EDGE_NAMES, firstUnusedName, invertName } from "../graph/names";
 import type { Edge, OrientedEdge, RibbonGraph, Vertex } from "../graph/ribbon-graph";
 import { Complex } from "../math/complex";
-import { slideIntoCorner } from "../geometry/cells";
+import { cellDecomposition, contractWalls } from "../geometry/cells";
 import { denormalizeLike } from "../geometry/normalize";
 import {
   polygonCorners,
@@ -27,7 +28,7 @@ import {
   type SurfaceModel,
 } from "../examples/models";
 import { FibredSurface } from "../fibred/fibred-surface";
-import type { Remarking, RemarkingProvider } from "../fibred/remarking";
+import { markTrack, type Remarking, type RemarkingProvider } from "../fibred/remarking";
 import type { TrainTrack } from "../fibred/train-track";
 import { chartOf } from "./chart";
 import { withTightMarking } from "./image";
@@ -48,7 +49,9 @@ export function keepingModel(model: SurfaceModel): RemarkingProvider {
 
 /**
  * The {@link Remarking} for a closed-surface move on `fs`, drawn in `model`, with the orbit Q of singular junctions.
- * Undefined if the model isn't a closed polygon without interior points, or the drawing doesn't allow it.
+ * The punctures P of the model are filled in: its vertex, and the points of a model left by an earlier move (port note
+ * 26). Undefined if the model isn't a compact or flat polygon whose punctures are its vertex and its points, or the
+ * drawing doesn't allow it.
  */
 export function remarkClosedSurface(
   model: SurfaceModel,
@@ -56,12 +59,23 @@ export function remarkClosedSurface(
   tt: TrainTrack,
   orbit: readonly Vertex[],
 ): Remarking | undefined {
-  if (model.kind !== "polygon" || !model.closed || (model.points ?? []).length > 0) return undefined;
+  if (model.kind !== "polygon" || model.geometry.kind === "ideal" || model.filled !== undefined)
+    return undefined;
+  // (A closed polygon with points has its vertex filled in already: not a model a closed-surface move leaves.)
+  if (model.closed && (model.points ?? []).length > 0) return undefined;
   let problem = "";
   // A switch or a strip may lie exactly on a chord (the Tutte layout averages); then the points move a little.
   for (let nudge = 0; nudge < 6; nudge++)
     try {
-      return build(model, fs, tt, orbit, nudge);
+      const remarking = build(model, fs, tt, orbit, nudge);
+      // μ of τ, as read off the drawing, must come from an embedding (a cramped drawing, e.g. with junctions on a side of
+      // the polygon, can give crossings that don't).
+      try {
+        strandOrder(markTrack(tt, remarking));
+      } catch (e) {
+        throw new Degenerate(`The drawing gives no embedding: ${(e as Error).message}`);
+      }
+      return remarking;
     } catch (e) {
       problem = (e as Error).message;
       if (!(e instanceof Degenerate)) break;
@@ -117,8 +131,12 @@ function build(
     // Moved by a fifth of the way towards a corner, in a different direction for each attempt.
     const radius = Math.min(...corners.map((z) => z.sub(centroid).abs()));
     const center = nudge === 0 ? centroid : centroid.add(Complex.fromPolar(0.2 * radius, 2.4 * nudge));
-    if (!inside(corners, center)) throw new Error(`The singularity of ${v} isn't inside its polygon`);
-    return center;
+    if (inside(corners, center)) return center;
+    // A non-convex polygon of switches: the junction itself lies among them.
+    const junction = drawn.junctions.get(v) as Complex;
+    const near = nudge === 0 ? junction : junction.add(Complex.fromPolar(0.05 * radius, 2.4 * nudge));
+    if (inside(corners, near)) return near;
+    throw new Error(`The singularity of ${v} isn't inside its polygon`);
   });
   const given = model.geometry.kind === "flat" ? model.geometry.vertices : undefined;
   const toModel = (z: Complex): Point2 => {
@@ -126,8 +144,77 @@ function build(
     return [w.re, w.im];
   };
 
-  // 2. The model with Q inside, its sides named and oriented as in the old G₀.
-  const mid: PolygonModel = { ...model, closed: false, points: points.map(toModel) };
+  // 2. The model with P's points and Q inside, its sides named and oriented as in the old G₀. If the old model has points
+  // (left by an earlier move, port note 26), its cells are kept: each cell with points of Q inside is cut into cells
+  // around them, so the old chords stay chords with their names, and only the new ones are read off the drawing.
+  const oldPoints = model.points ?? [];
+  const n = model.word.length;
+  const oldChords = new Set<string>();
+  let refined: Pick<PolygonModel, "cells" | "exits"> = {};
+  if (oldPoints.length > 0) {
+    const { vertices: polygon, points: oldInside } = polygonCorners(model);
+    const cornerOf = [...polygon, ...oldInside];
+    const used = new Set(
+      [...oldSpine.graph.edges.map((e) => e.name), ...model.word].map((x) => x.toLowerCase()),
+    );
+    const exits: Record<string, string> = {};
+    const cells: number[][] = [];
+    const placed = new Set<number>();
+    for (const cell of oldSpine.cells ?? []) {
+      cell.exits.forEach((x, i) => {
+        const [a, b] = [cell.corners[i] as number, cell.corners[(i + 1) % cell.corners.length] as number];
+        if (x === undefined || (a < n && b === (a + 1) % n)) return;
+        exits[`${a}>${b}`] = x.name;
+        oldChords.add(x.edge.name);
+      });
+      const ps = cell.corners.map((i) => cornerOf[i] as Complex);
+      const inner = points.map((z, i) => ({ z, i })).filter(({ z }) => inside(ps, z));
+      if (inner.length === 0) {
+        cells.push([...cell.corners]);
+        continue;
+      }
+      let sub: readonly (readonly number[])[];
+      try {
+        sub = cellDecomposition(
+          ps,
+          inner.map(({ z }) => z),
+        ).cells;
+      } catch (e) {
+        throw new Degenerate((e as Error).message); // (a point of Q on a side of the cell: move it a little)
+      }
+      for (const { i } of inner) placed.add(i);
+      for (const s of sub)
+        cells.push(
+          s.map((j) =>
+            j < ps.length
+              ? (cell.corners[j] as number)
+              : n + oldPoints.length + (inner[j - ps.length] as { i: number }).i,
+          ),
+        );
+    }
+    if (placed.size !== points.length) throw new Degenerate("A point of Q lies on a chord");
+    // The new chords take the next free names.
+    for (const cell of cells)
+      cell.forEach((a, i) => {
+        const b = cell[(i + 1) % cell.length] as number;
+        if ((a < n && b === (a + 1) % n) || exits[`${a}>${b}`] !== undefined) return;
+        const other = exits[`${b}>${a}`];
+        const name = other !== undefined ? invertName(other) : firstUnusedName(EDGE_NAMES, used);
+        used.add(name.toLowerCase());
+        exits[`${a}>${b}`] = name;
+      });
+    refined = { cells, exits };
+  }
+  const mid: PolygonModel = {
+    kind: "polygon",
+    name: model.name,
+    description: model.description,
+    word: model.word,
+    geometry: model.geometry,
+    closed: false,
+    points: [...oldPoints, ...points.map(toModel)],
+    ...refined,
+  };
   const naming = sideNaming(mid, oldSpine);
   let midSpine: Spine;
   let finalNaming: SpineNames = naming;
@@ -143,14 +230,19 @@ function build(
   const { vertices, points: cornersInside } = polygonCorners(mid);
   const cornerAt = [...vertices, ...cornersInside];
   const cells = midSpine.cells ?? [];
-  const chords: Chord[] = [];
-  const n = vertices.length;
+  const chords: (Chord & { old: boolean })[] = [];
   for (const cell of cells)
     cell.exits.forEach((x, i) => {
       const [a, b] = [cell.corners[i] as number, cell.corners[(i + 1) % cell.corners.length] as number];
       if (x === undefined || (a < n && b === (a + 1) % n) || !x.isForward) return;
-      chords.push({ p: cornerAt[a] as Complex, q: cornerAt[b] as Complex, exit: x });
+      chords.push({
+        p: cornerAt[a] as Complex,
+        q: cornerAt[b] as Complex,
+        exit: x,
+        old: oldChords.has(x.edge.name),
+      });
     });
+  const midByName = new Map(midSpine.graph.orientedEdges.map((x) => [x.name, x]));
   const cellOf = (z: Complex): Vertex => {
     let best = cells[0];
     let bestMargin = -Infinity;
@@ -163,11 +255,15 @@ function build(
     }
     return (best as (typeof cells)[number]).vertex;
   };
-  /** The crossings of the segment from a to b with the chords, at fractions of the segment. */
-  const chordCrossings = (a: Complex, b: Complex): { u: number; letter: OrientedEdge }[] => {
+  /**
+   * The crossings of the segment from a to b with the chords, at fractions of the segment; with `newOnly`, only with the
+   * chords that the old model doesn't have (a strip's crossings of those are the letters of its μ).
+   */
+  const chordCrossings = (a: Complex, b: Complex, newOnly = false): { u: number; letter: OrientedEdge }[] => {
     const v = b.sub(a);
     const result: { u: number; letter: OrientedEdge }[] = [];
-    for (const { p, q, exit } of chords) {
+    for (const { p, q, exit, old } of chords) {
+      if (newOnly && old) continue;
       const w = q.sub(p);
       const denominator = cross(v, w);
       if (Math.abs(denominator) < 1e-14) continue;
@@ -192,10 +288,18 @@ function build(
         ? [[switchAt.get(b.source) as Complex, switchAt.get(b.target) as Complex]]
         : (drawn.strips.get(strip) ?? []).map((piece) => [...piece]);
     if (strip !== undefined) {
+      // Each piece ends at its port: the stubs beyond the ports would cross chords near them out of order.
+      fs.mu.image(strip.forward).letters.forEach((x, j) => {
+        if ((chart.ports.get(x)?.stub ?? 0) > 0) pieces[j]?.pop();
+        if ((chart.ports.get(x.reversed)?.stub ?? 0) > 0) pieces[j + 1]?.shift();
+      });
       (pieces[0] as Complex[])[0] = switchAt.get(b.source) as Complex;
       const last = pieces.at(-1) as Complex[];
       last[last.length - 1] = switchAt.get(b.target) as Complex;
     }
+    // The strip's pieces end at the letters of its μ: at a polygon side it jumps to the partner side; at a chord of the
+    // old model it goes on where it was (the chords are glued by the identity), and the crossings with the new chords are
+    // found on the way.
     const letters = strip === undefined ? [] : fs.mu.image(strip.forward).letters;
     const events: { s: number; letter: OrientedEdge }[] = [];
     let s = 0;
@@ -203,13 +307,18 @@ function build(
       for (let i = 0; i + 1 < piece.length; i++) {
         const [a, c] = [piece[i] as Complex, piece[i + 1] as Complex];
         const length = c.sub(a).abs();
-        for (const { u, letter } of chordCrossings(a, c)) events.push({ s: s + u * length, letter });
+        for (const { u, letter } of chordCrossings(a, c, strip !== undefined))
+          events.push({ s: s + u * length, letter });
         s += length;
       }
       if (j + 1 < pieces.length) {
-        const side = oldSides.indexOf(letters[j] as OrientedEdge);
-        if (side < 0) throw new Error(`${letters[j]} is not a side of the polygon`);
-        events.push({ s, letter: midSides[side] as OrientedEdge });
+        const letter = letters[j];
+        if (letter === undefined) throw new Error(`The strip ${strip} has more pieces than letters in μ`);
+        const side = oldSides.indexOf(letter);
+        const crossed = side >= 0 ? midSides[side] : midByName.get(letter.name);
+        if (crossed === undefined)
+          throw new Error(`${letter} is neither a side nor a chord of the new model`);
+        events.push({ s, letter: crossed });
       }
     });
     crossings.set(
@@ -228,7 +337,10 @@ function build(
   for (const b of tt.graph.edges) {
     let cell = switchCell(b.source);
     for (const c of crossings.get(b) ?? []) {
-      if (c.letter.source !== cell) throw new Error(`The branch ${b} jumps between cells`);
+      if (c.letter.source !== cell)
+        throw new Error(
+          `The branch ${b} jumps between cells (in ${cell}, crossing ${c.letter}@${c.t.toFixed(3)}; crossings ${(crossings.get(b) ?? []).map((d) => `${d.letter}@${d.t.toFixed(3)}`).join(" ")}; μ of its strip ${stripOf.get(b) === undefined ? "-" : fs.mu.image((stripOf.get(b) as Edge).forward).toString()})`,
+        );
       cell = c.letter.target;
     }
     if (cell !== switchCell(b.target))
@@ -237,25 +349,27 @@ function build(
       );
   }
 
-  const {
-    fill: filled,
-    wall,
-    walled,
-    wallEdge,
-  } = filling({ model: mid, spine: midSpine, naming: finalNaming });
+  // The punctures P to fill in: the vertex, and the points of the old model.
+  const filling = fillingIn({
+    model: mid,
+    spine: midSpine,
+    naming: finalNaming,
+    pPoints: oldPoints.map((_, i) => n + i),
+    qPoints: points.map((_, i) => n + oldPoints.length + i),
+  });
   const slide = sliding({
     original: model,
     mid,
     midSpine,
-    walled,
-    wallEdge,
+    filling,
     naming: finalNaming,
     oldSpine,
     toModel,
-    orbit,
+    names: new Map(orbit.map((v, i) => [n + oldPoints.length + i, v.name])),
   });
+  const filled = filling.fill;
   return {
-    wall,
+    walls: filling.walls.map(({ text }) => text),
     slide,
     spine: midSpine.graph,
     part: (b, from, to) =>
@@ -309,103 +423,236 @@ function inside(polygon: readonly Complex[], z: Complex): boolean {
   return Math.abs(winding) > Math.PI;
 }
 
-/**
- * μ after filling in p (see {@link Remarking.filled}): the wall is replaced by the rest of p's boundary. The walled G₀ it
- * maps into is built once, so that all states share it.
- */
-function filling(context: { model: PolygonModel; spine: Spine; naming: SpineNames }): {
-  fill: (old: CombinatorialMap) => CombinatorialMap;
-  wall: { name: string; image: string };
-  /** The walled G₀ (of the closed model with the points). */
-  walled: Spine;
-  /** The wall, an edge of the mid G₀. */
-  wallEdge: Edge;
-} {
-  const { spine } = context;
-  const midGraph = spine.graph;
-  const finalModel: PolygonModel = { ...context.model, closed: true };
-  const finalSpine = spineOf(finalModel, context.naming);
-  // The wall: the edge of the mid G₀ that the filled-in model removes.
-  const kept = new Set(finalSpine.graph.edges.map((e) => e.name));
-  const wall = midGraph.edges.find((e) => !kept.has(e.name));
-  if (wall === undefined) throw new Error("The filled-in model has no wall");
-  // p's face: the boundary word through the polygon sides. It reads x β with x the wall: x ≃ β⁻¹.
-  const sides = new Set(spine.sides);
-  const face = midGraph.boundaryWords().find((w) => w.letters.some((x) => sides.has(x)));
-  const k = face?.letters.findIndex((x) => x.edge === wall) ?? -1;
-  if (face === undefined || k < 0) throw new Error(`The wall ${wall} doesn't lie on the boundary of p`);
-  const x = face.at(k) as OrientedEdge;
-  const beta = face.slice(k + 1).concat(face.slice(0, k));
-  const forwardImage = x.isForward ? beta.inverse : beta;
-  const substituted = (path: EdgePath): OrientedEdge[] =>
-    path.letters.flatMap((y) =>
-      y.edge === wall ? (y.isForward ? forwardImage : forwardImage.inverse).letters : [y],
-    );
-  models.set(finalSpine.graph, finalModel);
-  const byName = new Map(finalSpine.graph.orientedEdges.map((y) => [y.name, y]));
-  const vertexOf = new Map(midGraph.vertices.map((v, i) => [v, finalSpine.graph.vertices[i] as Vertex]));
-  const wallText = { name: wall.forward.name, image: forwardImage.toString() || "(nothing)" };
-  const fill = (old: CombinatorialMap) => {
-    const mu = new CombinatorialMap(old.source, finalSpine.graph);
-    for (const v of old.source.vertices) mu.setVertexImage(v, vertexOf.get(old.vertexImage(v)) as Vertex);
-    for (const e of old.source.edges)
-      mu.setImage(
-        e.forward,
-        EdgePath.from(
-          substituted(old.image(e.forward)).map((y) => byName.get(y.name) as OrientedEdge),
-        ).reduced(),
-      );
-    return mu;
-  };
-  return { fill, wall: wallText, walled: finalSpine, wallEdge: wall };
+/** A node of the chord graph: the vertex (all polygon corners, "V") or a point (its corner index). */
+type Node = number | "V";
+
+/** A wall: the chord dual to `edge`, from the filled-in puncture `child` to its neighbour `parent`. */
+interface Wall {
+  readonly edge: Edge;
+  readonly child: Node;
+  readonly parent: Node;
+  /** The corners of the chord at the child's and at the parent's end. */
+  readonly childCorner: number;
+  readonly parentCorner: number;
+  /** For the narration: the chord and what replaces it in μ. */
+  readonly text: { readonly name: string; readonly image: string };
+}
+
+/** The result of {@link fillingIn}. */
+interface Filling {
+  /** μ into the walled G₀ (see {@link Remarking.filled}). */
+  readonly fill: (old: CombinatorialMap) => CombinatorialMap;
+  /** The walls, in the order they were filled in (outermost last). */
+  readonly walls: readonly Wall[];
+  /** The walled G₀: the mid G₀ without the walls, with the mid cells. */
+  readonly walled: Spine;
+  /** The punctures of Q, the vertex (if it is filled in) and the points of P as nodes. */
+  readonly q: ReadonlySet<Node>;
 }
 
 /**
- * The slide after filling in p (see {@link Remarking.slide}, port note 27): the point of Q at the wall slides along it
- * into p's corner, the other points of Q are placed anew, and μ maps letter by letter into the G₀ of the explicit cells
- * that {@link slideIntoCorner} leaves (contracted edges of G₀ drop out). Without points left, that is the original
- * model with its own G₀. Undefined (for every surface) if the slide doesn't give convex cells.
+ * Filling in the punctures P on the side of G₀ (port notes 22 and 26): for each puncture of P, one chord to a neighbour
+ * becomes a wall, chosen outward from Q through the chord graph, so that the merged faces form trees around the points
+ * of Q. The walls are filled in from the outside in: each wall edge ε is replaced by the rest β of the boundary word of
+ * its child's face (x β with x = ε, so ε ≃ β⁻¹), and the faces merge. The walled G₀ it maps into is built once, so that
+ * all states share it.
+ */
+function fillingIn(context: {
+  model: PolygonModel;
+  spine: Spine;
+  naming: SpineNames;
+  /** The corners of the points of P (the vertex is filled in too). */
+  pPoints: readonly number[];
+  /** The corners of the points of Q. */
+  qPoints: readonly number[];
+}): Filling {
+  const { model, spine } = context;
+  const n = model.word.length;
+  const midGraph = spine.graph;
+  const cells = spine.cells ?? [];
+  const node = (corner: number): Node => (corner < n ? "V" : corner);
+  // The edges of G₀ in the order of the cells and their sides, with the nodes at the ends of their chords.
+  const sides = cells.flatMap((cell) =>
+    cell.exits.flatMap((x, i) => {
+      if (x === undefined) return [];
+      const [a, b] = [cell.corners[i] as number, cell.corners[(i + 1) % cell.corners.length] as number];
+      return [{ edge: x.edge, a, b }];
+    }),
+  );
+
+  // The walls: outward from Q, in the order of the sides.
+  const q = new Set<Node>(context.qPoints);
+  const toFill = new Set<Node>(["V", ...context.pPoints]);
+  const reached = new Set<Node>(q);
+  const chosen: Omit<Wall, "text">[] = [];
+  for (let grown = true; grown;) {
+    grown = false;
+    for (const { edge, a, b } of sides) {
+      for (const [inside, outside] of [
+        [a, b],
+        [b, a],
+      ] as const) {
+        const [from, to] = [node(inside), node(outside)];
+        if (!reached.has(from) || reached.has(to) || !toFill.has(to)) continue;
+        reached.add(to);
+        chosen.push({ edge, child: to, parent: from, childCorner: outside, parentCorner: inside });
+        grown = true;
+      }
+    }
+  }
+  if (chosen.length !== toFill.size) throw new Error("Not every puncture of P can be filled in");
+
+  // The face of each node: the boundary word whose edges are exactly the duals of the sides at that node.
+  const atNode = new Map<Node, Set<Edge>>();
+  const add = (x: Node, e: Edge) => (atNode.get(x) ?? atNode.set(x, new Set()).get(x))?.add(e);
+  for (const { edge, a, b } of sides) {
+    add(node(a), edge);
+    add(node(b), edge);
+  }
+  const words = midGraph.boundaryWords();
+  const faceOf = new Map<Node, EdgePath>();
+  for (const [x, edges] of atNode) {
+    const word = words.find(
+      (w) =>
+        new Set(w.letters.map((y) => y.edge)).size === edges.size &&
+        w.letters.every((y) => edges.has(y.edge)),
+    );
+    if (word === undefined) throw new Error(`No face of G₀ around the puncture ${x}`);
+    faceOf.set(x, word);
+  }
+
+  // Fill in from the outside in (the reverse of the order the walls were found in).
+  const root = new Map<Node, Node>();
+  const find = (x: Node): Node => (root.has(x) ? find(root.get(x) as Node) : x);
+  const substitution = new Map<Edge, EdgePath>();
+  const walls: Wall[] = [];
+  for (const wall of [...chosen].reverse()) {
+    const [inner, outer] = [
+      faceOf.get(find(wall.child)) as EdgePath,
+      faceOf.get(find(wall.parent)) as EdgePath,
+    ];
+    const k = inner.letters.findIndex((y) => y.edge === wall.edge);
+    const j = outer.letters.findIndex((y) => y.edge === wall.edge);
+    if (k < 0 || j < 0) throw new Error(`The wall ${wall.edge} doesn't lie between the faces it should`);
+    const x = inner.at(k) as OrientedEdge;
+    const beta = inner.slice(k + 1).concat(inner.slice(0, k));
+    const gamma = outer.slice(j + 1).concat(outer.slice(0, j));
+    const forwardImage = x.isForward ? beta.inverse : beta;
+    substitution.set(wall.edge, forwardImage);
+    root.set(find(wall.child), find(wall.parent));
+    faceOf.set(find(wall.parent), beta.concat(gamma));
+    walls.push({
+      ...wall,
+      text: { name: wall.edge.forward.name, image: forwardImage.toString() || "(nothing)" },
+    });
+  }
+  walls.reverse();
+
+  // The walled model: the mid cells, without the walls' edges, the vertex and the points of P filled in.
+  const exits: Record<string, string> = {};
+  for (const cell of cells)
+    cell.exits.forEach((x, i) => {
+      const [a, b] = [cell.corners[i] as number, cell.corners[(i + 1) % cell.corners.length] as number];
+      if (x !== undefined && !(a < n && b === (a + 1) % n) && !substitution.has(x.edge))
+        exits[`${a}>${b}`] = x.name;
+    });
+  const walledModel: PolygonModel = {
+    ...model,
+    closed: true,
+    cells: cells.map((cell) => cell.corners),
+    exits,
+    filled: context.pPoints.map((corner) => corner - n),
+  };
+  const walled = spineOf(walledModel, context.naming);
+  models.set(walled.graph, walledModel);
+  const byName = new Map(walled.graph.orientedEdges.map((y) => [y.name, y]));
+  const vertexOf = new Map(midGraph.vertices.map((v, i) => [v, walled.graph.vertices[i] as Vertex]));
+  // A letter with the walls substituted (an image only contains walls filled in later, so this ends).
+  const expand = (y: OrientedEdge): OrientedEdge[] => {
+    const image = substitution.get(y.edge);
+    if (image === undefined) return [byName.get(y.name) as OrientedEdge];
+    return (y.isForward ? image : image.inverse).letters.flatMap(expand);
+  };
+  const fill = (old: CombinatorialMap) => {
+    const mu = new CombinatorialMap(old.source, walled.graph);
+    for (const v of old.source.vertices) mu.setVertexImage(v, vertexOf.get(old.vertexImage(v)) as Vertex);
+    for (const e of old.source.edges)
+      mu.setImage(e.forward, EdgePath.from(old.image(e.forward).letters.flatMap(expand)).reduced());
+    return mu;
+  };
+  return { fill, walls, walled, q };
+}
+
+/**
+ * The contraction after filling in (see {@link Remarking.slide}, port notes 26 and 27): along the trees of walls, each
+ * filled-in point moves into its neighbour, and the point of Q in the vertex's tree slides into the vertex (a polygon
+ * corner doesn't move); the points of Q that are left are placed anew, and μ maps letter by letter into the G₀ of the
+ * explicit cells that {@link contractWalls} leaves (contracted edges of G₀ drop out). Without points left, that is the
+ * plain closed polygon (for the first move: the original model with its own G₀). Undefined (for every surface) if the
+ * contraction doesn't give convex cells.
  */
 function sliding(context: {
   original: PolygonModel;
   mid: PolygonModel;
   midSpine: Spine;
-  walled: Spine;
-  wallEdge: Edge;
+  filling: Filling;
   naming: SpineNames;
   oldSpine: Spine;
   toModel: (z: Complex) => Point2;
-  orbit: readonly Vertex[];
+  /** The names of the junctions of Q, by the corners of their points. */
+  names: ReadonlyMap<number, string>;
 }): Remarking["slide"] {
-  const { mid, midSpine, walled, oldSpine } = context;
+  const { mid, midSpine, oldSpine, original } = context;
+  const { walls, walled } = context.filling;
   const cells = midSpine.cells ?? [];
   const n = mid.word.length;
-  // The wall's ends: a corner of the polygon and a point of Q.
-  let ends: [number, number] | undefined;
   const exitName = new Map<string, string>();
   for (const cell of cells)
     cell.exits.forEach((x, i) => {
       const [a, b] = [cell.corners[i] as number, cell.corners[(i + 1) % cell.corners.length] as number];
-      if (x === undefined) return;
-      exitName.set(`${a}>${b}`, x.name);
-      if (x.edge === context.wallEdge) ends = a < n ? [a, b] : [b, a];
+      if (x !== undefined) exitName.set(`${a}>${b}`, x.name);
     });
-  if (ends === undefined) return () => undefined;
-  const [corner, point] = ends;
+
+  // The contractions: each tree of walls collapses towards the vertex if it contains it, else towards its point of Q.
+  const neighbours = new Map<Node, { other: Node; corner: number; otherCorner: number }[]>();
+  const link = (x: Node, other: Node, corner: number, otherCorner: number) =>
+    (neighbours.get(x) ?? neighbours.set(x, []).get(x))?.push({ other, corner, otherCorner });
+  for (const w of walls) {
+    link(w.child, w.parent, w.childCorner, w.parentCorner);
+    link(w.parent, w.child, w.parentCorner, w.childCorner);
+  }
+  const contractions: [number, number][] = [];
+  const done = new Set<Node>();
+  let intoVertex: number | undefined;
+  const anchors: Node[] = ["V", ...context.filling.q];
+  for (const anchor of anchors) {
+    if (done.has(anchor) || !neighbours.has(anchor)) continue;
+    done.add(anchor);
+    for (const queue = [anchor]; queue.length > 0;) {
+      const x = queue.shift() as Node;
+      for (const { other, corner, otherCorner } of neighbours.get(x) ?? []) {
+        if (done.has(other)) continue;
+        done.add(other);
+        queue.push(other);
+        contractions.push([otherCorner, corner]); // `other` moves into x (or where x went)
+        if (anchor === "V" && context.filling.q.has(other)) intoVertex = otherCorner;
+      }
+    }
+  }
   const { vertices, points } = polygonCorners(mid);
-  const slid = slideIntoCorner(
+  const slid = contractWalls(
     vertices,
     points,
     cells.map((cell) => cell.corners),
-    point,
-    corner,
+    contractions,
   );
   if (slid === undefined) return () => undefined;
 
-  // The model and G₀ after the slide, and how the walled G₀ maps into it.
+  // The model and G₀ after the contraction, and how the walled G₀ maps into it.
   let target: RibbonGraph;
   let letter: (y: OrientedEdge) => OrientedEdge | undefined;
-  if (slid.pointOf.length === 0 && slid.cells.length === 1) {
+  const plain = slid.pointOf.length === 0 && slid.cells.length === 1;
+  if (plain && (original.points ?? []).length === 0) {
     // Back to the original model and its G₀ (the chords have all been merged away).
     target = oldSpine.graph;
     const walledSides = walled.sides as readonly OrientedEdge[];
@@ -423,13 +670,17 @@ function sliding(context: {
         exits[`${a}>${b}`] = exitName.get((slid.was[k] as string[])[i] as string) as string;
       }),
     );
-    const model: PolygonModel = {
-      ...mid,
-      closed: false,
-      points: slid.corners.slice(n).map(context.toModel),
-      cells: slid.cells,
-      exits,
-    };
+    const base = { kind: "polygon" as const, name: mid.name, description: mid.description, word: mid.word };
+    const model: PolygonModel = plain
+      ? { ...base, geometry: mid.geometry, closed: true }
+      : {
+          ...base,
+          geometry: mid.geometry,
+          closed: false,
+          points: slid.corners.slice(n).map(context.toModel),
+          cells: slid.cells,
+          exits,
+        };
     const spine = spineOf(model, context.naming);
     models.set(spine.graph, model);
     target = spine.graph;
@@ -442,7 +693,8 @@ function sliding(context: {
   const merged = walled.graph.edges
     .filter((e) => letter(e.forward) === undefined && !(walled.sides ?? []).some((x) => x.edge === e))
     .map((e) => e.name);
-  const pointName = context.orbit[point - n]?.name ?? "q";
+  const point = intoVertex === undefined ? undefined : context.names.get(intoVertex);
+  const filledPoints = walls.filter((w) => w.child !== "V").length;
   return (surface) => {
     if (surface.spine0 !== walled.graph) return undefined;
     const mu = new CombinatorialMap(surface.graph, target);
@@ -467,7 +719,15 @@ function sliding(context: {
     result.onError = surface.onError;
     result.reductionCurves.push(...surface.reductionCurves);
     const ok = checked(result);
-    return ok && { surface: ok, point: pointName, merged, pointsLeft: slid.pointOf.length };
+    return (
+      ok && {
+        surface: ok,
+        ...(point !== undefined && { point }),
+        filledPoints,
+        merged,
+        pointsLeft: slid.pointOf.length,
+      }
+    );
   };
 }
 

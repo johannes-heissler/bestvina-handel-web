@@ -188,7 +188,11 @@ function polygonChart(model: PolygonModel, spine: Spine, sideFraction?: number):
       color: x.color,
     }),
   );
-  decorations.push(...chords, ...points.map((at): Decoration => ({ kind: "puncture", at })));
+  const filled = new Set(model.filled ?? []);
+  decorations.push(
+    ...chords,
+    ...points.map((at, i): Decoration => (filled.has(i) ? { kind: "marked", at } : { kind: "puncture", at })),
+  );
   if (model.closed && points.length > 0)
     decorations.push(...vertices.map((at): Decoration => ({ kind: "marked", at })));
   const partner = (k: number) => sides.indexOf((sides[k] as OrientedEdge).reversed);

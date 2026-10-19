@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { Complex } from "../math/complex";
-import { cellDecomposition, slideIntoCorner } from "./cells";
+import { cellDecomposition, contractWalls, slideIntoCorner } from "./cells";
 import { regularPolygon } from "./hyperbolic";
 
 /** The signed area of a polygon (positive if counterclockwise). */
@@ -124,5 +124,41 @@ describe("slideIntoCorner", () => {
         else expect(sides).toContain(side.split(">").reverse().join(">"));
       });
     expect(cellOf.every((k) => k >= 0 && k < after.length)).toBe(true);
+  });
+});
+
+describe("contractWalls", () => {
+  const octagon = regularPolygon(8, "compact");
+  /** Whether a cell runs from corner a to corner b. */
+  const hasSide = (cells: readonly (readonly number[])[], a: number, b: number) =>
+    cells.some((cell) => cell.some((x, i) => x === a && cell[(i + 1) % cell.length] === b));
+  const joined = (cells: readonly (readonly number[])[], a: number, b: number) =>
+    hasSide(cells, a, b) || hasSide(cells, b, a);
+
+  it("moves a filled-in point into its neighbour, and that one into the vertex", () => {
+    const points = [new Complex(-0.25, 0), new Complex(0.25, 0.05)];
+    const { cells } = cellDecomposition(octagon, points);
+    expect(joined(cells, 8, 9)).toBe(true);
+    const corner = [...Array(8).keys()].find((c) => joined(cells, c, 9)) as number;
+    const result = contractWalls(octagon, points, cells, [
+      [8, 9],
+      [9, corner],
+    ]);
+    // Both points are gone: the polygon is one cell again.
+    expect(result?.pointOf).toEqual([]);
+    expect(result?.cells).toEqual([[0, 1, 2, 3, 4, 5, 6, 7]]);
+  });
+
+  it("keeps the points that nothing moves into, placed by the Tutte layout", () => {
+    const points = [new Complex(-0.25, 0), new Complex(0.25, 0.05), new Complex(0, -0.3)];
+    const { cells } = cellDecomposition(octagon, points);
+    const neighbour = joined(cells, 8, 10) ? 10 : 9;
+    const result = contractWalls(octagon, points, cells, [[8, neighbour]]);
+    expect(result?.pointOf).toEqual([1, 2]);
+    const total = (result?.cells ?? []).reduce(
+      (sum, cell) => sum + area(cell.map((i) => result?.corners[i] as Complex)),
+      0,
+    );
+    expect(total).toBeCloseTo(area(octagon), 9);
   });
 });
