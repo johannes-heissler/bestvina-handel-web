@@ -41,7 +41,8 @@ in `docs/`.
 | 21  | [UI, saving, deployment](21-ui-saving-deployment.md)                                  | `UIElements/*`, `Kamera/*` (rewritten)                                           | 🔍   | ✅             | ✅    |
 | 22  | [Interior punctures, filled points, cutting in the polygon](22-interior-punctures.md) | thesis § Closed surfaces (not in C#)                                             | ✍️   | phases 1–3     | ✅    |
 | 23  | [Showing a state in another model](23-switching-models.md)                            | – (new)                                                                          | ✍️   |                |       |
-| 24+ | Point pushes, 3D                                                                      | `PointPushes.cs`, `GeometricObjects_Visualization/*`                             |      |                |       |
+| 24  | [Marking a once-punctured surface as closed](24-marking-closed.md)                    | – (new)                                                                          | ✅   | ✅             | ✅    |
+| 25+ | Point pushes, 3D                                                                      | `PointPushes.cs`, `GeometricObjects_Visualization/*`                             |      |                |       |
 | 3   | Curves, points, geodesics                                                             | `GeometricObjects_Abstract/*`                                                    |      |                |       |
 | 4   | Surfaces, homeomorphisms                                                              | `GeometricObjects_Abstract/*`                                                    |      |                |       |
 | …   | Embedding layer, suggestion system, examples, rendering, UI                           |                                                                                  |      |                |       |

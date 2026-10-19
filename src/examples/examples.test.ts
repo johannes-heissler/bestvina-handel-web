@@ -4,7 +4,7 @@ import { perronFrobenius } from "../fibred/perron-frobenius";
 import { applyMove, type FollowUp } from "../fibred/move";
 import { autopilot, DEFAULT_AUTOMATIC, nextSuggestion } from "../fibred/suggestions";
 import { canonicalWord, gallery } from "./gallery";
-import { initialFibredSurface, spineOf, topology, type SurfaceModel } from "./models";
+import { closedModel, initialFibredSurface, spineOf, topology, type SurfaceModel } from "./models";
 import { buildPreset, presetNamed, PRESETS, randomGenus2, randomTorus2 } from "./presets";
 
 const growth = (fs: FibredSurface) => perronFrobenius(fs, { essentialOnly: true }).growth;
@@ -170,7 +170,8 @@ describe("presets", () => {
 
   it("colours the strips of a preset given by its own graph, those mapping to a side like the side", () => {
     const fs = buildPreset(presetNamed("Closed genus 2")!);
-    const key = (e: { color: { r: number; g: number; b: number } }) => `${e.color.r},${e.color.g},${e.color.b}`;
+    const key = (e: { color: { r: number; g: number; b: number } }) =>
+      `${e.color.r},${e.color.g},${e.color.b}`;
     expect(fs.graph.edges.map(key)).not.toContain("0,0,0");
     expect(new Set(fs.graph.edges.map(key)).size).toBe(fs.graph.edges.length);
     for (const e of fs.graph.edges) {
@@ -216,5 +217,58 @@ describe("presets", () => {
     const a = buildPreset(randomGenus2(7));
     expect(a.checkIntegrity()).toEqual([]);
     expect(a.toString()).toBe(buildPreset(randomGenus2(7)).toString());
+  });
+});
+
+describe("the closed model of a once-punctured surface", () => {
+  const word = ["a", "b", "A", "B"];
+  it("makes an ideal polygon compact, and marks flat polygons and ribbon models closed", () => {
+    const ideal: SurfaceModel = {
+      kind: "polygon",
+      name: "T",
+      description: "",
+      word,
+      geometry: { kind: "ideal" },
+      closed: false,
+    };
+    expect(closedModel(ideal)).toMatchObject({ word, geometry: { kind: "compact" }, closed: true });
+    const vertices = [
+      [0, 0],
+      [1, 0],
+      [1, 1],
+      [0, 1],
+    ] as const;
+    const flat: SurfaceModel = { ...ideal, geometry: { kind: "flat", vertices } };
+    expect(closedModel(flat)).toMatchObject({ geometry: { kind: "flat", vertices }, closed: true });
+    const ribbon: SurfaceModel = {
+      kind: "ribbon",
+      name: "R",
+      description: "",
+      boundaryWords: [["a", "b", "A", "B"]],
+    };
+    expect(closedModel(ribbon)).toMatchObject({ kind: "ribbon", closed: true });
+    expect(topology(closedModel(ideal)!)).toEqual({ genus: 1, punctures: 0 });
+  });
+
+  it("isn't defined for a polygon with interior points or the plane", () => {
+    const points: SurfaceModel = {
+      kind: "polygon",
+      name: "P",
+      description: "",
+      word,
+      geometry: { kind: "compact" },
+      closed: true,
+      points: [[0, 0]],
+    };
+    expect(closedModel(points)).toBeUndefined();
+    const plane: SurfaceModel = {
+      kind: "plane",
+      name: "",
+      description: "",
+      points: [],
+      spine: "rose",
+      basePoint: [0, 1],
+    };
+    expect(closedModel(plane)).toBeUndefined();
   });
 });

@@ -321,6 +321,19 @@ export function isClosedModel(model: SurfaceModel): boolean {
   );
 }
 
+/**
+ * The model of the same surface with its one puncture marked as artificial, on the same G₀ (port note 24): an ideal
+ * polygon becomes the compact one with the same word, a flat polygon or a ribbon model is only marked closed.
+ * Undefined if that isn't possible on the same G₀ (a polygon with interior points, the plane).
+ */
+export function closedModel(model: SurfaceModel): SurfaceModel | undefined {
+  const named = { name: `${model.name} (closed)`, description: `${model.description} Marked as closed.` };
+  if (model.kind === "ribbon") return { ...model, ...named, closed: true };
+  if (model.kind !== "polygon" || (model.points ?? []).length > 0) return undefined;
+  const geometry: PolygonGeometry = model.geometry.kind === "ideal" ? { kind: "compact" } : model.geometry;
+  return { ...model, ...named, geometry, closed: true };
+}
+
 // ─── The initial fibred surface ─────────────────────────────────────────────────────────────
 
 export interface FibredSurfaceOptions extends SpineNames {
@@ -405,8 +418,13 @@ export function initialFibredSurface(model: SurfaceModel, options: FibredSurface
         tree.has(e) ? EdgePath.EMPTY : EdgePath.of(byName.get(e.forward.name) as OrientedEdge),
       );
     // The edges outside the tree keep the colours of the sides they map to; the tree edges get the least used ones.
-    for (const e of graph.edges) if (!tree.has(e)) e.color = (byName.get(e.forward.name) as OrientedEdge).color;
-    for (const e of tree) e.color = leastUsedColor(EDGE_COLORS, graph.edges.map((x) => x.color));
+    for (const e of graph.edges)
+      if (!tree.has(e)) e.color = (byName.get(e.forward.name) as OrientedEdge).color;
+    for (const e of tree)
+      e.color = leastUsedColor(
+        EDGE_COLORS,
+        graph.edges.map((x) => x.color),
+      );
   }
   const fs = new FibredSurface({ graph, g: CombinatorialMap.identity(graph), mu });
   fs.mapName = IDENTITY_NAME;

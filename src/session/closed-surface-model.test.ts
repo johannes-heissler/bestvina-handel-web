@@ -84,3 +84,31 @@ describe("closed-surface moves in the original polygon", () => {
     120_000,
   );
 });
+
+describe("marking a once-punctured surface as closed", () => {
+  it("is the only option at the end of the point push, and makes the polygon compact on the same G₀", () => {
+    const session = Session.create({ kind: "preset", preset: "Point push" });
+    session.runAutopilot();
+    const before = session.current;
+    expect(session.suggestion().options.map((o) => o.move)).toEqual([{ kind: "mark as closed" }]);
+    const node = session.apply({ kind: "mark as closed" });
+    expect(node.surface.isClosed).toBe(true);
+    expect(node.surface.spine0).toBe(before.surface.spine0);
+    expect(node.model).toMatchObject({
+      kind: "polygon",
+      word: ["a", "b", "A", "B", "c", "d", "C", "D"],
+      geometry: { kind: "compact" },
+      closed: true,
+    });
+    drawable(node.surface, node.model);
+    expect(session.suggestion().kind).toBe("closed surface");
+
+    // A saved session gets the same model back.
+    const { session: replayed } = Session.fromFile(session.toFile());
+    expect(replayed.current.model).toMatchObject({
+      kind: "polygon",
+      geometry: { kind: "compact" },
+      closed: true,
+    });
+  });
+});

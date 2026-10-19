@@ -528,16 +528,21 @@ function nextStep(fs: FibredSurface, context: SuggestionContext): Suggestion {
     ],
     { kind: "pseudo-Anosov", growth },
   );
-  // With a single cusp at the only puncture, the puncture might be one that the surface doesn't really have: offer the
-  // moves of the closed-surface case anyway, to see what the mapping class would be on the closed surface.
+  // With a single cusp at the only puncture, the puncture might be one that the surface doesn't really have: offer to
+  // mark the surface as closed, to see what the mapping class is on the closed surface (port note 24).
   if (!oneCusp) return result;
   return {
     ...result,
     description: [
       ...result.description,
-      " τ has only one cusp at the puncture: if the surface is meant to be closed, fill it in (cut along a singular leaf) and continue on the closed surface.",
+      " τ has only one cusp at the puncture: if the surface is meant to be closed, mark it as closed and continue there.",
     ],
-    options: closedSurfaceOptions(fs),
+    options: [
+      {
+        move: { kind: "mark as closed" },
+        label: ["Mark the surface as closed (the puncture is artificial)"],
+      },
+    ],
   };
 }
 

@@ -127,6 +127,8 @@ export type Move =
       readonly realBranches?: number;
     }
   | { readonly kind: "replace puncture by singularity"; readonly junction: string }
+  /** The one puncture is artificial: the surface is closed (port note 24). G, g, μ and G₀ stay the same. */
+  | { readonly kind: "mark as closed" }
   /** Editing by hand (the map editor): these are moves too, so that a session is its start plus its moves. */
   | {
       readonly kind: "edit map";
@@ -278,6 +280,10 @@ function introduction(fs: FibredSurface, move: Move): Text {
         "Shortcut: puncture the surface at the singularity of ",
         { junction: move.junction },
         " (×; with its orbit under f) instead of p. Its junction is blown up into its infinitesimal polygon, with the new puncture inside.",
+      ];
+    case "mark as closed":
+      return [
+        "The puncture is artificial: the surface is closed, and the map is studied there. G, g, μ and G₀ stay the same; the polygon becomes compact. τ has only one cusp at the puncture, so on the closed surface the puncture has to be replaced by a singularity next.",
       ];
     case "edit map":
       return ["Replace g by the map entered."];
@@ -484,6 +490,9 @@ function applyMoveQuietly(fs: FibredSurface, move: Move, hooks: MoveHooks = {}):
     }
     case "edit map":
       updateMap(fs, move.text, move.mode, move.name);
+      return fs;
+    case "mark as closed":
+      fs.isClosed = true;
       return fs;
     case "rename map":
       fs.mapName = move.name;

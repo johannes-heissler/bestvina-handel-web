@@ -3,6 +3,7 @@ import { plainText, variants } from "../fibred/suggestions";
 import { Session } from "../session/session";
 import { decodeSession } from "../session/share";
 import { drawTimeline } from "./drawing";
+import type { Move } from "../fibred/move";
 
 // A fold whose isotopy (moving the new junction along B A b) passes through states that can't be laid out: the
 // strip runs parallel to another one with the same μ until they are folded.
@@ -95,5 +96,33 @@ describe("the strand order with a hairpin", () => {
     const before = widest(0);
     for (let position = 0; position < fold; position += 0.5)
       expect(widest(position), `at ${position}`).toBeGreaterThan(before / 2);
+  });
+});
+
+describe("the timeline of a cut on the point push", () => {
+  const atEnd = () => {
+    const session = Session.create({ kind: "preset", preset: "Point push" });
+    session.runAutopilot();
+    return session;
+  };
+  const drawsEveryMoment = (session: Session, move: Move) => {
+    const preview = session.preview(move);
+    expect(preview.error).toBeUndefined();
+    const states = [preview.before, ...preview.steps.map((s) => s.after)];
+    const motions = preview.steps.map((s) => s.motion);
+    for (let position = 0; position <= preview.steps.length; position += 0.5)
+      expect(drawTimeline(session.current.model, states, motions, position, { size: 100 }).notes).toEqual([]);
+    return preview;
+  };
+  const cut: Move = { kind: "cut along a singular leaf", junction: "v0" };
+
+  it("draws the states after a cut without a model for the new G₀ as ribbon graphs (surface not marked closed)", () => {
+    expect(drawsEveryMoment(atEnd(), cut).steps).toHaveLength(3); // (cut in one go)
+  });
+
+  it("shows the cut branch by branch in the compact polygon after marking the surface as closed", () => {
+    const session = atEnd();
+    session.apply({ kind: "mark as closed" });
+    expect(drawsEveryMoment(session, cut).steps.length).toBeGreaterThan(3);
   });
 });

@@ -174,15 +174,23 @@ describe("autopilot", () => {
 });
 
 describe("a finished result with a single cusp at the only puncture", () => {
-  it("offers cutting along a singular leaf; for the point push, f relative to the singularity is reducible", () => {
+  it("offers to mark the surface as closed; for the point push, f relative to the singularity is then reducible", () => {
     const { surface, stoppedAt } = autopilot(buildPreset(PRESETS.find((p) => p.name === "Point push")!));
     expect(stoppedAt.kind).toBe("finished");
     expect(stoppedAt.classification).toMatchObject({ kind: "pseudo-Anosov" });
-    const cut = stoppedAt.options.find((o) => o.move.kind === "cut along a singular leaf" && o.rating === 1);
+    expect(stoppedAt.options.map((o) => o.move)).toEqual([{ kind: "mark as closed" }]);
+    const closed = applyMove(surface.copy(), stoppedAt.options[0]!.move);
+    expect(closed.isClosed).toBe(true);
+    expect([...closed.graph.edges].map((e) => closed.mu.image(e.forward).toString())).toEqual(
+      [...surface.graph.edges].map((e) => surface.mu.image(e.forward).toString()),
+    );
+    const next = nextSuggestion(closed);
+    expect(next.kind).toBe("closed surface");
+    const cut = next.options.find((o) => o.move.kind === "cut along a singular leaf" && o.rating === 1);
     expect(cut).toBeDefined();
     // On the closed surface the point push is isotopic to the identity; relative to the fixed singularity it is then
     // a point push of that point, which is reducible, with the identity on the first piece.
-    const cutOpen = autopilot(applyMove(surface.copy(), cut!.move));
+    const cutOpen = autopilot(applyMove(closed.copy(), cut!.move));
     expect(cutOpen.stoppedAt.kind).toBe("reducible");
     const reduced = autopilot(applyMove(cutOpen.surface.copy(), cutOpen.stoppedAt.options[0]!.move));
     expect(reduced.stoppedAt.classification).toMatchObject({ kind: "finite order", order: 1 });

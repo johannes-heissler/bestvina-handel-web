@@ -17,6 +17,7 @@ import type { FibredSurface } from "../fibred/fibred-surface";
 import { perronFrobenius } from "../fibred/perron-frobenius";
 import { imageSurface, withTightMarking } from "../embedding/image";
 import { modelOfSpine } from "../embedding/remark";
+import { ribbonModelOf } from "../session/session";
 import { type Rendered, renderSvg, type RenderOptions } from "../render/svg";
 
 const charts = new WeakMap<RibbonGraph, Map<string, Chart>>();
@@ -70,6 +71,14 @@ const modelId = (model: SurfaceModel) => {
   return modelIds.get(model) as number;
 };
 
+/** The ribbon model of a state's G₀, the same object for the same G₀ (the charts are cached per model). */
+const ribbonModels = new WeakMap<RibbonGraph, SurfaceModel>();
+function ribbonModelFor(surface: FibredSurface): SurfaceModel {
+  let model = ribbonModels.get(surface.spine0);
+  if (model === undefined) ribbonModels.set(surface.spine0, (model = ribbonModelOf(surface)));
+  return model;
+}
+
 /**
  * The SVG of a moment of the timeline of a move: `states` are the surfaces before and after each step, `motions` the
  * junction crossing a side in each step (if any), and 0 ≤ `position` ≤ number of steps.
@@ -97,7 +106,9 @@ export function drawTimeline(
   // until halfway, without interpolating.
   if (states.some((state) => state.spine0 !== (states[0] as FibredSurface).spine0)) {
     const state = states[Math.min(Math.round(position), states.length - 1)] as FibredSurface;
-    return draw(modelOfSpine(state.spine0) ?? model, state, options);
+    // (A new G₀ without a model of its own is shown as a ribbon graph, as in the history.)
+    const own = state.spine0 === (states[0] as FibredSurface).spine0 ? model : ribbonModelFor(state);
+    return draw(modelOfSpine(state.spine0) ?? own, state, options);
   }
   try {
     const chart = chartFor(model, states[0] as FibredSurface, options.sideFraction);

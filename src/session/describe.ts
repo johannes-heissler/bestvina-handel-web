@@ -63,6 +63,8 @@ export function describeMove(move: Move): Text {
       ];
     case "replace puncture by singularity":
       return ["Fill the puncture at ", { junction: move.junction }];
+    case "mark as closed":
+      return ["Mark the surface as closed"];
     case "edit map": {
       const map = move.name ?? "a map";
       return [

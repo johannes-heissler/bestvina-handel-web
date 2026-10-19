@@ -23,7 +23,12 @@ import { perronFrobenius } from "../fibred/perron-frobenius";
 import { type Motion, narrated } from "../fibred/narration";
 import type { RemarkingProvider } from "../fibred/remarking";
 import { modelOfSpine, remarkClosedSurface } from "../embedding/remark";
-import { type FibredSurfaceOptions, initialFibredSurface, type SurfaceModel } from "../examples/models";
+import {
+  closedModel,
+  type FibredSurfaceOptions,
+  initialFibredSurface,
+  type SurfaceModel,
+} from "../examples/models";
 import { buildPreset, presetNamed } from "../examples/presets";
 
 /** How a session starts: a preset, or a model with options and a map. Plain data (saved in files and links). */
@@ -342,9 +347,11 @@ export class Session {
     steps?: readonly Text[],
   ): HistoryNode {
     const model =
-      surface.spine0 === parent.surface.spine0
-        ? parent.model
-        : (modelOfSpine(surface.spine0) ?? ribbonModelOf(surface));
+      surface.spine0 !== parent.surface.spine0
+        ? (modelOfSpine(surface.spine0) ?? ribbonModelOf(surface))
+        : surface.isClosed && !parent.surface.isClosed // (marked as closed)
+          ? (closedModel(parent.model) ?? ribbonModelOf(surface))
+          : parent.model;
     const node: HistoryNode = {
       id: this.nextId++,
       parent,
@@ -396,7 +403,7 @@ export function startSurface(start: Start): { surface: FibredSurface; model: Sur
 }
 
 /** The ribbon model of a surface's own spine G₀ (after a closed-surface move, which re-marks the surface). */
-function ribbonModelOf(surface: FibredSurface): SurfaceModel {
+export function ribbonModelOf(surface: FibredSurface): SurfaceModel {
   return {
     kind: "ribbon",
     name: "Ribbon graph",
