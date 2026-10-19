@@ -117,6 +117,9 @@ went from 4.2282 to 4.2280 for p and stayed at 4.2921 for q.)
 
 ## Implementation (2026-10-19)
 
+Superseded in part by port note 29: the cut no longer blows up the junctions outside Q, so there is nothing to
+contract before merging, and the fallback is gone.
+
 As proposed. Results on "Closed genus 2": after the cut at p, B is a pink line of 23 strips (35 before contracting
 the polygons outside Q), merged into the loop `c_1` at `p_o` and removed; removing it leaves `p_o` of valence 2, and the
 last merge takes it out. The surface then has 6 junctions of valence 3, and `runAlgorithm` needs 2 steps (before: 4).

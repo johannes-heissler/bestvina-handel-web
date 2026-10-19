@@ -11,6 +11,11 @@
  * 4. g′ maps each piece along the image strand of its branch (see `strands.ts`). Since f⁻¹ of the cut set lies in
  *    the cut set, the image of each piece fits exactly into whole pieces.
  *
+ * Only the junctions in `blownUp` are cut as the polygons of TS(τ) (port note 29): those of the new punctures Q. Every
+ * other junction stays a junction of G: the slits through it are chords of its disk, from one strip end to another,
+ * and split it into parts, each a junction of the result (its infinitesimal polygon, a disk, lies in one of them and is
+ * not represented). Its infinitesimal branches get no pieces, and they are left out of the images.
+ *
  * @module
  */
 import { CombinatorialMap } from "../graph/combinatorial-map";
@@ -131,8 +136,15 @@ export interface CutTrack {
    * strictly between 0 and the branch width lie on a slit.
    */
   readonly isOnSlit: (e: OrientedEdge) => boolean;
-  /** The side of its switch that each branch end is on (to the right: real branches, or the part after a subdivision). */
+  /**
+   * The side of its switch that each branch end is on (to the right: real branches, or the part after a subdivision).
+   * The ends at the parts of a junction that isn't blown up are all to the right.
+   */
   readonly side: ReadonlyMap<OrientedEdge, "right" | "left">;
+  /** The junction of G that each vertex is (a part of): a switch or a part of a junction; undefined inside a branch. */
+  readonly junctionOf: ReadonlyMap<Vertex, Vertex | undefined>;
+  /** The vertices that are parts of a junction that isn't blown up (not of a switch). */
+  readonly junctionParts: ReadonlySet<Vertex>;
   /** The default names of the surface that was cut (`FibredSurface.legacyDefaultNames`). */
   readonly legacyDefaultNames: boolean;
 }
@@ -157,11 +169,24 @@ interface PieceDraft {
   edge?: Edge;
 }
 
-/** Cuts TS(τ) along the slits; see the module documentation. */
-export function cut(tt: TrainTrack, slits: readonly Slit[]): CutTrack {
+/**
+ * Cuts TS(τ) along the slits; see the module documentation.
+ *
+ * @param options.blownUp The junctions of G that are cut as their polygons of TS(τ); all of them by default (the cut
+ *   before port note 29, for replaying older sessions).
+ */
+export function cut(
+  tt: TrainTrack,
+  slits: readonly Slit[],
+  options: { readonly blownUp?: ReadonlySet<Vertex> } = {},
+): CutTrack {
   const widths = tt.widths as ReadonlyMap<Edge, number>;
   const lengthOf = (e: Edge) => tt.lengths.get(e) as number;
   const widthOf = (e: Edge) => widths.get(e) as number;
+  const isBlownUp = (s: Vertex) =>
+    options.blownUp === undefined || options.blownUp.has(tt.junctionOf.get(s) as Vertex);
+  /** The branches that get pieces: the real ones, and the infinitesimal ones of the junctions that are blown up. */
+  const hasPieces = (e: Edge) => tt.kind.get(e) === "real" || isBlownUp(e.source);
 
   // 1. Subdivision points of the real branches (forward length coordinates).
   const points = new Map<Edge, number[]>(tt.graph.edges.map((e) => [e, [0, lengthOf(e)]]));
@@ -181,6 +206,7 @@ export function cut(tt: TrainTrack, slits: readonly Slit[]): CutTrack {
   const key = (e: Edge, k: number) => `${e.id}/${k}`;
   slits.forEach((slit) =>
     slit.path.forEach((x, i) => {
+      if (!hasPieces(x.edge)) return;
       const w = widthOf(x.edge);
       const l = lengthOf(x.edge);
       const height = x.isForward ? (slit.heights[i] as number) : w - (slit.heights[i] as number);
@@ -204,7 +230,7 @@ export function cut(tt: TrainTrack, slits: readonly Slit[]): CutTrack {
 
   // Pieces of each sub-branch.
   const pieceDrafts = new Map<string, PieceDraft[]>();
-  for (const e of tt.graph.edges) {
+  for (const e of tt.graph.edges.filter(hasPieces)) {
     const pts = points.get(e) as number[];
     for (let k = 0; k < subBranchCount(e); k++) {
       const heights = [0, ...(cuts.get(key(e, k)) ?? []).sort((a, b) => a - b), widthOf(e)];
@@ -220,7 +246,7 @@ export function cut(tt: TrainTrack, slits: readonly Slit[]): CutTrack {
 
   // 3. Arcs with their piece ends, then split into switches.
   const graph = new RibbonGraph();
-  const arcs: { name: string; ends: ArcEnd[] }[] = [];
+  const arcs: { name: string; junction: Vertex | undefined; ends: ArcEnd[] }[] = [];
   // The arcs of the subdivisions get new names that no junction of G and no switch has (port note 25).
   const used = new Set([...tt.junctionOf.values(), ...tt.graph.vertices].map((v) => v.name));
   const subdivisionName = () => {
@@ -228,7 +254,7 @@ export function cut(tt: TrainTrack, slits: readonly Slit[]): CutTrack {
     used.add(name);
     return name;
   };
-  for (const s of tt.graph.vertices) {
+  for (const s of tt.graph.vertices.filter(isBlownUp)) {
     const arc = switchArc(tt, s);
     const ends: ArcEnd[] = [];
     for (const [sideName, intervals] of [
@@ -248,20 +274,33 @@ export function cut(tt: TrainTrack, slits: readonly Slit[]): CutTrack {
             high: interval.bottom + (e.isForward ? piece.top : w - piece.bottom),
           });
       }
-    arcs.push({ name: s.name, ends });
+    arcs.push({ name: s.name, junction: tt.junctionOf.get(s), ends });
   }
-  for (const e of tt.graph.edges)
+  for (const e of tt.graph.edges.filter(hasPieces))
     for (let k = 1; k < subBranchCount(e); k++) {
       const ends: ArcEnd[] = [];
       for (const piece of pieceDrafts.get(key(e, k)) as PieceDraft[])
         ends.push({ piece, leaves: true, side: "right", low: piece.bottom, high: piece.top });
       for (const piece of pieceDrafts.get(key(e, k - 1)) as PieceDraft[])
         ends.push({ piece, leaves: false, side: "left", low: piece.bottom, high: piece.top });
-      arcs.push({ name: tt.legacyDefaultNames ? `${e.name}@${k}` : subdivisionName(), ends });
+      arcs.push({
+        name: tt.legacyDefaultNames ? `${e.name}@${k}` : subdivisionName(),
+        junction: undefined,
+        ends,
+      });
     }
 
   const switchOfEnd = new Map<PieceDraft, { start?: Vertex; end?: Vertex }>();
   const starOf = new Map<Vertex, ArcEnd[]>();
+  const junctionOf = new Map<Vertex, Vertex | undefined>();
+  const attach = (v: Vertex, inside: readonly ArcEnd[]) => {
+    for (const x of inside) {
+      const entry = switchOfEnd.get(x.piece) ?? {};
+      if (x.leaves) entry.start = v;
+      else entry.end = v;
+      switchOfEnd.set(x.piece, entry);
+    }
+  };
   for (const arc of arcs) {
     const width = Math.max(...arc.ends.map((x) => x.high));
     const boundaries = (side: "right" | "left") =>
@@ -283,12 +322,66 @@ export function cut(tt: TrainTrack, slits: readonly Slit[]): CutTrack {
       const part = tt.legacyDefaultNames ? String(j) : letterIndex(j);
       const v = graph.addVertex(bounds.length > 2 ? `${arc.name}_${part}` : arc.name);
       starOf.set(v, inside);
-      for (const x of inside) {
-        const entry = switchOfEnd.get(x.piece) ?? {};
-        if (x.leaves) entry.start = v;
-        else entry.end = v;
-        switchOfEnd.set(x.piece, entry);
+      junctionOf.set(v, arc.junction);
+      attach(v, inside);
+    }
+  }
+
+  // The junctions that aren't blown up: their disks, split by the chords of the slits (in counterclockwise order).
+  const partStars = new Map<Vertex, ArcEnd[]>();
+  for (const [v, switches] of tt.switchesOf) {
+    if (switches.length === 0 || isBlownUp(switches[0] as Vertex)) continue;
+    // The piece ends around the junction, counterclockwise, with the switch and arc height of the gap after each.
+    const around: { end: ArcEnd; s: Vertex }[] = [];
+    for (const s of switches)
+      for (const interval of switchArc(tt, s).real) {
+        const e = interval.end;
+        const k = e.isForward ? 0 : subBranchCount(e.edge) - 1;
+        const w = widthOf(e.edge);
+        const ends = (pieceDrafts.get(key(e.edge, k)) as PieceDraft[]).map((piece) => ({
+          piece,
+          leaves: e.isForward,
+          side: "right" as const,
+          low: interval.bottom + (e.isForward ? piece.bottom : w - piece.top),
+          high: interval.bottom + (e.isForward ? piece.top : w - piece.bottom),
+        }));
+        for (const end of ends.sort((a, b) => a.low - b.low)) around.push({ end, s });
       }
+    const gapAt = (s: Vertex, height: number) => {
+      const width = switchArc(tt, s).width;
+      const i = around.findIndex((x) => x.s === s && near(x.end.high, height, width));
+      if (i < 0) throw new Error(`A slit through ${v} doesn't end between two pieces`);
+      return i;
+    };
+    // The chords: a slit arrives along a real branch at the switch s, runs along an infinitesimal branch to the switch
+    // t, and leaves along a real branch. Each connects the gap after one piece end with the gap after another.
+    const chord = new Map<number, number>();
+    for (const slit of slits)
+      slit.path.forEach((x, i) => {
+        const next = slit.path[i + 2];
+        if (tt.kind.get(x.edge) !== "real" || next === undefined) return;
+        const s = x.target;
+        if (tt.junctionOf.get(s) !== v) return;
+        const arrival = switchArc(tt, s).real.find((a) => a.end === x.reversed) as { bottom: number };
+        const departure = switchArc(tt, next.source).real.find((a) => a.end === next) as { bottom: number };
+        const a = gapAt(s, arrival.bottom + widthOf(x.edge) - (slit.heights[i] as number));
+        const b = gapAt(next.source, departure.bottom + (slit.heights[i + 2] as number));
+        chord.set(a, b);
+        chord.set(b, a);
+      });
+    // The parts: walking along the boundary of each, counterclockwise, crossing over along the chords.
+    const seen = new Set<number>();
+    for (let start = 0; start < around.length; start++) {
+      if (seen.has(start)) continue;
+      const ends: ArcEnd[] = [];
+      for (let i = start; !seen.has(i); i = ((chord.get(i) ?? i) + 1) % around.length) {
+        seen.add(i);
+        ends.push((around[i] as { end: ArcEnd }).end);
+      }
+      const part = graph.addVertex(v.name);
+      partStars.set(part, ends);
+      junctionOf.set(part, v);
+      attach(part, ends);
     }
   }
 
@@ -331,11 +424,15 @@ export function cut(tt: TrainTrack, slits: readonly Slit[]): CutTrack {
     newLengths.set(edge, piece.end - piece.start);
   }
   const side = new Map<OrientedEdge, "right" | "left">();
+  const orient = (x: ArcEnd) => {
+    const edge = x.piece.edge as Edge;
+    return x.leaves ? edge.forward : edge.backward;
+  };
+  for (const [v, ends] of partStars) {
+    graph.setStar(v, ends.map(orient));
+    for (const x of ends) side.set(orient(x), "right");
+  }
   for (const [v, ends] of starOf) {
-    const orient = (x: ArcEnd) => {
-      const edge = x.piece.edge as Edge;
-      return x.leaves ? edge.forward : edge.backward;
-    };
     const right = ends.filter((x) => x.side === "right").sort((a, b) => a.low - b.low);
     const left = ends.filter((x) => x.side === "left").sort((a, b) => b.low - a.low);
     graph.setStar(v, [...right, ...left].map(orient));
@@ -356,6 +453,7 @@ export function cut(tt: TrainTrack, slits: readonly Slit[]): CutTrack {
     const image: OrientedEdge[] = [];
     let a = 0; // cumulative length along the path
     strand.path.forEach((c, i) => {
+      if (!hasPieces(c.edge)) return; // (an infinitesimal branch of a junction that isn't blown up: no length)
       const l = lengthOf(c.edge);
       const o = strand.offsets[i] as number;
       // Heights are measured from the bottom of the arc where a traversal starts. For real branches (which leave
@@ -422,6 +520,8 @@ export function cut(tt: TrainTrack, slits: readonly Slit[]): CutTrack {
     pieces,
     isOnSlit,
     side,
+    junctionOf,
+    junctionParts: new Set(partStars.keys()),
     legacyDefaultNames: tt.legacyDefaultNames,
   };
 }

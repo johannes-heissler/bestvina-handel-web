@@ -44,6 +44,11 @@ export interface TrainTrack {
   /** The junction of G containing each switch. */
   readonly junctionOf: ReadonlyMap<Vertex, Vertex>;
   /**
+   * The switches of each junction of G, in the cyclic order of its gates: going around the junction counterclockwise,
+   * the real branch ends come switch by switch, each switch's from the bottom of its arc to the top.
+   */
+  readonly switchesOf: ReadonlyMap<Vertex, readonly Vertex[]>;
+  /**
    * At the junctions of G with a single gate (gatewise extremal), the linear order of the gate from right to left
    * across the band (counterclockwise), where it could be decided (see gate-order.ts). At the other junctions each gate
    * is cut open where the previous gate ends.
@@ -241,6 +246,7 @@ export function trainTrack(fs: FibredSurface): TrainTrack {
     switchOf,
     singleGateOrder,
     junctionOf,
+    switchesOf: gateSwitches,
     growth: pf.growth,
     widths,
     lengths,

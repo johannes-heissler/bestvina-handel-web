@@ -379,8 +379,8 @@ export const FILE_FORMAT = "bestvina-handel-session";
  * (`FibredSurface.legacyPeripheralNames`).
  * 4: default names from lists or with subscripts: v, w, … instead of v0, v1, …, the chords and lassos from the edge
  * names, Greek peripheral lassos from γ, v_a and v_α in τ, … (`FibredSurface.legacyDefaultNames`, port note 25).
- * 5: the closed-surface moves merge the valence-2 lines, the cut before removing B (`FibredSurface.legacyCut`, port
- * note 28).
+ * 5: the closed-surface moves merge the valence-2 lines, the cut before removing B, and the cut blows up only Q
+ * (`FibredSurface.legacyCut`, port notes 28 and 29).
  */
 export const FILE_VERSION = 5;
 

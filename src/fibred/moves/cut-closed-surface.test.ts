@@ -75,6 +75,14 @@ describe("closed surfaces: cutting along a singular leaf (the thesis's move)", (
     expect(valenceTwoJunctions(legacy)).toHaveLength(17);
   });
 
+  it("finds the same cuts as on all of TS(τ), before port note 29", { timeout: 60_000 }, () => {
+    for (const v of original.graph.vertices.filter((x) => ["p", "q"].includes(x.name))) {
+      const lengths = (legacy: boolean) =>
+        cutOptions(tt, prongsOfOrbit(tt, v), undefined, { legacy }).map((o) => o.realBranches);
+      expect(lengths(false)).toEqual(lengths(true));
+    }
+  });
+
   it("reaches the same growth when cutting at the singularity q (period 2)", { timeout: 30_000 }, () => {
     const q = original.graph.vertices.find((v) => v.name === "q")!;
     const [option] = cutOptions(tt, prongsOfOrbit(tt, q));

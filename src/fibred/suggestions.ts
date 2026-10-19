@@ -949,7 +949,7 @@ export function variants(fs: FibredSurface, move: Move): MoveOption[] {
       const from = (path: readonly OrientedEdge[]): TextPart => ({
         junction: (tt.junctionOf.get((path[0] as OrientedEdge).source) as Vertex).name,
       });
-      return cutOptions(tt, prongsOfOrbit(tt, q)).map((o) => {
+      return cutOptions(tt, prongsOfOrbit(tt, q), undefined, { legacy: fs.legacyCut }).map((o) => {
         const [L, ...preimages] = slitsForProng(tt, o.prong, o.realBranches) as [Slit, ...Slit[]];
         return {
           move: {

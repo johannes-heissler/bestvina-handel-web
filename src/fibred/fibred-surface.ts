@@ -82,8 +82,9 @@ export class FibredSurface {
    */
   legacyDefaultNames = false;
   /**
-   * The closed-surface moves as before session format 5 (port note 28): without merging the valence-2 lines, and the
-   * cut removes B before contracting the polygons outside Q. Set when replaying older saved sessions.
+   * The closed-surface moves as before session format 5 (port notes 28 and 29): without merging the valence-2 lines,
+   * and the cut runs on all of TS(τ) and removes B before contracting the polygons outside Q. Set when replaying older
+   * saved sessions.
    */
   legacyCut = false;
   /**

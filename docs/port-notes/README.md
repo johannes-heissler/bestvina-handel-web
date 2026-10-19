@@ -46,7 +46,8 @@ in `docs/`.
 | 26  | [Cutting again: an orbit of artificial punctures](26-cutting-again.md)                | thesis § Closed surfaces (remark at the end)                                     | 🔍   | ✅             | ✅    |
 | 27  | [Contracting the wall for any number of new punctures](27-contracting-the-wall.md)    | thesis § Closed surfaces (not in C#)                                             | ✅   | ✅             | ✅    |
 | 28  | [Valence-2 lines, merged right after the cut](28-valence-two-lines.md)                | – (new)                                                                          | ✅   | ✅             | ✅    |
-| 29+ | Point pushes, 3D                                                                      | `PointPushes.cs`, `GeometricObjects_Visualization/*`                             |      |                |       |
+| 29  | [Cutting on G, with only Q blown up](29-cutting-on-g.md)                              | – (new; replaces port note 22, § 6)                                              | ✅   | ✅             | ✅    |
+| 30+ | Point pushes, 3D                                                                      | `PointPushes.cs`, `GeometricObjects_Visualization/*`                             |      |                |       |
 | 3   | Curves, points, geodesics                                                             | `GeometricObjects_Abstract/*`                                                    |      |                |       |
 | 4   | Surfaces, homeomorphisms                                                              | `GeometricObjects_Abstract/*`                                                    |      |                |       |
 | …   | Embedding layer, suggestion system, examples, rendering, UI                           |                                                                                  |      |                |       |
