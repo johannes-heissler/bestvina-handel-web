@@ -7,11 +7,11 @@
 //
 // Results are appended to <outDir>/*.jsonl; node states are in <outDir>/nodes/<id>.json.
 import { spawn } from "node:child_process";
-import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync, unlinkSync } from "node:fs";
+import { appendFileSync, copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync, unlinkSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-const [workerPath, examplesPath, outDir, hoursArg, workersArg] = process.argv.slice(2);
+const [workerPath, examplesPath, outDir, hoursArg, workersArg, cacheArg] = process.argv.slice(2);
 const startTime = Date.now();
 const deadline = startTime + Number(hoursArg) * 3600_000;
 const maxWorkers = Number(workersArg ?? 14);
@@ -117,21 +117,54 @@ const choiceKey = (c) => JSON.stringify([c.kind, c.junction, c.prong ?? null, c.
 const nodes = new Map();
 const expansionsPerExample = new Map();
 
-function makeNode(example, family, depth, info, parent, choice) {
-  const id = nodeCounter++;
-  const node = { id, example, family, depth, info, children: new Map(), prongs: undefined };
-  nodes.set(id, node);
-  return node;
+// ─── Resuming: results of earlier runs (comma-separated folders), by the path of choices from the root ─────────
+const cache = new Map();
+const childKey = (node, choice) => `${node.pathKey}|${choiceKey(choice)}`;
+for (const dir of (cacheArg ?? "").split(",").filter(Boolean)) {
+  const readLog = (f) => (existsSync(path.join(dir, f)) ? readFileSync(path.join(dir, f), "utf8").split("\n").filter(Boolean).flatMap((l) => { try { return [JSON.parse(l)]; } catch { return []; } }) : []);
+  const keyOf = new Map();
+  for (const r of readLog("roots.jsonl")) {
+    keyOf.set(r.nodeId, r.example);
+    cache.set(r.example, { record: r, file: path.join(dir, "nodes", `${r.nodeId}.json`) });
+  }
+  for (const e of readLog("expansions.jsonl")) {
+    const parentKey = keyOf.get(e.parent);
+    if (parentKey === undefined) continue;
+    const key = `${parentKey}|${choiceKey(e.choice)}`;
+    keyOf.set(e.id, key);
+    cache.set(key, { record: e, file: path.join(dir, "nodes", `${e.id}.json`) });
+  }
+  for (const a of readLog("analyses.jsonl")) {
+    const key = keyOf.get(a.node);
+    if (key !== undefined) cache.set(`A|${key}`, { record: a });
+  }
+}
+let reused = 0;
+/** A cached result that is worth reusing (not one cut short by a crash, a kill or the deadline), with its node state copied. */
+function fromCache(key, nodeId) {
+  const hit = cache.get(key);
+  if (!hit) return undefined;
+  const r = hit.record;
+  if (r.skipped || (!r.ok && /^exit /.test(String(r.error)))) return undefined;
+  if (r.node) {
+    if (!existsSync(hit.file)) return undefined;
+    copyFileSync(hit.file, nodeFile(nodeId));
+  }
+  reused++;
+  const { id, parent, example, family, genus, depth, choice, nodeId: _n, node: _node, ...rest } = r;
+  return { ...rest, ...(r.node && { node: r.node }), cached: true };
 }
 
 /** The root of an example: a node, or a leaf if no cut is needed. */
 async function root(example) {
   const id = nodeCounter++;
   const prio = famPrio(example.family) * 10;
-  const result = await submit(isHeavy(example.family) ? prio : prio * 0.01, { type: "root", example, nodeOut: nodeFile(id) }, isHeavy(example.family));
+  const result =
+    fromCache(example.id, id) ??
+    (await submit(isHeavy(example.family) ? prio : prio * 0.01, { type: "root", example, nodeOut: nodeFile(id) }, isHeavy(example.family)));
   log("roots.jsonl", { example: example.id, family: example.family, genus: example.genus, nodeId: id, ...result });
   if (!result.ok || !result.node) return undefined;
-  const node = { id, example: example.id, family: example.family, depth: 0, info: result.node, children: new Map(), prongs: undefined };
+  const node = { id, example: example.id, family: example.family, depth: 0, info: result.node, children: new Map(), prongs: undefined, pathKey: example.id };
   nodes.set(id, node);
   log("nodes.jsonl", { id, example: example.id, family: example.family, depth: 0, parent: null, choice: null, ...result.node });
   return node;
@@ -148,7 +181,9 @@ function expand(node, choice, extra = {}) {
     const prio = isHeavy(node.family)
       ? (extra.fill ? 100 : 0) + famPrio(node.family) * 10 + 1 + Math.min(node.depth, 8) * 0.1
       : (extra.fill ? 1000 : 0) + (node.depth + 1) * 10 + famPrio(node.family);
-    const result = await submit(prio, { type: "expand", node: nodeFile(node.id), choice, nodeOut: nodeFile(childId) }, isHeavy(node.family));
+    const result =
+      fromCache(childKey(node, choice), childId) ??
+      (await submit(prio, { type: "expand", node: nodeFile(node.id), choice, nodeOut: nodeFile(childId) }, isHeavy(node.family)));
     const orbit = node.info.orbits.find((o) => o.junction === choice.junction);
     if (!result.skipped)
       log("expansions.jsonl", {
@@ -168,7 +203,7 @@ function expand(node, choice, extra = {}) {
       });
     let child;
     if (result.ok && result.node) {
-      child = { id: childId, example: node.example, family: node.family, depth: node.depth + 1, info: result.node, children: new Map(), prongs: undefined };
+      child = { id: childId, example: node.example, family: node.family, depth: node.depth + 1, info: result.node, children: new Map(), prongs: undefined, pathKey: childKey(node, choice) };
       nodes.set(childId, child);
       log("nodes.jsonl", { id: childId, example: node.example, family: node.family, depth: node.depth + 1, parent: node.id, choice, ...result.node });
     }
@@ -282,7 +317,9 @@ async function walk(rootNode, policy, seed) {
 /** Every prong of every orbit at a node (needs the analysis first). */
 async function prongAlternatives(node) {
   const prio = famPrio(node.family) * 10 + 2 + node.depth * 0.1;
-  const result = await submit(isHeavy(node.family) ? prio : 500 + prio, { type: "analyze", node: nodeFile(node.id) }, isHeavy(node.family));
+  const result =
+    fromCache(`A|${node.pathKey}`) ??
+    (await submit(isHeavy(node.family) ? prio : 500 + prio, { type: "analyze", node: nodeFile(node.id) }, isHeavy(node.family)));
   log("analyses.jsonl", { node: node.id, example: node.example, family: node.family, depth: node.depth, punctures: node.info.punctures, ...result });
   if (!result.ok) return;
   const byOrbit = new Map();
@@ -360,6 +397,7 @@ setInterval(() => {
     queued: queue.length,
     freeMB: Math.round(freeMB()),
     jobs: jobCounter,
+    reused,
     nodes: nodes.size,
     runningJobs: [...running.values()].map(({ entry, started }) => ({
       type: entry.job.type,
