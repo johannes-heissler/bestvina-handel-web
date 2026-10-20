@@ -17,19 +17,21 @@ const deadline = startTime + Number(hoursArg) * 3600_000;
 const maxWorkers = Number(workersArg ?? 14);
 const MIN_FREE_MB = 900;
 const TIMEOUT = { root: 20 * 60_000, expand: 45 * 60_000, analyze: 15 * 60_000 };
-const RANDOM_WALKS = { preset: 24, known: 16, "g2-mixed": 4, "g2-twists": 2, "g3-mixed": 4 };
+const RANDOM_WALKS = { preset: 24, known: 16, "g2-mixed": 4, "g2-twistpush": 6, "g2-twists": 2, "g3-mixed": 4, "g3-twistpush": 4, "ref-g2": 2, "ref-g3": 2 };
 /** Expansions per example for the breadth-first fill (after the walks). */
-const FILL_BUDGET = { preset: 250, known: 150, "g2-mixed": 40, "g2-twists": 10, "g3-mixed": 30 };
+const FILL_BUDGET = { preset: 250, known: 150, "g2-mixed": 40, "g2-twistpush": 60, "g2-twists": 10, "g3-mixed": 30, "g3-twistpush": 30, "ref-g2": 10, "ref-g3": 10 };
 /** Nodes up to this depth get every prong of every orbit expanded. */
 const PRONG_DEPTH = { preset: 1, known: 1, "g2-mixed": 0, "g2-twists": 0, "g3-mixed": 0 };
 const MAX_DEPTH = 12;
+const HEAVY_SLOTS = 5;
+const isHeavy = (family) => family === "preset" || family === "known";
 
 mkdirSync(path.join(outDir, "nodes"), { recursive: true });
 mkdirSync(path.join(outDir, "jobs"), { recursive: true });
 const log = (file, record) => appendFileSync(path.join(outDir, file), JSON.stringify(record) + "\n");
 
 const examples = JSON.parse(readFileSync(examplesPath, "utf8"));
-const famPrio = (family) => ({ preset: 0, known: 1, "g2-mixed": 3, "g3-mixed": 4, "g2-twists": 5 })[family] ?? 6;
+const famPrio = (family) => ({ preset: 0, known: 1, "g2-twistpush": 2, "g2-mixed": 3, "g3-twistpush": 4, "g3-mixed": 4.5, "g2-twists": 5, "ref-g2": 6, "ref-g3": 7 })[family] ?? 8;
 
 // ─── Job queue ──────────────────────────────────────────────────────────────────────────────
 
@@ -39,9 +41,9 @@ let jobCounter = 0;
 const running = new Map();
 
 /** Runs a job in a worker process; resolves with its result (never rejects). */
-function submit(prio, job) {
+function submit(prio, job, heavy = false) {
   return new Promise((resolve) => {
-    queue.push({ prio, seq: seq++, job, resolve });
+    queue.push({ prio, seq: seq++, job, resolve, heavy });
     pump();
   });
 }
@@ -93,10 +95,15 @@ function pump() {
     for (const entry of queue.splice(0)) entry.resolve({ ok: false, error: "deadline", skipped: true });
     return;
   }
+  // The presets and the known words (long cut chains) get at most HEAVY_SLOTS workers, unless nothing else waits; the
+  // rest go shallow first.
   queue.sort((a, b) => a.prio - b.prio || a.seq - b.seq);
   while (queue.length > 0 && running.size < maxWorkers) {
     if (running.size > 0 && freeMB() < MIN_FREE_MB) break;
-    launch(queue.shift());
+    const heavyRunning = [...running.values()].filter((r) => r.entry.heavy).length;
+    let i = heavyRunning < HEAVY_SLOTS ? 0 : queue.findIndex((e) => !e.heavy);
+    if (i < 0) i = 0;
+    launch(queue.splice(i, 1)[0]);
   }
 }
 
@@ -121,7 +128,7 @@ function makeNode(example, family, depth, info, parent, choice) {
 async function root(example) {
   const id = nodeCounter++;
   const prio = famPrio(example.family) * 10;
-  const result = await submit(prio, { type: "root", example, nodeOut: nodeFile(id) });
+  const result = await submit(isHeavy(example.family) ? prio : prio * 0.01, { type: "root", example, nodeOut: nodeFile(id) }, isHeavy(example.family));
   log("roots.jsonl", { example: example.id, family: example.family, genus: example.genus, nodeId: id, ...result });
   if (!result.ok || !result.node) return undefined;
   const node = { id, example: example.id, family: example.family, depth: 0, info: result.node, children: new Map(), prongs: undefined };
@@ -138,8 +145,10 @@ function expand(node, choice, extra = {}) {
   const promise = (async () => {
     const childId = nodeCounter++;
     expansionsPerExample.set(node.example, (expansionsPerExample.get(node.example) ?? 0) + 1);
-    const prio = (extra.fill ? 100 : 0) + famPrio(node.family) * 10 + 1 + Math.min(node.depth, 8) * 0.1;
-    const result = await submit(prio, { type: "expand", node: nodeFile(node.id), choice, nodeOut: nodeFile(childId) });
+    const prio = isHeavy(node.family)
+      ? (extra.fill ? 100 : 0) + famPrio(node.family) * 10 + 1 + Math.min(node.depth, 8) * 0.1
+      : (extra.fill ? 1000 : 0) + (node.depth + 1) * 10 + famPrio(node.family);
+    const result = await submit(prio, { type: "expand", node: nodeFile(node.id), choice, nodeOut: nodeFile(childId) }, isHeavy(node.family));
     const orbit = node.info.orbits.find((o) => o.junction === choice.junction);
     if (!result.skipped)
       log("expansions.jsonl", {
@@ -273,7 +282,7 @@ async function walk(rootNode, policy, seed) {
 /** Every prong of every orbit at a node (needs the analysis first). */
 async function prongAlternatives(node) {
   const prio = famPrio(node.family) * 10 + 2 + node.depth * 0.1;
-  const result = await submit(prio, { type: "analyze", node: nodeFile(node.id) });
+  const result = await submit(isHeavy(node.family) ? prio : 500 + prio, { type: "analyze", node: nodeFile(node.id) }, isHeavy(node.family));
   log("analyses.jsonl", { node: node.id, example: node.example, family: node.family, depth: node.depth, punctures: node.info.punctures, ...result });
   if (!result.ok) return;
   const byOrbit = new Map();

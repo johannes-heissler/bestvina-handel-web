@@ -99,12 +99,43 @@ const add = (family: string, genus: number, gens: readonly NamedMap[], lengths: 
     }
 };
 
-// Genus 2: pushes and twists mixed; a few pure twist words as a control.
-add("g2-mixed", 2, g2all, [4, 6, 8, 10, 12], 120, 100_000);
+/**
+ * Twist-rich words: a random twist word with `pushes` random point pushes inserted at random places. On the closed
+ * surface the pushes are trivial, so the closed class is that of the twist word alone.
+ */
+const addTwistPush = (family: string, genus: number, twists: readonly NamedMap[], pushes: readonly NamedMap[], twistLengths: number[], pushCounts: number[], count: number, seed0: number) => {
+  for (const t of twistLengths)
+    for (const k of pushCounts)
+      for (let i = 0; i < count; i++) {
+        const seed = seed0 + 10_000 * t + 1000 * k + i;
+        const random = mulberry32(seed);
+        const maps = randomWord(twists, t, random);
+        for (const push of randomWord(pushes, k, random)) maps.splice(Math.floor(random() * (maps.length + 1)), 0, push);
+        examples.push({ id: `${family}:T${t}P${k}:s${seed}`, family, genus, polygon: genus === 2 ? G2 : G3, reversed: genus === 2 ? G2_REVERSED : [], maps });
+      }
+};
+
+// Genus 2: pushes and twists mixed uniformly; twist-rich words with a few pushes; pure twist words as a control.
+add("g2-mixed", 2, g2all, [4, 6, 8, 10, 12], 100, 100_000);
+addTwistPush("g2-twistpush", 2, g2twist, g2push, [8, 12], [1, 2, 3], 40, 400_000);
 add("g2-twists", 2, g2twist, [10], 40, 200_000);
 // Genus 3: pushes and Lickorish twists.
-const g3all = [...genus3Pushes(), ...genus3Twists()];
-add("g3-mixed", 3, g3all, [6, 8, 10], 80, 300_000);
+const g3push = genus3Pushes();
+const g3twist = genus3Twists();
+add("g3-mixed", 3, [...g3push, ...g3twist], [6, 8, 10], 60, 300_000);
+addTwistPush("g3-twistpush", 3, g3twist, g3push, [10], [2], 60, 500_000);
+
+// The closed class of every word as a reference: its twist part alone (pushes are trivial on the closed surface).
+const isPush = (m: NamedMap) => m.name.startsWith("P_");
+const seen = new Set<string>();
+for (const e of [...examples]) {
+  if (e.maps === undefined || !e.maps.some(isPush)) continue;
+  const twists = e.maps.filter((m) => !isPush(m));
+  const key = `${e.genus}:${twists.map((m) => m.name).join(" ")}`;
+  if (seen.has(key)) continue;
+  seen.add(key);
+  examples.push({ id: `ref:${e.id}`, family: `ref-g${e.genus}`, genus: e.genus, polygon: e.polygon as string, reversed: e.reversed ?? [], maps: twists });
+}
 
 writeFileSync(process.argv[2] as string, JSON.stringify(examples, null, 1));
 console.log(`${examples.length} examples`);
