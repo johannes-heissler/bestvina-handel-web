@@ -147,3 +147,12 @@ step?
 each single merge), or something like the name of the branch of τ when all pieces of the line are parts of one branch
 (`y_2 y_3 y_4` → `y`)? After the cut, the lines mix pieces of different branches (the junction p_a joins y_2 and
 p_α_2), so the second rule would rarely apply.
+
+## Update: the valence-2 lines before moving vertices (2026-10-22)
+
+The suggestion order (Q2) is changed after all: the valence-2 lines now come directly after absorbing into the
+periphery, before moving vertices. With the old order, the autopilot with only "pull tight" and "valence-2 junctions"
+ticked stopped at "move vertices" while lines were left, and the vertex moves were tried (with a growth each) at every
+junction on the long lines after a cut, even at the valence-2 junctions that the merge removes. On all presets (seeds
+1–5) the default autopilot ends at the same λ; two runs of "Random mapping class in genus 2" need one step less. The
+follow-up folds of an inefficiency keep their valence-2 junctions as before (`pending`).

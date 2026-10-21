@@ -184,10 +184,11 @@ could such circles reach every orbit of punctures.
 
 ## Update: moving vertices as a step; switching moves off; no valence-1 step
 
-- **Moving vertices** is its own step (kind "move vertices"), directly after absorbing into the periphery: at every
-  junction v not on P (moving those would change the images of P), for every first strip a of the images at v, the move
-  g(v) ↦ end of a (images starting with a lose it, the others get ā in front), offered if λ after pulling tight is
-  smaller, the smallest first. It is an automatic step by default (the autopilot takes the first option, the least λ).
+- **Moving vertices** is its own step (kind "move vertices"), directly after absorbing into the periphery (since the
+  update of port note 28, after the valence-2 lines): at every junction v not on P (moving those would change the
+  images of P), for every first strip a of the images at v, the move g(v) ↦ end of a (images starting with a lose it,
+  the others get ā in front), offered if λ after pulling tight is smaller, the smallest first. It is an automatic step
+  by default (the autopilot takes the first option, the least λ).
 - **Options** (formerly "Automatic steps"): besides the automatic kinds, the moves beyond the original algorithm can be
   switched off: cutting along a singular leaf, reductions (reducing and splitting junctions along τ), moving vertices.
   Switched off, their options are greyed out with a warning (`SuggestionContext.disabled`, `Session.disabled`), and

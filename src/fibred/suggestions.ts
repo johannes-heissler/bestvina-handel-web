@@ -314,6 +314,39 @@ function nextStep(fs: FibredSurface, context: SuggestionContext): Suggestion {
       multiple: false,
     };
 
+  // The valence-2 lines are merged before moving vertices: after a cut there are many long lines, and the vertex moves
+  // would be tried (with a growth each) at every junction on them (port note 28).
+  // While an inefficiency of higher order is being removed fold by fold, its next fold needs the junctions of valence
+  // 2 that the previous fold created (the subdivision points): removing them would undo the fold, and the same fold
+  // would be suggested again and again. So they wait until the inefficiency is gone.
+  const followUp = context.followUp;
+  const pending =
+    followUp !== undefined &&
+    foldCandidates(fs).some(
+      (c) =>
+        c.places.includes(`${followUp.point.strip}@${followUp.point.index}`) ||
+        sameNames(
+          c.edgesToFold.map((e) => e.name),
+          followUp.strips,
+        ),
+    );
+  const lines = pending ? [] : valenceTwoLines(fs);
+  if (lines.length > 0)
+    return {
+      kind: "remove valence-2 junctions",
+      description: [
+        "There are valence-2 lines: paths whose inner junctions have valence 2. Each can be merged into one strip.",
+      ],
+      options: [
+        { move: { kind: "merge valence-2 lines" }, label: ["Merge all"] },
+        ...lines.map((line) => ({
+          move: { kind: "merge valence-2 lines" as const, lines: [(line.inner[0] as Vertex).name] },
+          label: ["Merge ", ...lettersText(line.strips)] as Text,
+        })),
+      ],
+      multiple: true,
+    };
+
   // Moving vertices (not in the original algorithm; with it switched off, see `withSwitchedOffVertexMoves`).
   if (!context.disabled?.has("move vertices")) {
     const moves = vertexMoves(fs);
@@ -429,37 +462,6 @@ function nextStep(fs: FibredSurface, context: SuggestionContext): Suggestion {
         classification: { kind: "reducible", candidates },
       };
   }
-
-  // While an inefficiency of higher order is being removed fold by fold, its next fold needs the junctions of valence
-  // 2 that the previous fold created (the subdivision points): removing them would undo the fold, and the same fold
-  // would be suggested again and again. So they wait until the inefficiency is gone.
-  const followUp = context.followUp;
-  const pending =
-    followUp !== undefined &&
-    foldCandidates(fs).some(
-      (c) =>
-        c.places.includes(`${followUp.point.strip}@${followUp.point.index}`) ||
-        sameNames(
-          c.edgesToFold.map((e) => e.name),
-          followUp.strips,
-        ),
-    );
-  const lines = pending ? [] : valenceTwoLines(fs);
-  if (lines.length > 0)
-    return {
-      kind: "remove valence-2 junctions",
-      description: [
-        "There are valence-2 lines: paths whose inner junctions have valence 2. Each can be merged into one strip.",
-      ],
-      options: [
-        { move: { kind: "merge valence-2 lines" }, label: ["Merge all"] },
-        ...lines.map((line) => ({
-          move: { kind: "merge valence-2 lines" as const, lines: [(line.inner[0] as Vertex).name] },
-          label: ["Merge ", ...lettersText(line.strips)] as Text,
-        })),
-      ],
-      multiple: true,
-    };
 
   const folds = foldCandidates(fs);
   // The natural next step after a fold: the next fold of the inefficiency it followed, first and marked.
