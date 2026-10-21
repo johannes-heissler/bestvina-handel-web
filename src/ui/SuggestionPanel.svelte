@@ -241,8 +241,9 @@
     else if (selectedMove) app.apply(selectedMove, { thenAutomatic: true });
   }
 
-  /** The height of the bar with Apply, which the timeline row sticks under. */
+  /** The heights of the bar with Apply and of the heading of "What will happen", which stick above the timeline. */
   let barHeight = $state(0);
+  let headingHeight = $state(0);
   let willHappenOpen = $state(true);
   let optionsOpen = $state(false);
 
@@ -328,7 +329,7 @@
 
 <!-- (Stays in sight at the top while the panel scrolls, with the timeline of "What will happen" under it.) -->
 {#if suggestion?.options.length || suggestion?.kind !== "finished"}
-  <div class="action-bar" bind:clientHeight={barHeight}>
+  <div class="action-bar" bind:offsetHeight={barHeight}>
     {#if suggestion?.options.length}<button class="primary" onclick={applySelected}>Apply</button>{/if}
     {#if suggestion?.kind !== "finished"}
       <button onclick={runToTheEnd} title="Apply the default of every step until the algorithm stops">Run to the end</button>
@@ -338,14 +339,16 @@
 
 {#if suggestion?.options.length}
   <details class="panel will-happen-block" bind:open={willHappenOpen}>
-    <summary><h2>What will happen</h2></summary>
+    <summary class="sticky-heading" style:top="{barHeight}px" bind:offsetHeight={headingHeight}
+      ><h2>What will happen</h2></summary
+    >
     {#if preview === undefined}
       <p class="note">Computing…</p>
     {:else if preview.error !== undefined}
       <p class="note">This can't be applied here: {preview.error}</p>
     {:else}
       <!-- (A short horizontal slider in a row that stays in sight: a slider as tall as the list scrolled the panel.) -->
-      <div class="timeline-controls" style:top="{barHeight}px">
+      <div class="timeline-controls" style:top="{barHeight + (willHappenOpen ? headingHeight : 0)}px">
         <button onclick={play} title="Show the steps one after the other in the views">{playing ? "⏸" : "▶"}</button>
         <input
           class="timeline"

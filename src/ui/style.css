@@ -618,7 +618,12 @@ details.toggle > summary h2 {
 .choices-note {
   margin: 0.2rem 0 0.4rem 1.4rem;
 }
-/* What will happen: a timeline row that stays in sight while the steps scroll, and the steps (clickable). */
+/* What will happen: its heading and a timeline row stay in sight (under Apply) while the steps scroll. */
+.sticky-heading {
+  position: sticky;
+  z-index: 1;
+  background: var(--panel);
+}
 .timeline-controls {
   display: flex;
   align-items: center;
