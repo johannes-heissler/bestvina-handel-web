@@ -10,10 +10,10 @@ import { AUTOMATIC, nodeInfo } from "./study";
 const [name, maxArg] = process.argv.slice(2) as [string, string];
 const session = Session.create({ kind: "preset", preset: name });
 const t0 = performance.now();
-let s = session.runAutopilot({ automatic: AUTOMATIC, maxSteps: 1_000_000 });
+let s = session.runAutopilot({ automatic: AUTOMATIC, maxSteps: 1_000_000 }).stoppedAt;
 if (s.kind !== "closed surface") {
   session.apply({ kind: "mark as closed" });
-  s = session.runAutopilot({ automatic: AUTOMATIC, maxSteps: 1_000_000 });
+  s = session.runAutopilot({ automatic: AUTOMATIC, maxSteps: 1_000_000 }).stoppedAt;
 }
 for (let k = 0; k < Number(maxArg) && s.kind === "closed surface"; k++) {
   const fs = session.current.surface;
@@ -21,7 +21,7 @@ for (let k = 0; k < Number(maxArg) && s.kind === "closed surface"; k++) {
   const move = s.options[0]!.move;
   console.log(JSON.stringify({ k, punctures: info.punctures, growth: info.growth, strips: info.size.strips, orbits: info.orbits.map((o) => o.period), model: session.current.model.kind, move, secs: (performance.now() - t0) / 1000 }));
   session.apply(move);
-  s = session.runAutopilot({ automatic: AUTOMATIC, maxSteps: 1_000_000 });
+  s = session.runAutopilot({ automatic: AUTOMATIC, maxSteps: 1_000_000 }).stoppedAt;
 }
 const tt = trainTrack(session.current.surface);
 console.log(JSON.stringify({ end: s.kind, classification: s.classification, punctures: punctureCount(tt), model: session.current.model.kind, secs: (performance.now() - t0) / 1000 }));

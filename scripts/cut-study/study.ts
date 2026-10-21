@@ -16,8 +16,6 @@ import { trainTrack, type TrainTrack } from "../../src/fibred/train-track";
 import { polygonSingularities } from "../../src/fibred/moves/fill-puncture";
 import {
   cutOptions,
-  cutTooFine,
-  preimageShrinking,
   prongsOfOrbit,
   punctureCount,
   ringLetters,
@@ -254,8 +252,8 @@ export interface OrbitInfo {
   /** The prongs of the singularities in the orbit (all candidates for L). */
   readonly prongs: number;
   readonly prongsPerSingularity: number;
+  /** λ^(P−1) for the period P of its prongs: how much shorter the shortest preimage of L is (no limit for the cut). */
   readonly shrinking: number;
-  readonly tooFine: boolean;
 }
 
 export interface NodeInfo {
@@ -282,8 +280,7 @@ export function nodeInfo(fs: FibredSurface): NodeInfo {
         period: q.orbit.length,
         prongs: ps.length,
         prongsPerSingularity: ps.length / q.orbit.length,
-        shrinking: preimageShrinking(tt, q.junction),
-        tooFine: cutTooFine(tt, q.junction),
+        shrinking: tt.growth ** (ps[0] === undefined ? 0 : prongPeriod(tt, ps[0]) - 1),
       };
     });
   return { punctures: punctureCount(tt), growth: tt.growth, size: sizeOf(fs), shape: trackShape(tt), orbits };
@@ -337,21 +334,17 @@ export function analyzeProngs(fs: FibredSurface, maxRealBranches = 500): ProngAn
     for (const prong of prongsOfOrbit(tt, j)) {
       const index = all.findIndex((p) => p.atSwitch === prong.atSwitch && p.below === prong.below);
       const junction = (tt.junctionOf.get(prong.atSwitch) as Vertex).name;
-      if (orbit.tooFine) {
-        result.push({ index, junction, orbitJunction: orbit.junction, failure: "too fine" });
-        continue;
-      }
       try {
         const slitsFor = growingSlits(tt, prong, maxRealBranches);
         let found: number | undefined;
         let failure: string | undefined = "not within limit";
         for (let count = 1; count <= maxRealBranches; count++) {
-          const slits = slitsFor(count);
-          if (slits === undefined) {
+          const system = slitsFor(count);
+          if (system === undefined) {
             failure = "corner";
             break;
           }
-          if (ringsCutOff(tt, rings, slits)) {
+          if (ringsCutOff(tt, rings, system.slits)) {
             found = count;
             failure = undefined;
             break;
