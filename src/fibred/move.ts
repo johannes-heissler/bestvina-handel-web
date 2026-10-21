@@ -16,9 +16,9 @@ import { type MapUpdateMode, renameJunction, renameStrip, updateMap } from "./ma
 import type { FibredSurface } from "./fibred-surface";
 import { collapseSubforest } from "./moves/collapse-forest";
 import { absorbIntoPeriphery } from "./moves/absorb-periphery";
-import { cutClosedSurface, cutOptions, cutOrbit, prongsOfOrbit } from "./moves/cut-closed-surface";
+import { cutClosedSurface, cutOptions, cutOrbit, NoCutFound, prongsOfOrbit } from "./moves/cut-closed-surface";
 import type { RemarkingProvider } from "./remarking";
-import { polygonSingularities, replacePunctureBySingularity } from "./moves/fill-puncture";
+import { polygonSingularities, ratedFillings, replacePunctureBySingularity } from "./moves/fill-puncture";
 import type { FoldOption } from "./moves/fold";
 import {
   type FoldChoice,
@@ -138,7 +138,15 @@ export type Move =
       readonly prong?: number;
       readonly realBranches?: number;
     }
-  | { readonly kind: "replace puncture by singularity"; readonly junction: string }
+  | {
+      readonly kind: "replace puncture by singularity";
+      readonly junction: string;
+      /**
+       * The strips of the blown-up surface to delete, one per puncture of P, by their letters on its faces, in order
+       * (see `fillings`); by default the way with the least growth after pulling tight.
+       */
+      readonly fill?: readonly string[];
+    }
   /** The one puncture is artificial: the surface is closed (port note 24). G, g, μ and G₀ stay the same. */
   | { readonly kind: "mark as closed" }
   /** Editing by hand (the map editor): these are moves too, so that a session is its start plus its moves. */
@@ -525,7 +533,7 @@ function applyMoveQuietly(fs: FibredSurface, move: Move, hooks: MoveHooks = {}):
           ? { prong: prongs(tt)[move.prong], realBranches: move.realBranches }
           : cutOptions(tt, prongsOfOrbit(tt, junction(fs, move.junction)))[0];
       if (option?.prong === undefined)
-        throw new Error(`No cut found for the singularity at ${move.junction}`);
+        throw new NoCutFound(`No cut found for the singularity at ${move.junction}`);
       const remarking = hooks.remark?.(fs, tt, cutOrbit(tt, option.prong));
       const { surface } = cutClosedSurface(
         tt,
@@ -553,8 +561,9 @@ function applyMoveQuietly(fs: FibredSurface, move: Move, hooks: MoveHooks = {}):
       const q = polygonSingularities(fs).find((s) => s.junction.name === move.junction);
       if (q === undefined) throw new Error(`${move.junction} is not a singularity`);
       const tt = trainTrack(fs);
+      const fill = move.fill ?? ratedFillings(fs, q, (t) => hooks.remark?.(fs, t, q.orbit), tt)[0]?.letters;
       const remarking = hooks.remark?.(fs, tt, q.orbit);
-      return keepFlags(fs, replacePunctureBySingularity(fs, q, remarking, tt));
+      return keepFlags(fs, replacePunctureBySingularity(fs, q, remarking, tt, fill));
     }
   }
 }

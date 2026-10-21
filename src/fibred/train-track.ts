@@ -295,6 +295,56 @@ function branchWidths(
 }
 
 /**
+ * A junction v outside a g-invariant set Q of junctions that g maps into Q. When Q is blown up into its polygons, the
+ * gates of v go to different corners of the polygon of g(v), so v (a single vertex) has no single image unless the
+ * strips of one gate take the side of the polygon between the corners first.
+ */
+export interface EntryIntoBlownUp {
+  readonly junction: Vertex;
+  /** The switch of v whose image corner is the image of v. */
+  readonly base: Vertex;
+  /**
+   * For the other switch of v (if its corner differs): the infinitesimal branch of τ from g_τ(base) to its image
+   * corner, g_τ of the infinitesimal branch of v.
+   */
+  readonly sides: ReadonlyMap<Vertex, OrientedEdge>;
+}
+
+/**
+ * The junctions outside `blownUp` (invariant under g) that g maps into it ({@link EntryIntoBlownUp}). Such a junction
+ * has at most two gates: g is injective on the junctions with three or more gates (they are singularities, which are
+ * periodic points), so one of them mapped into the orbit Q would lie in Q.
+ *
+ * @throws Error if such a junction has three or more gates, or its two gates are joined by no infinitesimal branch.
+ */
+export function entriesInto(tt: TrainTrack, blownUp: ReadonlySet<Vertex>): Map<Vertex, EntryIntoBlownUp> {
+  const entries = new Map<Vertex, EntryIntoBlownUp>();
+  for (const [v, switches] of tt.switchesOf) {
+    const [base, other] = switches;
+    if (base === undefined || blownUp.has(v)) continue;
+    if (!blownUp.has(tt.junctionOf.get(tt.gTau.vertexImage(base)) as Vertex)) continue;
+    if (switches.length > 2)
+      throw new Error(
+        `The junction ${v} with ${switches.length} gates is mapped into the orbit, but isn't in it`,
+      );
+    const sides = new Map<Vertex, OrientedEdge>();
+    if (other !== undefined && tt.gTau.vertexImage(other) !== tt.gTau.vertexImage(base)) {
+      const inside = tt.graph
+        .star(base)
+        .find((x) => tt.kind.get(x.edge) === "infinitesimal" && x.target === other);
+      const side = inside === undefined ? undefined : tt.gTau.image(inside);
+      if (side?.length !== 1)
+        throw new Error(
+          `The gates of ${v} go to different corners of the polygon of its image, joined by no side`,
+        );
+      sides.set(other, side.first as OrientedEdge);
+    }
+    entries.set(v, { junction: v, base, sides });
+  }
+  return entries;
+}
+
+/**
  * For each switch, the total width of its real branch ends minus that of its infinitesimal ones. By the switch
  * equation this is 0 for a train-track map with λ > 1 (up to rounding); useful to check the construction.
  */

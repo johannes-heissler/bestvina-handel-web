@@ -15,8 +15,11 @@ import { CombinatorialMap } from "../graph/combinatorial-map";
 import { EdgePath } from "../graph/edge-path";
 import { fromBoundaryWords } from "../graph/from-boundary-words";
 import { parseMap } from "../graph/path-parser";
-import type { Edge, GraphCopy, RibbonGraph, StarPosition, Vertex } from "../graph/ribbon-graph";
+import type { Edge, GraphCopy, OrientedEdge, RibbonGraph, StarPosition, Vertex } from "../graph/ribbon-graph";
 import { firstDuplicate } from "../util/iter";
+import { pretrivialEdges } from "./gates";
+import { pullTight } from "./moves/pull-tight";
+import { quietly } from "./narration";
 import {
   EDGE_COLORS,
   LEGACY_EDGE_NAMES,
@@ -288,17 +291,21 @@ export class FibredSurface {
     const duplicateVertex = firstDuplicate(this.graph.vertices, (v) => v.name);
     if (duplicateVertex !== undefined) problems.push(`The vertex name ${duplicateVertex.name} is used twice`);
 
-    // Strips at a junction whose images start with the same strip must be adjacent in the cyclic order,
-    // since the homeomorphism preserves the cyclic order.
-    for (const v of this.graph.vertices) {
-      const star = this.graph.star(v);
-      const byDerivative = Map.groupBy(star, (e) => this.g.derivative(e));
-      for (const [first, edges] of byDerivative)
-        if (first !== undefined && !isCyclicInterval(star, new Set(edges)))
-          problems.push(
-            `The edges ${edges.join(", ")} all start with ${first} under g, but are not adjacent in the star of ${v}`,
-          );
+    // The order of the strips at the junctions (see starOrderProblems) holds for g pulled tight: before, the images
+    // can still run along strips that pulling tight removes (e.g. right after a cut or a shortcut). So what the check
+    // finds is checked again on a copy pulled tight.
+    let starProblems = starOrderProblems(this.graph, this.g);
+    if (starProblems.length > 0) {
+      const tight = this.copy();
+      tight.onError = () => {};
+      try {
+        quietly(() => pullTight(tight));
+        starProblems = starOrderProblems(tight.graph, tight.g);
+      } catch {
+        // (pulling tight fails: the problems found stand)
+      }
     }
+    problems.push(...starProblems);
 
     for (const b of this.mu.boundaryWordReport(undefined, this.peripheralCurvesOfG0()))
       if (b.matchedIndex < 0)
@@ -348,6 +355,60 @@ function markingByCopy(graph: RibbonGraph): CombinatorialMap {
   for (const v of graph.vertices) mu.setVertexImage(v, copy.vertexMap.get(v) as Vertex);
   for (const e of graph.edges) mu.setImage(e.forward, EdgePath.of(copy.orient(e.forward)));
   return mu;
+}
+
+/**
+ * Strips at a junction whose images start with the same strip must be adjacent in the cyclic order, since the
+ * homeomorphism preserves the cyclic order. This is checked for the reduced images (an image can start with a
+ * backtrack that the homeomorphism doesn't see, or reduce to a point). The pretrivial strips (mapped to a point, or into
+ * such strips) say nothing at their junction: they form a g-invariant forest, which is contracted first, so that the
+ * strips at their other ends join the star (e.g. after a shortcut, where filling in deletes strips from the images),
+ * and the strips are compared by Dg*.
+ */
+function starOrderProblems(graph: RibbonGraph, g: CombinatorialMap): string[] {
+  const reduced = new CombinatorialMap(graph, graph);
+  for (const v of graph.vertices) reduced.setVertexImage(v, g.vertexImage(v));
+  for (const e of graph.edges) reduced.setImage(e.forward, g.image(e.forward).reduced());
+  const pretrivial = pretrivialEdges(graph, reduced);
+  const collapsed = (e: Edge) => pretrivial.has(e);
+  const problems: string[] = [];
+  for (const star of starsAfterContracting(graph, collapsed)) {
+    const first = (e: OrientedEdge) => reduced.image(e).letters.find((x) => !collapsed(x.edge));
+    for (const [d, edges] of Map.groupBy(star, first))
+      if (d !== undefined && !isCyclicInterval(star, new Set(edges)))
+        problems.push(
+          `The edges ${edges.join(", ")} all start with ${d} under g, but are not adjacent in the star of ${(star[0] as OrientedEdge).source}`,
+        );
+  }
+  return problems;
+}
+
+/**
+ * The stars of the junctions after contracting the edges in `contracted` (a forest): going around each tree
+ * counterclockwise, the other edges in their cyclic order. A junction outside the forest keeps its star.
+ */
+export function starsAfterContracting(
+  graph: RibbonGraph,
+  contracted: (e: Edge) => boolean,
+): OrientedEdge[][] {
+  const seen = new Set<OrientedEdge>();
+  const stars: OrientedEdge[][] = [];
+  for (const v of graph.vertices)
+    for (const start of graph.star(v)) {
+      if (contracted(start.edge) || seen.has(start)) continue;
+      const star: OrientedEdge[] = [];
+      let x = start;
+      do {
+        if (contracted(x.edge)) x = graph.next(x.reversed);
+        else {
+          star.push(x);
+          seen.add(x);
+          x = graph.next(x);
+        }
+      } while (x !== start);
+      stars.push(star);
+    }
+  return stars;
 }
 
 /** Whether the elements of `subset` form one cyclically consecutive block of `cycle` (or `subset` is empty). */

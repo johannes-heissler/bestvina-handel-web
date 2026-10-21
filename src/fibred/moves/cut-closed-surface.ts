@@ -11,13 +11,23 @@ import { Color } from "../../math/color";
 import { EdgePath } from "../../graph/edge-path";
 import { letterIndex } from "../../graph/names";
 import type { Edge, OrientedEdge, Vertex } from "../../graph/ribbon-graph";
-import { cut, type CutTrack, growingSlits, type Piece, type Slit, slitsForProng } from "../cut-along-leaf";
+import {
+  cut,
+  type CutTrack,
+  growingSlits,
+  type Piece,
+  type Slit,
+  type SlitSystem,
+  slitsForProng,
+} from "../cut-along-leaf";
 import { FibredSurface } from "../fibred-surface";
 import { explain, keepingStates, narrate } from "../narration";
 import { type BranchPart, forgetInMarking, type Remarking } from "../remarking";
 import type { Text, TextPart } from "../suggestions";
 import { imageProng, type Prong, prongs } from "../singular-leaves";
 import type { TrainTrack } from "../train-track";
+import { type LeafPoint, leafPoints } from "../leaf-order";
+import { SubdividedTrack } from "../subdivided-track";
 import { tightenMarking } from "./isotopy";
 import { mergeAllValenceTwoLines } from "./valence";
 
@@ -177,26 +187,6 @@ export function prongsOfOrbit(tt: TrainTrack, junction: Vertex): Prong[] {
 }
 
 /**
- * How much shorter than L its shortest preimage slit is: λ^(P−1) for the period P of the prongs of the orbit of
- * `junction` (see `slitsForProng`). The cut computes in floating point with a tolerance of 1e-9, so beyond about
- * 1e10 the short preimages can't be resolved and no cut is found (e.g. a period-4 orbit of 3-pronged singularities
- * with λ ≈ 22.5: λ¹¹ ≈ 10¹⁵).
- */
-export function preimageShrinking(tt: TrainTrack, junction: Vertex): number {
-  const prong = prongsOfOrbit(tt, junction)[0];
-  if (prong === undefined) return 1;
-  const same = (p: Prong, q: Prong) => p.atSwitch === q.atSwitch && p.below === q.below;
-  let period = 1;
-  for (let p = imageProng(tt, prong); !same(p, prong) && period < 10_000; p = imageProng(tt, p)) period++;
-  return tt.growth ** (period - 1);
-}
-
-/** Whether the cut from this orbit is beyond what the floating-point cut can resolve ({@link preimageShrinking}). */
-export function cutTooFine(tt: TrainTrack, junction: Vertex): boolean {
-  return preimageShrinking(tt, junction) > 1e10;
-}
-
-/**
  * The switches along the boundary words of P that still have valence > 2, i.e. where the cut hasn't yet separated
  * a thin ring along a boundary; one per puncture (its attachment switch) when every boundary is a circle attached at
  * one switch. For showing the progress while L is prolonged. `undefined` if no boundary word of P can be identified.
@@ -206,6 +196,9 @@ export function circleDefects(ct: CutTrack): Vertex[] | undefined {
   if (words.length === 0) return undefined;
   return words.flatMap((word) => word.letters.map((x) => x.target).filter((s) => ct.graph.valence(s) > 2));
 }
+
+/** No prong of the orbit gives a cut ({@link cutOptions} is empty); another closed-surface option may still work. */
+export class NoCutFound extends Error {}
 
 /** A way to cut: along `prong` through `realBranches` real branches, after which B is a circle attached at one switch. */
 export interface CutOption {
@@ -240,7 +233,8 @@ interface Traversal {
   readonly slit: number;
   /** Its index in the slit's path. */
   readonly k: number;
-  readonly distance: number;
+  /** Where it passes, across the branch. */
+  readonly point: LeafPoint;
   /** Whether the slit runs along the letter (else against it). */
   readonly along: boolean;
   /** Whether it is the last branch of a slit that ends inside it. */
@@ -258,7 +252,7 @@ interface Traversal {
  * The cusp is then the only switch of the ring with valence > 2.
  */
 export function ringsCutOff(tt: TrainTrack, rings: readonly RingLetters[], slits: readonly Slit[]): boolean {
-  const widths = tt.widths as ReadonlyMap<Edge, number>;
+  const points = leafPoints(tt);
   const occurrences = new Map<Edge, { ring: number; i: number; letter: OrientedEdge }[]>();
   rings.forEach(({ letters }, ring) =>
     letters.forEach((letter, i) => {
@@ -273,13 +267,13 @@ export function ringsCutOff(tt: TrainTrack, rings: readonly RingLetters[], slits
   slits.forEach((slit, s) =>
     slit.path.forEach((x, k) => {
       for (const { ring, i, letter } of occurrences.get(x.edge) ?? []) {
-        const y = slit.heights[k] as number;
+        const point = { prong: points.indexOf(slit.prong), index: k };
         const along = x === letter;
-        const distance = along ? y : (widths.get(x.edge) as number) - y;
         const old = (nearest[ring] as (Traversal | undefined)[])[i];
-        if (old === undefined || distance < old.distance) {
-          const partial = slit.partialLength !== undefined && k === slit.path.length - 1;
-          (nearest[ring] as (Traversal | undefined)[])[i] = { slit: s, k, distance, along, partial };
+        // Nearest to the puncture: lowest, seen along the letter (p lies on its right).
+        if (old === undefined || points.compare(point, old.point, letter) < 0) {
+          const partial = slit.partial && k === slit.path.length - 1;
+          (nearest[ring] as (Traversal | undefined)[])[i] = { slit: s, k, point, along, partial };
         }
       }
     }),
@@ -317,17 +311,17 @@ export function cutOptions(tt: TrainTrack, candidates: readonly Prong[], maxReal
   const found = candidates.flatMap((prong) => {
     const slitsFor = growingSlits(tt, prong, maxRealBranches);
     for (let count = 1; count <= maxRealBranches; count++) {
-      const slits = slitsFor(count);
-      if (slits === undefined) return []; // a slit runs into a corner
-      if (ringsCutOff(tt, rings, slits)) return [{ prong, realBranches: count, slits }];
+      const system = slitsFor(count);
+      if (system === undefined) return []; // a slit runs into a corner
+      if (ringsCutOff(tt, rings, system.slits)) return [{ prong, realBranches: count, system }];
     }
     return [];
   });
   const options: CutOption[] = [];
-  for (const { prong, realBranches, slits } of found.sort((a, b) => a.realBranches - b.realBranches)) {
+  for (const { prong, realBranches, system } of found.sort((a, b) => a.realBranches - b.realBranches)) {
     if (options.length > 0 && realBranches >= 2 * (options[0] as CutOption).realBranches) break;
     try {
-      if (attachedCircles(cut(tt, slits, new Set(cutOrbit(tt, prong))), punctures) !== undefined)
+      if (attachedCircles(cut(tt, system, new Set(cutOrbit(tt, prong))), punctures) !== undefined)
         options.push({ prong, realBranches });
     } catch {
       // (the cut fails for this prong)
@@ -398,10 +392,10 @@ export function cutClosedSurface(tt: TrainTrack, option: CutOption, remarking?: 
   const orbit = cutOrbit(tt, option.prong);
   /** The real branches of each slit when L runs through `count` branches: L first, then f⁻¹(L), f⁻²(L), … */
   const slitBranches = (count: number) =>
-    slitsForProng(tt, option.prong, count).map((slit) => ({
+    slitsForProng(tt, option.prong, count).slits.map((slit) => ({
       start: tt.junctionOf.get((slit.path[0] as OrientedEdge).source) as Vertex,
       real: slit.path.filter((x) => tt.kind.get(x.edge) === "real"),
-      partial: slit.partialLength !== undefined,
+      partial: slit.partial,
     }));
   const final = slitBranches(n);
   const real = (final[0] as (typeof final)[number]).real;
@@ -411,8 +405,8 @@ export function cutClosedSurface(tt: TrainTrack, option: CutOption, remarking?: 
 
   // Only the junctions of Q are blown up into their polygons: the new punctures sit inside them (port note 29).
   const inQ = new Set(orbit);
-  const track = (slits: readonly Slit[]) => {
-    const ct = cut(tt, slits, inQ);
+  const track = (system: SlitSystem) => {
+    const ct = cut(tt, system, inQ);
     nameParts(ct, inQ);
     return ct;
   };
@@ -437,7 +431,7 @@ export function cutClosedSurface(tt: TrainTrack, option: CutOption, remarking?: 
     : [n];
   // The state before the cut: G with Q blown up.
   narrate(blowUpText(orbit.map((v) => v.name)));
-  let before = keep ? shown(track([])) : undefined;
+  let before = keep ? shown(track({ track: new SubdividedTrack(tt), slits: [] })) : undefined;
   let previous: { real: readonly OrientedEdge[]; partial: boolean }[] = [];
   let done = 0;
   let ct: CutTrack | undefined;

@@ -14,11 +14,13 @@ import {
   autopilot,
   type AutopilotLimit,
   type AutopilotOptions,
+  type MoveOption,
   nextSuggestion,
   type OptionalMove,
   type Suggestion,
   type SuggestionKind,
   type Text,
+  variants,
 } from "../fibred/suggestions";
 import { perronFrobenius } from "../fibred/perron-frobenius";
 import { type Motion, type NarratedStep, narrated } from "../fibred/narration";
@@ -145,6 +147,11 @@ export class Session {
       const model = modelOfSpine(fs.spine0) ?? (fs.spine0 === node.surface.spine0 ? node.model : undefined);
       return model === undefined ? undefined : remarkClosedSurface(model, fs, tt, orbit);
     };
+  }
+
+  /** The further choices of `move` at the current state (see `variants`), with the model kept to rate μ. */
+  variants(move: Move): MoveOption[] {
+    return variants(this.current.surface, move, this.remarker(this.current));
   }
 
   /** The suggestion at the current state. */

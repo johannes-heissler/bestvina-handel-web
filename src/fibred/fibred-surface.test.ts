@@ -4,7 +4,8 @@ import { CombinatorialMap } from "../graph/combinatorial-map";
 import { EdgePath } from "../graph/edge-path";
 import { nameTable, parseEdgePath } from "../graph/path-parser";
 import { RibbonGraph } from "../graph/ribbon-graph";
-import { FibredSurface, isCyclicInterval } from "./fibred-surface";
+import { FibredSurface, isCyclicInterval, starsAfterContracting } from "./fibred-surface";
+import { fromStars } from "../graph/from-boundary-words";
 import { EDGE_NAMES, firstUnusedName } from "../graph/names";
 import { leastUsedColor } from "./names-and-colors";
 
@@ -85,6 +86,40 @@ describe("checkIntegrity", () => {
     // are not adjacent.
     const fs = FibredSurface.fromText([["a", "b", "A", "B"]], "a -> a b A");
     expect(fs.checkIntegrity().some((p) => p.includes("are not adjacent"))).toBe(true);
+  });
+
+  it("contracts the strips mapped to a point before comparing the stars", () => {
+    // Loops a, c at v, the strip e from v to w, a loop b at w; g(e) is a point. In the star of v, e separates a and A,
+    // whose images both start with a; after contracting e, b and B (also starting with a) lie between them.
+    const surface = (bImage: string) => {
+      const graph = fromStars([
+        ["a", "e", "A", "c", "C"],
+        ["E", "b", "B"],
+      ]);
+      const x = (name: string) => graph.orientedEdges.find((y) => y.name === name)!;
+      const path = (text: string) => EdgePath.from(text.split(" ").map(x));
+      const g = CombinatorialMap.fromEdgeImages(
+        graph,
+        graph,
+        new Map([
+          [x("a"), path("a c A")],
+          [x("c"), path("c")],
+          [x("b"), path(bImage)],
+          [x("e"), EdgePath.EMPTY],
+        ]),
+      );
+      return new FibredSurface({ graph, g });
+    };
+    const adjacency = (fs: FibredSurface) =>
+      fs.checkIntegrity().filter((p) => p.includes("are not adjacent"));
+    expect(
+      starsAfterContracting(surface("a c A").graph, (e) => e.name === "e").map((s) => s.join(" ")),
+    ).toEqual(["a b B A c C"]);
+    expect(adjacency(surface("a c A"))).toEqual([]);
+    // b ↦ c, B ↦ C separate a and A (and are separated from c, C themselves)
+    expect(adjacency(surface("c"))).toContain(
+      "The edges a, A all start with a under g, but are not adjacent in the star of v",
+    );
   });
 
   it("reports a broken μ", () => {

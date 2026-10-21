@@ -5,6 +5,8 @@ import { cut, slitsForProng, type CutTrack } from "./cut-along-leaf";
 import { cutOrbit } from "./moves/cut-closed-surface";
 import { prongs } from "./singular-leaves";
 import { trainTrack } from "./train-track";
+import { FibredSurface } from "./fibred-surface";
+import { perronFrobenius } from "./perron-frobenius";
 
 function growthOf(ct: CutTrack): number {
   const M = new Matrix(ct.gPrime.transitionMatrix().entries.map((row) => [...row]));
@@ -12,16 +14,22 @@ function growthOf(ct: CutTrack): number {
 }
 
 /**
- * For each switch: total width on the right minus total width on the left (the switch equation says 0). The parts of
- * the junctions that aren't blown up are no switches.
+ * For each switch: total width on the right minus total width on the left (the switch equation says 0), with the
+ * Perron–Frobenius widths of g′ (the cut computes no widths). The parts of the junctions that aren't blown up are no
+ * switches.
  */
 function switchDefects(ct: CutTrack): number[] {
+  const { widths } = perronFrobenius(new FibredSurface({ graph: ct.graph, g: ct.gPrime }), {
+    essentialOnly: false,
+  });
+  const scale = Math.max(...widths.values());
   return ct.graph.vertices
     .filter((v) => !ct.junctionParts.has(v))
-    .map((v) =>
-      ct.graph
-        .star(v)
-        .reduce((sum, e) => sum + (ct.side.get(e) === "right" ? 1 : -1) * ct.widths.get(e.edge)!, 0),
+    .map(
+      (v) =>
+        ct.graph
+          .star(v)
+          .reduce((sum, e) => sum + (ct.side.get(e) === "right" ? 1 : -1) * widths.get(e.edge)!, 0) / scale,
     );
 }
 

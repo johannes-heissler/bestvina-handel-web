@@ -222,4 +222,16 @@ describe("a finished result with a single cusp at the only puncture", () => {
     const reduced = autopilot(applyMove(cutOpen.surface.copy(), cutOpen.stoppedAt.options[0]!.move));
     expect(reduced.stoppedAt.classification).toMatchObject({ kind: "finite order", order: 1 });
   });
+
+  it("cuts along a leaf whose preimages are ~10¹⁵ times shorter (the period-4 orbit of the point push)", () => {
+    const { surface, stoppedAt } = autopilot(buildPreset(PRESETS.find((p) => p.name === "Point push")!));
+    const closed = applyMove(surface.copy(), stoppedAt.options[0]!.move);
+    const next = nextSuggestion(closed);
+    const cut = next.options.find((o) => o.move.kind === "cut along a singular leaf" && o.rating === 4)!;
+    expect(cut).toBeDefined();
+    const choices = variants(closed, cut.move);
+    expect(choices.length).toBeGreaterThan(0);
+    const result = applyMove(closed.copy(), choices[0]!.move);
+    expect(result.checkIntegrity()).toEqual([]);
+  }, 60_000);
 });

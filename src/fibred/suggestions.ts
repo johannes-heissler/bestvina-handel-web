@@ -11,8 +11,8 @@ import type { FibredSurface } from "./fibred-surface";
 import { applyMove, type FollowUp, type FoldRef, foldRef, type Move, type MoveKind, strip } from "./move";
 import { needsAbsorbing } from "./moves/absorb-periphery";
 import { candidateCenters, invariantSubforests, isPeripheryFriendlyForest } from "./moves/collapse-forest";
-import { cutOptions, cutTooFine, preimageShrinking, prongsOfOrbit } from "./moves/cut-closed-surface";
-import { oneCuspPunctures, polygonSingularities } from "./moves/fill-puncture";
+import { cutOptions, NoCutFound, prongsOfOrbit } from "./moves/cut-closed-surface";
+import { oneCuspPunctures, polygonSingularities, ratedFillings } from "./moves/fill-puncture";
 import type { FoldOption } from "./moves/fold";
 import {
   type FoldCandidate,
@@ -73,6 +73,8 @@ export interface MoveOption {
   readonly rating?: number;
   /** The rating as shown, e.g. "3 side crossings" (otherwise the number alone). */
   readonly ratingText?: string;
+  /** What the rating measures (a tooltip); by default the side crossings after a fold. */
+  readonly ratingTitle?: string;
   /** Possible, but not the step of the algorithm now (shown greyed out). */
   readonly discouraged?: boolean;
   /** More about the option, shown under it (e.g. the inefficiency points behind a fold). */
@@ -555,7 +557,7 @@ function nextStep(fs: FibredSurface, context: SuggestionContext): Suggestion {
 
 /**
  * The moves of the closed-surface case: cut along a leaf from a singularity, or the shortcut, one option per orbit of
- * singularities, by period. Cuts that the floating-point cut can't resolve are shown greyed out.
+ * singularities, by period.
  */
 function closedSurfaceOptions(fs: FibredSurface): MoveOption[] {
   const tt = trainTrack(fs);
@@ -577,26 +579,11 @@ function closedSurfaceOptions(fs: FibredSurface): MoveOption[] {
           "; period " + orbit.length + ")",
         ];
   return [
-    ...singularities.map((q) => {
-      const tooFine = cutTooFine(tt, q.junction);
-      return {
-        move: { kind: "cut along a singular leaf" as const, junction: q.junction.name },
-        label: [
-          "Cut along a leaf from ",
-          { junction: q.junction.name },
-          ...orbitText(q.orbit),
-          ...(tooFine
-            ? [
-                ": not possible yet, its preimages would be " +
-                  preimageShrinking(tt, q.junction).toExponential(0) +
-                  " times shorter",
-              ]
-            : []),
-        ] as Text,
-        rating: q.orbit.length,
-        ...(tooFine && { discouraged: true }),
-      };
-    }),
+    ...singularities.map((q) => ({
+      move: { kind: "cut along a singular leaf" as const, junction: q.junction.name },
+      label: ["Cut along a leaf from ", { junction: q.junction.name }, ...orbitText(q.orbit)] as Text,
+      rating: q.orbit.length,
+    })),
     ...singularities.map((q) => ({
       move: { kind: "replace puncture by singularity" as const, junction: q.junction.name },
       label: [
@@ -789,9 +776,10 @@ export function combine(moves: readonly Move[]): Move {
 /**
  * The concrete choices within a move, computed on demand (some need the move to be tried on a copy): the fold
  * options of an inefficiency step, the centres of a collapse, the strip to remove at a valence-2 junction, the pieces
- * of a reduction, the cuts of a closed surface. Empty if the move has no further choice.
+ * of a reduction, the cuts of a closed surface, the strips to delete for the shortcut. Empty if the move has no further
+ * choice. `remark` keeps the model through the closed-surface moves, so that μ can be rated (see `MoveHooks.remark`).
  */
-export function variants(fs: FibredSurface, move: Move): MoveOption[] {
+export function variants(fs: FibredSurface, move: Move, remark?: RemarkingProvider): MoveOption[] {
   switch (move.kind) {
     case "collapse invariant subforest": {
       const components = fs.graph.components([...move.strips].map((n) => strip(fs, n).edge));
@@ -938,8 +926,6 @@ export function variants(fs: FibredSurface, move: Move): MoveOption[] {
       const all = prongs(tt);
       const q = fs.graph.vertices.find((v) => v.name === move.junction);
       if (q === undefined) return [];
-      if (cutTooFine(tt, q))
-        throw new Error("the preimages of the leaf are too short for the floating-point cut");
       /** The real branches of a slit, the first `max` of them (as strip names). */
       const branches = (path: readonly OrientedEdge[], max = Infinity): TextPart[] => {
         const real = path.filter((x) => tt.kind.get(x.edge) === "real");
@@ -952,7 +938,7 @@ export function variants(fs: FibredSurface, move: Move): MoveOption[] {
         junction: (tt.junctionOf.get((path[0] as OrientedEdge).source) as Vertex).name,
       });
       return cutOptions(tt, prongsOfOrbit(tt, q)).map((o) => {
-        const slits = slitsForProng(tt, o.prong, o.realBranches);
+        const { slits } = slitsForProng(tt, o.prong, o.realBranches);
         const [L, ...preimages] = slits as [Slit, ...Slit[]];
         const total = slits.reduce(
           (n, slit) => n + slit.path.filter((x) => tt.kind.get(x.edge) === "real").length,
@@ -988,13 +974,32 @@ export function variants(fs: FibredSurface, move: Move): MoveOption[] {
                 from(slit.path),
                 ": ",
                 ...branches(slit.path),
-                ...(slit.partialLength !== undefined ? [" (the last partly)"] : []),
+                ...(slit.partial ? [" (the last partly)"] : []),
               ]),
               ".",
             ] as Text,
           }),
         };
       });
+    }
+    case "replace puncture by singularity": {
+      if (move.fill !== undefined) return [];
+      const q = polygonSingularities(fs).find((s) => s.junction.name === move.junction);
+      if (q === undefined) return [];
+      return ratedFillings(fs, q, remark && ((tt) => remark(fs, tt, q.orbit))).map((f) => ({
+        move: { ...move, fill: f.letters },
+        label: f.label,
+        rating: f.growth,
+        ratingText: [
+          `λ ${f.growth.toFixed(4)}`,
+          ...(f.sideCrossings === undefined
+            ? []
+            : [`${f.sideCrossings} side ${f.sideCrossings === 1 ? "crossing" : "crossings"}`]),
+        ].join(", "),
+        ratingTitle:
+          "the growth after deleting the strips and pulling tight" +
+          (f.sideCrossings === undefined ? "" : ", and the side crossings of all strips then"),
+      }));
     }
     default:
       return [];
@@ -1166,16 +1171,35 @@ export function autopilot(fs: FibredSurface, options: AutopilotOptions = {}): Au
     if (limit !== undefined) break;
     // A default that is greyed out (a move switched off in the options) is left to the user.
     if (suggestion.autopilotMove === undefined && suggestion.options[0]?.discouraged) break;
-    const move = suggestion.autopilotMove ?? (suggestion.options[0] as MoveOption).move;
+    // The closed-surface options are tried in turn while a cut finds no length (they don't change the surface).
+    const candidates =
+      suggestion.autopilotMove !== undefined
+        ? [suggestion.autopilotMove]
+        : suggestion.kind === "closed surface"
+          ? suggestion.options.filter((o) => !o.discouraged).map((o) => o.move)
+          : [(suggestion.options[0] as MoveOption).move];
+    let move = candidates[0] as Move;
     // A fold starts a new follow-up (or ends it); the bookkeeping steps in between keep it.
-    const folds = move.kind === "fold" || move.kind === "remove inefficiency";
     let next: FollowUp | undefined;
-    const done = narrated(() =>
-      applyMove(surface, move, {
-        followUp: (point) => (next = point),
-        ...(options.remark && { remark: options.remark }),
-      }),
-    );
+    const apply = (m: Move) =>
+      narrated(() =>
+        applyMove(surface, m, {
+          followUp: (point) => (next = point),
+          ...(options.remark && { remark: options.remark }),
+        }),
+      );
+    let done: ReturnType<typeof apply> | undefined;
+    for (const [i, candidate] of candidates.entries()) {
+      move = candidate;
+      try {
+        done = apply(candidate);
+        break;
+      } catch (e) {
+        if (!(e instanceof NoCutFound) || i === candidates.length - 1) throw e;
+      }
+    }
+    if (done === undefined) break;
+    const folds = move.kind === "fold" || move.kind === "remove inefficiency";
     surface = done.result;
     if (folds) followUp = next;
     moves.push(move);
