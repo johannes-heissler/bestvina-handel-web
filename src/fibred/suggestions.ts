@@ -944,27 +944,17 @@ export function variants(fs: FibredSurface, move: Move, remark?: RemarkingProvid
           (n, slit) => n + slit.path.filter((x) => tt.kind.get(x.edge) === "real").length,
           0,
         );
-        const cutAlong =
-          preimages.length === 0
-            ? "L alone"
-            : `L and ${preimages.length} ${preimages.length === 1 ? "preimage" : "preimages"}`;
         return {
           move: {
             ...move,
             prong: all.findIndex((p) => p.atSwitch === o.prong.atSwitch && p.above === o.prong.above),
             realBranches: o.realBranches,
           },
-          label: [
-            "The leaf of length ",
-            `${o.realBranches}`,
-            " from ",
-            from(L.path),
-            ": ",
-            ...branches(L.path, 8),
-            ` (prong period ${slits.length}: cut along ${cutAlong}, ${total} branches in total)`,
-          ],
+          label: ["leaf ", ...branches(L.path, 8), " from ", from(L.path), ` (length ${o.realBranches})`],
           rating: o.realBranches,
-          ratingText: `${o.realBranches} branches`,
+          ratingText: `${slits.length} ${slits.length === 1 ? "leaf" : "leaves"}, ${total} branches`,
+          ratingTitle:
+            "L and its preimages (one per prong of the orbit), and the real branches they run through",
           ...(preimages.length > 0 && {
             details: [
               "Cut together with its preimages ",
