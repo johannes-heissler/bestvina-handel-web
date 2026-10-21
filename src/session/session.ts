@@ -12,6 +12,7 @@ import type { FibredSurface } from "../fibred/fibred-surface";
 import { applyMove, type FollowUp, type Move } from "../fibred/move";
 import {
   autopilot,
+  type AutopilotLimit,
   type AutopilotOptions,
   nextSuggestion,
   type OptionalMove,
@@ -84,6 +85,11 @@ export interface Preview {
   readonly followUp?: FollowUp;
   /** The automatic steps after the move: each move, its explanation and the surface after it. */
   readonly automatic: readonly { move: Move; steps: readonly NarratedStep[]; surface: FibredSurface }[];
+  /**
+   * The limit that stopped the automatic steps while there were more to do: {@link PREVIEW_AUTOMATIC_STEPS} steps or
+   * {@link PREVIEW_TIME_LIMIT}.
+   */
+  readonly limit?: AutopilotLimit;
   /** The growth of g after the move and the automatic steps (undefined if it can't be computed). */
   readonly growth?: number;
   /** Why the move can't be applied. */
@@ -91,6 +97,11 @@ export interface Preview {
   /** How long computing the preview took (ms). */
   readonly time: number;
 }
+
+/** How many automatic steps a preview (and so applying a move) does at most. */
+export const PREVIEW_AUTOMATIC_STEPS = 50;
+/** After how many ms a preview starts no further automatic step. */
+export const PREVIEW_TIME_LIMIT = 3000;
 
 export class Session {
   readonly root: HistoryNode;
@@ -161,13 +172,16 @@ export class Session {
 
   /**
    * Runs the autopilot from the current state; every step becomes a node (the "run ahead" buttons), and the last one
-   * becomes current.
+   * becomes current. Returns where it stopped, and the limit that stopped it if there was more to do.
    */
-  runAutopilot(options: Omit<AutopilotOptions, "onStep"> = {}): Suggestion {
+  runAutopilot(options: Omit<AutopilotOptions, "onStep"> = {}): {
+    stoppedAt: Suggestion;
+    limit?: AutopilotLimit;
+  } {
     const copy = this.current.surface.copy();
     copy.onError = () => {};
     let node = this.current;
-    const { stoppedAt } = autopilot(copy, {
+    const { stoppedAt, limit } = autopilot(copy, {
       disabled: this.disabled,
       remark: this.remarker(this.current),
       ...options,
@@ -180,14 +194,16 @@ export class Session {
       },
     });
     this.select(node);
-    return stoppedAt;
+    return { stoppedAt, ...(limit && { limit }) };
   }
 
   private readonly previews = new WeakMap<HistoryNode, Map<string, Preview>>();
 
   /**
    * What `move` will do from the current state (computed once per state, move and automatic kinds): applied to a
-   * copy, with its explanation and the states in between, then the automatic steps (at most 50).
+   * copy, with its explanation and the states in between, then the automatic steps (at most
+   * {@link PREVIEW_AUTOMATIC_STEPS} and for at most {@link PREVIEW_TIME_LIMIT}, so that a surface on which they never
+   * end doesn't hang the app).
    */
   preview(move: Move, automatic: ReadonlySet<SuggestionKind> = new Set()): Preview {
     const node = this.current;
@@ -222,17 +238,19 @@ export class Session {
       let k = 0;
       const explanation = told.map((step) => (step.note ? { note: step.text } : { step: k++ }));
       const auto: { move: Move; steps: readonly NarratedStep[]; surface: FibredSurface }[] = [];
+      let limit: AutopilotLimit | undefined;
       if (automatic.size > 0) {
         const start = result.copy();
         start.onError = () => {};
-        autopilot(start, {
+        ({ limit } = autopilot(start, {
           automatic,
           remark: this.remarker(node),
           disabled: this.disabled,
-          maxSteps: 50,
+          maxSteps: PREVIEW_AUTOMATIC_STEPS,
+          timeLimit: PREVIEW_TIME_LIMIT,
           ...(hint.followUp && { followUp: hint.followUp }),
           onStep: (m, surface, texts) => auto.push({ move: m, steps: texts, surface: surface.copy() }),
-        });
+        }));
       }
       let growth: number | undefined;
       try {
@@ -248,6 +266,7 @@ export class Session {
         surface: result,
         ...(hint.followUp && { followUp: hint.followUp }),
         automatic: auto,
+        ...(limit && { limit }),
         ...(growth !== undefined && { growth }),
         time: performance.now() - started,
       };
@@ -284,7 +303,9 @@ export class Session {
         preview.surface,
         preview.followUp,
         preview.explanation.map((x) =>
-          "note" in x ? { text: x.note, note: true as const } : { text: (preview.steps[x.step] as PreviewStep).text },
+          "note" in x
+            ? { text: x.note, note: true as const }
+            : { text: (preview.steps[x.step] as PreviewStep).text },
         ),
       );
     for (const step of preview.automatic) {

@@ -159,6 +159,17 @@ describe("autopilot", () => {
     expect(stoppedAt.kind).not.toBe("pull tight");
   });
 
+  it("says which limit stopped it while there was more to do", () => {
+    const pointPush = () => buildPreset(PRESETS.find((p) => p.name === "Point push")!);
+    const steps = autopilot(pointPush(), { maxSteps: 1 });
+    expect(steps.moves).toHaveLength(1);
+    expect(steps.limit).toBe("steps");
+    const time = autopilot(pointPush(), { timeLimit: 0 });
+    expect(time.moves).toHaveLength(0);
+    expect(time.limit).toBe("time");
+    expect(autopilot(pointPush()).limit).toBeUndefined();
+  });
+
   it("stops at a reduction by default", () => {
     const fs = FibredSurface.fromText([["a", "b", "A", "B", "c", "d", "C", "D"]], "a -> a b B b, b -> b a b");
     expect(autopilot(fs).stoppedAt.kind).toBe("reducible");

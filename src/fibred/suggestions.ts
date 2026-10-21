@@ -1076,6 +1076,8 @@ export interface AutopilotOptions {
   /** The suggestion kinds whose default is applied without asking; the autopilot stops at any other. */
   readonly automatic?: ReadonlySet<SuggestionKind>;
   readonly maxSteps?: number;
+  /** The time (ms) after which no further move is started; unlimited if undefined. */
+  readonly timeLimit?: number;
   /** Called after each move with the resulting surface, e.g. to add it to the history (copy it there). */
   readonly onStep?: (move: Move, surface: FibredSurface, steps: readonly NarratedStep[]) => void;
   /** Keeps the model through the closed-surface moves (see `MoveHooks.remark`). */
@@ -1088,12 +1090,18 @@ export interface AutopilotResult {
   readonly moves: readonly Move[];
   /** The suggestion the autopilot stopped at: finished, or a kind it doesn't apply by itself. */
   readonly stoppedAt: Suggestion;
+  /** The limit that stopped it while there was more to do (`stoppedAt` is then of a kind it applies). */
+  readonly limit?: AutopilotLimit;
 }
+
+/** What can stop the autopilot before it's done: `maxSteps` or `timeLimit`. */
+export type AutopilotLimit = "steps" | "time";
 
 /**
  * Applies the default option of each suggestion while its kind is in `automatic` (the C# `BestvinaHandelAlgorithm`,
  * and the semi-automatic mode: e.g. `automatic = {"pull tight", "remove valence-2 junctions"}` skips just those).
- * Checks the integrity after every move.
+ * Checks the integrity after every move. Stops after `maxSteps` moves, or when `timeLimit` has passed (the move under
+ * way is finished).
  *
  * @throws Error if a move leaves the surface inconsistent.
  */
@@ -1107,8 +1115,13 @@ export function autopilot(fs: FibredSurface, options: AutopilotOptions = {}): Au
     followUp,
     ...(options.disabled && { disabled: options.disabled }),
   });
+  const deadline = options.timeLimit === undefined ? Infinity : performance.now() + options.timeLimit;
+  let limit: AutopilotLimit | undefined;
   let suggestion = nextSuggestion(surface, context(followUp));
-  while (automatic.has(suggestion.kind) && moves.length < maxSteps) {
+  while (automatic.has(suggestion.kind)) {
+    if (moves.length >= maxSteps) limit = "steps";
+    else if (performance.now() >= deadline) limit = "time";
+    if (limit !== undefined) break;
     // A default that is greyed out (a move switched off in the options) is left to the user.
     if (suggestion.autopilotMove === undefined && suggestion.options[0]?.discouraged) break;
     const move = suggestion.autopilotMove ?? (suggestion.options[0] as MoveOption).move;
@@ -1129,5 +1142,5 @@ export function autopilot(fs: FibredSurface, options: AutopilotOptions = {}): Au
     options.onStep?.(move, surface, done.steps);
     suggestion = nextSuggestion(surface, context(followUp));
   }
-  return { surface, moves, stoppedAt: suggestion };
+  return { surface, moves, stoppedAt: suggestion, ...(limit && { limit }) };
 }

@@ -8,12 +8,23 @@ import type { FibredSurface } from "../fibred/fibred-surface";
 import type { Wedge } from "../fibred/fold-highlight";
 import type { Move } from "../fibred/move";
 import type { Motion } from "../fibred/narration";
-import type { OptionalMove, SuggestionKind } from "../fibred/suggestions";
-import { type HistoryNode, type Preview, Session, type SessionFile, type Start } from "../session/session";
+import type { AutopilotLimit, OptionalMove, SuggestionKind } from "../fibred/suggestions";
+import {
+  type HistoryNode,
+  PREVIEW_AUTOMATIC_STEPS,
+  PREVIEW_TIME_LIMIT,
+  type Preview,
+  Session,
+  type SessionFile,
+  type Start,
+} from "../session/session";
 import { encodeSession } from "../session/share";
 import { store } from "./storage";
 
 export const AUTOSAVE_KEY = "last-session";
+
+/** After how many ms running ahead starts no further step. */
+const RUN_AHEAD_TIME_LIMIT = 20000;
 
 export class AppState {
   session = $state.raw<Session | undefined>(undefined);
@@ -68,13 +79,28 @@ export class AppState {
     this.run(() => {
       const session = this.session;
       if (session === undefined) return;
-      session.commit(session.preview(move, options.thenAutomatic ? new Set(this.automatic) : new Set()));
+      const preview = session.preview(move, options.thenAutomatic ? new Set(this.automatic) : new Set());
+      session.commit(preview);
+      this.reportLimit(preview.limit);
     });
   }
 
   /** Applies a move that was previewed (with the automatic steps it included). */
   commit(preview: Preview): void {
-    this.run(() => this.session?.commit(preview));
+    this.run(() => {
+      this.session?.commit(preview);
+      this.reportLimit(preview.limit);
+    });
+  }
+
+  /** The message when the automatic steps after a move stopped at a limit of the preview. */
+  private reportLimit(limit: AutopilotLimit | undefined): void {
+    if (limit === undefined) return;
+    const reason =
+      limit === "steps"
+        ? `after ${PREVIEW_AUTOMATIC_STEPS} steps`
+        : `after ${PREVIEW_TIME_LIMIT / 1000} seconds`;
+    this.message = `The automatic steps stopped ${reason}, though there are more: apply the next suggestion or run ahead to continue.`;
   }
 
   select(node: HistoryNode): void {
@@ -83,8 +109,14 @@ export class AppState {
 
   runAutopilot(automatic: ReadonlySet<SuggestionKind> = new Set(this.automatic)): void {
     this.run(() => {
-      const stopped = this.session?.runAutopilot({ automatic });
-      if (stopped && stopped.kind !== "finished") this.message = `The autopilot stopped: ${stopped.kind}.`;
+      const result = this.session?.runAutopilot({ automatic, timeLimit: RUN_AHEAD_TIME_LIMIT });
+      if (result === undefined) return;
+      const { stoppedAt, limit } = result;
+      if (limit === "time")
+        this.message = `The autopilot stopped after ${RUN_AHEAD_TIME_LIMIT / 1000} seconds, at ${stoppedAt.kind}: run ahead again to continue.`;
+      else if (limit === "steps")
+        this.message = `The autopilot stopped at its step limit, at ${stoppedAt.kind}: run ahead again to continue.`;
+      else if (stoppedAt.kind !== "finished") this.message = `The autopilot stopped: ${stoppedAt.kind}.`;
     });
   }
 

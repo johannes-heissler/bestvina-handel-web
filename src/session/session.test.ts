@@ -25,7 +25,7 @@ describe("Session", () => {
   it("records every autopilot step as a node", () => {
     const session = Session.create({ kind: "preset", preset: "Anosov map of the torus" });
     session.disabled = new Set(["move vertices"]); // (these tests are about folds and the bookkeeping steps)
-    const stopped = session.runAutopilot();
+    const { stoppedAt: stopped } = session.runAutopilot();
     expect(stopped.kind).toBe("finished");
     const conjugated = Session.create({
       kind: "model",

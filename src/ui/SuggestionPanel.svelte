@@ -15,7 +15,7 @@
   } from "../fibred/suggestions";
   import type { FibredSurface } from "../fibred/fibred-surface";
   import { foldHighlight, type Wedge } from "../fibred/fold-highlight";
-  import type { Preview } from "../session/session";
+  import { PREVIEW_AUTOMATIC_STEPS, PREVIEW_TIME_LIMIT, type Preview } from "../session/session";
   import type { Motion } from "../fibred/narration";
   import { describeMove } from "../session/describe";
   import { app } from "./state.svelte";
@@ -407,6 +407,10 @@
         {#if preview.automatic.length === 1}Step {moments.length} is the automatic step after it.
         {:else if preview.automatic.length > 1}Steps {preview.steps.length + 1}–{moments.length} are the automatic steps
           after it.
+        {/if}{#if preview.limit === "steps"}{" "}The automatic steps stop there, at the limit of {PREVIEW_AUTOMATIC_STEPS}, though
+          there are more.
+        {:else if preview.limit === "time"}{" "}The automatic steps stop there, after {PREVIEW_TIME_LIMIT / 1000} seconds,
+          though there are more.
         {/if}{" "}Afterwards: {preview.growth === undefined ? "the growth can't be computed" : `growth λ = ${preview.growth.toFixed(6)}`}
         <span class="timing">({preview.time.toFixed(0)} ms)</span>
       </p>

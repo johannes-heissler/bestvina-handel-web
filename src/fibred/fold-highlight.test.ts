@@ -14,10 +14,10 @@ function bh61AtAFoldOfOrder2() {
     "move vertices",
   ]);
   const orderTwo = (o: { label: Text }) => plainText(o.label).includes("order 2");
-  let suggestion = session.runAutopilot({ automatic });
+  let suggestion = session.runAutopilot({ automatic }).stoppedAt;
   for (let n = 0; n < 10 && suggestion.kind === "fold" && !suggestion.options.some(orderTwo); n++) {
     session.apply(suggestion.options[0]!.move);
-    suggestion = session.runAutopilot({ automatic });
+    suggestion = session.runAutopilot({ automatic }).stoppedAt;
   }
   return { surface: session.current.surface, suggestion, option: suggestion.options.find(orderTwo) };
 }

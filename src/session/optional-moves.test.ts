@@ -40,7 +40,9 @@ describe("moves beyond the original algorithm", () => {
     expect(s.kind).toBe("reducible");
     for (const o of s.options.filter((x) => x.move.kind === "reduce" || x.move.kind === "split junctions"))
       expect(o.discouraged).toBe(true);
-    const stopped = reducible.runAutopilot({ automatic: new Set([...DEFAULT_AUTOMATIC, "reducible"]) });
+    const { stoppedAt: stopped } = reducible.runAutopilot({
+      automatic: new Set([...DEFAULT_AUTOMATIC, "reducible"]),
+    });
     expect(stopped.kind).toBe("reducible");
     expect(reducible.path()).toHaveLength(1);
   });
