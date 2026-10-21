@@ -261,12 +261,13 @@ export function renderSvg(fs: FibredSurface, layout: Layout, options: RenderOpti
   const pixelsOf = (e: Edge) => options.widths?.get(e) ?? basePixels(e) * shrink;
   /** The width of the strip e in the hyperbolic metric (in display units for flat charts), times the width factor. */
   const trueWidth = (e: Edge) => ((pixelsOf(e) * widthScale) / scale) * centreMetric;
-  /** The width of e in display units at the display point z, across the unit direction n (at least 0.4 pixels). */
-  // (At most twice the width at the centre: in the half-plane, strips high up would get arbitrarily wide.)
+  /** The width of e in display units at the display point z, across the unit direction n (at least 1.2 pixels). */
+  // (At most twice the width at the centre: in the half-plane, strips high up would get arbitrarily wide. The minimum
+  // wins over that cap: when a junction lies on another one, `shrink` is 0, and the strips must still be drawn.)
   const widthAt = (e: Edge, z: Complex, n: Complex) =>
-    Math.min(
-      (2 * trueWidth(e)) / centreMetric,
-      Math.max((0.4 * widthScale) / scale, trueWidth(e) / metric(z, n)),
+    Math.max(
+      (1.2 * widthScale) / scale,
+      Math.min((2 * trueWidth(e)) / centreMetric, trueWidth(e) / metric(z, n)),
     );
   /** The region between the offsets from·w and to·w across a display polyline of e (w: the width of e there). */
   const band = (e: Edge, line: readonly Complex[], from: number, to: number): string =>
