@@ -24,6 +24,7 @@ import { EdgePath } from "../graph/edge-path";
 import { firstUnusedName, letterIndex, VERTEX_NAMES } from "../graph/names";
 import { type Edge, type OrientedEdge, RibbonGraph, type Vertex } from "../graph/ribbon-graph";
 import { imageProng, type Prong, switchArc } from "./singular-leaves";
+import { leafPath } from "./leaf-paths";
 import { strands as computeStrands } from "./strands";
 import { type BranchKind, entriesInto, type TrainTrack } from "./train-track";
 
@@ -60,7 +61,11 @@ function traceProng(tt: TrainTrack, prong: Prong, until: { length?: number; coun
   return slit;
 }
 
-/** {@link traceProng}, but stopping where the leaf runs into a corner (`blocked`) instead of throwing. */
+/**
+ * {@link traceProng}, but returning where the leaf runs into a corner (`blocked`) instead of throwing. The train path
+ * of the leaf is found combinatorially ({@link leafPath}); the heights are only computed along it (kept inside each
+ * branch, where rounding would put the leaf just outside).
+ */
 function traceUntilCorner(
   tt: TrainTrack,
   prong: Prong,
@@ -69,14 +74,21 @@ function traceUntilCorner(
   const widths = tt.widths as ReadonlyMap<Edge, number>;
   const corner = switchArc(tt, prong.atSwitch).infinitesimal.find((i) => i.end === prong.below);
   if (corner === undefined) throw new Error("The prong's lower branch doesn't start at its switch");
+  const real = (x: OrientedEdge) => tt.kind.get(x.edge) === "real";
+  const leaf = leafPath(tt, prong, (p) =>
+    until.count !== undefined
+      ? p.filter(real).length >= until.count
+      : p.reduce((l, x) => l + (tt.lengths.get(x.edge) as number), 0) >= (until.length as number),
+  );
   const path: OrientedEdge[] = [];
   const heights: number[] = [];
+  if (leaf === undefined) return { path, heights, blocked: prong.atSwitch };
   let [s, h, side] = [prong.atSwitch, corner.top, "real" as BranchKind];
   let [travelled, count] = [0, 0];
-  for (let step = 0; step < 100_000; step++) {
-    const interval = switchArc(tt, s)[side].find((i) => i.bottom < h && h < i.top);
-    if (interval === undefined) return { path, heights, blocked: s };
-    const y = h - interval.bottom;
+  for (const x of leaf) {
+    const interval = switchArc(tt, s)[side].find((i) => i.end === x);
+    if (interval === undefined) throw new Error(`The leaf's branch ${x} doesn't leave ${s}`);
+    const y = Math.min(Math.max(h - interval.bottom, 0), interval.top - interval.bottom);
     path.push(interval.end);
     heights.push(y);
     if (side === "real") {

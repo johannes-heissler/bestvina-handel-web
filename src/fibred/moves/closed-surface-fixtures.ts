@@ -93,3 +93,23 @@ export const awayFromQ = (): FibredSurface =>
     ],
     "s_γ_1 ↦ x u_4 c a X B z_9 d C U_3 c_15 x A_2, c_15 ↦ x A_2 d a w_γ_1 s_γ_1, w_γ_1 ↦ u_4 c a X B z_9 d C U_3 c_15 x A_2 d a w_γ_1 s_γ_1 b x u_4 c a X B z_9 d C U_3 c_15 x A_2 d a w_γ_1 s_γ_1 b, u_4 ↦ u_4 c a X B z_9 d C U_3 c_15 x A_2 d a w_γ_1 s_γ_1 b x u_4 c a X B z_9 d C U_3 c_15 x A_2 d a w_γ_1, a ↦ a X B z_9 d a, c ↦ u_3 c, d ↦ c a X B z_9 d, a_2 ↦ U_3 W_Γ_1 A D a_2 X C_15 u_3 c D Z_9 b x A C U_4 X B S_Γ_1 W_Γ_1 A D a_2 X C_15 u_3 c D Z_9 b x A C U_4, z_9 ↦ d a u_4, b ↦ Z_9, x ↦ b x, u_3 ↦ C_15",
   );
+
+/**
+ * g2-twistpush:T8P2:s482012, after four closed-surface moves: D_c₁⁻¹ ∘ D_a ∘ P_α ∘ P_β̄⁻¹ ∘ D_a ∘ D_c₁ ∘ D_c ∘ D_d⁻¹ ∘ D_c ∘ D_d⁻¹.
+ * Traced in floating point, the leaf of the prong at v_1_c (period 18) seems to run into a corner after 3 branches;
+ * it passes within rounding error of the boundary of a branch there.
+ */
+export const falseCorner = (): FibredSurface =>
+  build(
+    [
+      ["v_12", ["b", "V_1_Α", "q_β", "Q_Γ", "P_Γ", "r_α", "T_Δ", "B", "z"]],
+      ["w", ["U", "v_1_α", "S_Δ"]],
+      ["q", ["p_γ", "C", "r_δ"]],
+      ["r", ["q_γ", "D", "c"]],
+      ["s", ["Q_Β", "X", "d"]],
+      ["t", ["t_δ", "Y", "x"]],
+      ["v_2", ["s_δ", "Z", "y"]],
+      ["v_1", ["R_Α", "R_Δ", "u"]],
+    ],
+    "v_1_α ↦ v_1_α b z y x d c r_δ u v_1_α b r_α u S_Δ Z b z y x d c r_δ u v_1_α, b ↦ b z y x d c r_δ u v_1_α b z y x d c r_δ u v_1_α b r_α u S_Δ Z b z y x d c r_δ u v_1_α b z y x d c r_δ u v_1_α b, r_α ↦ r_α u v_1_α b T_Δ Y, z ↦ z y, q_β ↦ Q_Γ, r_δ ↦ u v_1_α b r_α u S_Δ, p_γ ↦ R_Α, c ↦ r_δ, q_γ ↦ p_γ, d ↦ c, x ↦ d, t_δ ↦ Q_Β V_1_Α U R_Δ C D X Y Z B z s_δ U R_Α B V_1_Α U R_Δ C D X Y Z B V_1_Α U R_Δ C D X Y Z B z s_δ U R_Α B V_1_Α U R_Δ C D X Y Z B V_1_Α U R_Δ C D X Y Z B V_1_Α U R_Δ C D X Y Z B z s_δ U R_Α B V_1_Α U R_Δ C D X Y Z B V_1_Α U R_Δ C D X Y Z B z y t_δ B V_1_Α U R_Α, s_δ ↦ t_δ B V_1_Α U R_Α B V_1_Α U R_Δ C D X Y Z B V_1_Α U R_Δ C D X Y Z B z s_δ U R_Α B V_1_Α U R_Δ C D X Y Z B V_1_Α U R_Δ C D X Y Z B V_1_Α U R_Δ C D X Y Z B z s_δ U R_Α B V_1_Α U R_Δ C D X Y Z B V_1_Α, y ↦ x, u ↦ Z b z y x d c r_δ u",
+  );
