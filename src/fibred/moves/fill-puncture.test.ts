@@ -3,7 +3,8 @@ import { closedGenus2OneCusp, torusAnosov } from "../../examples/maps";
 import { runAlgorithm } from "../algorithm";
 import { inefficiencies } from "./inefficiency";
 import { perronFrobenius } from "../perron-frobenius";
-import { trainTrack } from "../train-track";
+import { entriesInto, trainTrack } from "../train-track";
+import { entersQ } from "./closed-surface-fixtures";
 import {
   blowUpOrbit,
   fillPuncture,
@@ -73,4 +74,17 @@ describe("closed surfaces: replacing the puncture by a singularity", () => {
       }
     expect([...results]).toEqual(["4.212077"]);
   }, 30_000); // about 7 s when all test files run in parallel
+
+  it("maps a junction that g maps into Q to a corner, the strips of its other gate taking a side first", () => {
+    const fs = entersQ();
+    const q = polygonSingularities(fs).find((s) => s.junction.name === "v")!;
+    expect(q.orbit.map((v) => v.name)).toEqual(["v"]);
+    const entries = [...entriesInto(trainTrack(fs), new Set(q.orbit)).values()];
+    expect(entries.map((e) => [e.junction.name, e.sides.size])).toEqual([["q", 1]]);
+    const { surface } = blowUpOrbit(fs, q);
+    expect(surface.g.checkContinuity()).toEqual([]);
+    const next = replacePunctureBySingularity(fs, q);
+    expect(next.checkIntegrity()).toEqual([]);
+    expect(next.g.preservesBoundaryWords()).toBe(true);
+  });
 });

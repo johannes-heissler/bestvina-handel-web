@@ -14,7 +14,7 @@ import type { TextPart } from "../suggestions";
 import { blowUpText, fillingText, finishRemarking, junctionPartName } from "./cut-closed-surface";
 import { tightenMarking } from "./isotopy";
 import { mergeAllValenceTwoLines } from "./valence";
-import { trainTrack, type TrainTrack } from "../train-track";
+import { entriesInto, trainTrack, type TrainTrack } from "../train-track";
 
 /** A junction with an infinitesimal polygon (a singularity of angle ≥ 3π) and its period under g. */
 export interface Singularity {
@@ -195,15 +195,12 @@ export interface BlownUp {
  * infinitesimal branches inserted at the turns at Q (read off g_τ). This is a spine of Σ ∖ ({p} ∪ Q) with a
  * train-track map of the same growth; the polygons form its periphery.
  *
- * @throws Error if a junction outside Q is mapped into Q (not supported yet).
+ * A junction outside Q that g maps into Q (it has at most two gates) is mapped to the corner of one gate, and the
+ * strips of the other gate take the side of the polygon to their corner first (see {@link entriesInto}).
  */
 export function blowUpOrbit(fs: FibredSurface, q: Singularity, tt: TrainTrack = trainTrack(fs)): BlownUp {
   const inQ = new Set(q.orbit);
-  for (const v of fs.graph.vertices)
-    if (!inQ.has(v) && inQ.has(fs.g.vertexImage(v)))
-      throw new Error(
-        `The junction ${v} outside the orbit of ${q.junction} is mapped into it; not supported yet`,
-      );
+  const entries = entriesInto(tt, inQ);
 
   const graph = new RibbonGraph();
   const vertexOf = new Map<Vertex, Vertex>(); // junction outside Q, or switch at Q → vertex of G₀
@@ -257,13 +254,28 @@ export function blowUpOrbit(fs: FibredSurface, q: Singularity, tt: TrainTrack = 
   const keep = (x: OrientedEdge) => tt.kind.get(x.edge) === "real" || atQ(x.edge);
   const g0 = new CombinatorialMap(graph, graph);
   for (const [source, target] of vertexOf) {
-    // Switches (at Q) are mapped as in τ, junctions outside Q as in G.
-    const image = tt.junctionOf.has(source) ? tt.gTau.vertexImage(source) : fs.g.vertexImage(source);
+    // Switches (at Q) are mapped as in τ, junctions outside Q as in G, or to a corner if they enter Q.
+    const entry = entries.get(source);
+    const image = tt.junctionOf.has(source)
+      ? tt.gTau.vertexImage(source)
+      : entry !== undefined
+        ? tt.gTau.vertexImage(entry.base)
+        : fs.g.vertexImage(source);
     g0.setVertexImage(target, vertexOf.get(image) as Vertex);
   }
+  /** The side of the polygon from the image corner of the junction where `end` starts to that of its gate, if any. */
+  const side = (end: OrientedEdge): OrientedEdge[] => {
+    const s = entries.get(end.source)?.sides.get(tt.switchOf.get(end) as Vertex);
+    return s === undefined ? [] : [orient(s)];
+  };
   for (const [original, edge] of edgeOf) {
     const branch = tt.realBranch.get(original) ?? original;
-    g0.setImage(edge.forward, EdgePath.from(tt.gTau.image(branch.forward).letters.filter(keep).map(orient)));
+    const image = tt.gTau.image(branch.forward).letters.filter(keep).map(orient);
+    const ends =
+      branch === original
+        ? { start: [], end: [] }
+        : { start: side(original.forward), end: side(original.backward).map((x) => x.reversed) };
+    g0.setImage(edge.forward, EdgePath.from([...ends.start, ...image, ...ends.end]));
   }
 
   const surface = new FibredSurface({ graph, g: g0, peripheral: [...polygons.values()].flat() });

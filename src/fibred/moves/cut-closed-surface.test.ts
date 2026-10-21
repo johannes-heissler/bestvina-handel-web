@@ -21,7 +21,8 @@ import { autopilot, DEFAULT_AUTOMATIC, plainText } from "../suggestions";
 import { inefficiencies } from "./inefficiency";
 import { valenceTwoJunctions } from "./valence";
 import { pullTight } from "./pull-tight";
-import type { FibredSurface } from "../fibred-surface";
+import { FibredSurface } from "../fibred-surface";
+import { entersQ, shortBranch, thinSide } from "./closed-surface-fixtures";
 import { applyMove } from "../move";
 import { buildPreset, presetNamed } from "../../examples/presets";
 
@@ -179,4 +180,40 @@ describe("the length of L from the slits, without cutting (port note 15, update 
       expect(cutOptions(tt, prongsOfOrbit(tt, p)).map((o) => o.realBranches)).toContain(22);
     },
   );
+});
+
+describe("cases from the cut study", () => {
+  /** Cuts along the first option from the singularity at `junction`: g′ of the cut track has the same growth. */
+  const cutAt = (fs: FibredSurface, junction: string) => {
+    const tt = trainTrack(fs);
+    const q = fs.graph.vertices.find((v) => v.name === junction)!;
+    const [option] = cutOptions(tt, prongsOfOrbit(tt, q));
+    expect(option).toBeDefined();
+    // (cutClosedSurface goes on to remove B from the cut track, which lowers the growth)
+    const ct = cut(
+      tt,
+      slitsForProng(tt, option!.prong, option!.realBranches),
+      new Set(cutOrbit(tt, option!.prong)),
+    );
+    const track = new FibredSurface({ graph: ct.graph, g: ct.gPrime });
+    expect(track.g.checkContinuity()).toEqual([]);
+    expect(growth(track)).toBeCloseTo(tt.growth, 6);
+    const result = cutClosedSurface(tt, option!);
+    expect(result.surface.checkIntegrity()).toEqual([]);
+    expect(result.surface.g.preservesBoundaryWords()).toBe(true);
+    return { ...result, cut: ct };
+  };
+
+  it("cuts where a junction with two gates is mapped into Q (its parts take a side of the polygon)", () => {
+    const { cut: ct } = cutAt(entersQ(), "v");
+    expect([...ct.junctionParts].some((v) => ct.junctionOf.get(v)?.name === "q")).toBe(true);
+  });
+
+  it("keeps a strip that is shorter than the tolerance along the image of a whole piece", () => {
+    cutAt(shortBranch(), "p");
+  });
+
+  it("fits the images into the thin sides of Q despite the rounding error of the slit heights", () => {
+    expect(cutAt(thinSide(), "q").realBranches).toBe(46);
+  });
 });

@@ -25,7 +25,7 @@ import { firstUnusedName, letterIndex, VERTEX_NAMES } from "../graph/names";
 import { type Edge, type OrientedEdge, RibbonGraph, type Vertex } from "../graph/ribbon-graph";
 import { imageProng, type Prong, switchArc } from "./singular-leaves";
 import { strands as computeStrands } from "./strands";
-import type { BranchKind, TrainTrack } from "./train-track";
+import { type BranchKind, entriesInto, type TrainTrack } from "./train-track";
 
 const TOLERANCE = 1e-9;
 const near = (a: number, b: number, scale = 1) => Math.abs(a - b) <= TOLERANCE * Math.max(1, scale);
@@ -175,6 +175,59 @@ export interface Piece {
   /** Its length range along the branch (forward orientation); [0, 0] for infinitesimal branches. */
   readonly start: number;
   readonly end: number;
+}
+
+/**
+ * At the parts of the junctions that g maps into the blown-up orbit ({@link entriesInto}): the ends of the other gate
+ * take the piece of the polygon's side from the image corner of the base gate to theirs first (in a part, both lie in
+ * one piece of the side, since the cut set is invariant under f⁻¹), so that the part has a single image.
+ */
+function connectEntries(
+  tt: TrainTrack,
+  blownUp: ReadonlySet<Vertex>,
+  partStars: ReadonlyMap<Vertex, readonly ArcEnd[]>,
+  pieceDrafts: ReadonlyMap<string, readonly PieceDraft[]>,
+  gPrime: CombinatorialMap,
+): void {
+  const entries = entriesInto(tt, blownUp);
+  if (entries.size === 0) return;
+  const sideOf = new Map(
+    [...entries.values()].flatMap((entry) =>
+      [...entry.sides].map(([s, side]) => [s, { base: entry.base, side }] as const),
+    ),
+  );
+  /** The end of a piece at the part as an oriented edge leaving it, and the switch of its gate. */
+  const leaving = (x: ArcEnd) => {
+    const edge = x.piece.edge as Edge;
+    return {
+      end: x.leaves ? edge.forward : edge.backward,
+      gate: x.leaves ? x.piece.branch.source : x.piece.branch.target,
+    };
+  };
+  for (const ends of partStars.values()) {
+    const all = ends.map(leaving);
+    for (const { end, gate } of all) {
+      const entry = sideOf.get(gate);
+      if (entry === undefined) continue;
+      const base = all.find((x) => x.gate === entry.base);
+      if (base === undefined) continue; // (only the ends of this gate: the part maps to its corner)
+      const [from, to] = [gPrime.image(base.end).first?.source, gPrime.image(end).first?.source];
+      const { side } = entry;
+      const candidates = (pieceDrafts.get(`${side.edge.id}/0`) ?? [])
+        .map((p) => (side.isForward ? (p.edge as Edge).forward : (p.edge as Edge).backward))
+        .filter((y) => y.source === from && y.target === to);
+      if (candidates.length !== 1)
+        throw new Error(
+          `The part of ${end.source.name} meets ${candidates.length} pieces of the side ${side.edge.name} between its corners`,
+        );
+      const y = candidates[0] as OrientedEdge;
+      const image = gPrime.image(end.edge.forward);
+      gPrime.setImage(
+        end.edge.forward,
+        end.isForward ? EdgePath.of(y).concat(image) : image.concat(EdgePath.of(y.reversed)),
+      );
+    }
+  }
 }
 
 /** The result of {@link cut}. */
@@ -494,11 +547,18 @@ export function cut(tt: TrainTrack, slits: readonly Slit[], blownUp: ReadonlySet
   const λ = tt.growth;
   const gPrime = new CombinatorialMap(graph, graph);
   const piecesAt = (e: Edge, k: number) => pieceDrafts.get(key(e, k)) as PieceDraft[];
+  // The heights of the slits are traced through branches of very different widths, so their rounding errors are
+  // absolute, on the scale of the widest branch: a thin (e.g. infinitesimal) branch needs more than TOLERANCE · w.
+  const heightError = 1e-11 * Math.max(...widths.values());
   for (const [edge, piece] of pieces) {
     const strand = strandOf.get(piece.branch);
     if (strand === undefined) throw new Error(`No strand for ${piece.branch}`);
-    const [s0, s1] = [λ * piece.start, λ * piece.end];
-    const scale = Math.max(1, s1);
+    // The image of the piece along the strand. Where the piece ends at a switch, so does its image (exactly: the PF
+    // lengths span many orders of magnitude, and a short branch at the end must not be lost to the tolerance).
+    const l0 = lengthOf(piece.branch);
+    const s0 = piece.start <= 0 ? -Infinity : λ * piece.start;
+    const s1 = piece.end >= l0 ? Infinity : λ * piece.end;
+    const scale = Math.max(1, λ * piece.end);
     const image: OrientedEdge[] = [];
     let a = 0; // cumulative length along the path
     strand.path.forEach((c, i) => {
@@ -515,9 +575,10 @@ export function cut(tt: TrainTrack, slits: readonly Slit[], blownUp: ReadonlySet
         : [o + piece.bottom / λ, o + piece.top / λ];
       const w = widthOf(c.edge);
       const [low, high] = c.isForward ? [y0, y1] : [w - y1, w - y0];
+      const tolerance = Math.max(TOLERANCE * w, heightError);
       const choose = (k: number) => {
         const candidate = piecesAt(c.edge, k).find(
-          (p) => p.bottom <= low + TOLERANCE * w && high <= p.top + TOLERANCE * w,
+          (p) => p.bottom <= low + tolerance && high <= p.top + tolerance,
         );
         if (candidate === undefined)
           throw new Error(`The image of a piece of ${piece.branch} doesn't fit into a piece of ${c.edge}`);
@@ -531,8 +592,10 @@ export function cut(tt: TrainTrack, slits: readonly Slit[], blownUp: ReadonlySet
         )
           choose(0);
       } else {
-        const [u0, u1] = [Math.max(s0, a) - a, Math.min(s1, a + l) - a];
-        if (u1 - u0 > TOLERANCE * scale) {
+        // A branch inside the image is taken whole, however short; one the image only overlaps needs a real overlap.
+        const whole = s0 <= a && a + l <= s1;
+        const [u0, u1] = whole ? [0, l] : [Math.max(s0, a) - a, Math.min(s1, a + l) - a];
+        if (whole || u1 - u0 > TOLERANCE * scale) {
           const [f0, f1] = c.isForward ? [u0, u1] : [l - u1, l - u0];
           const pts = points.get(c.edge) as number[];
           const ks = Array.from({ length: subBranchCount(c.edge) }, (_, k) => k).filter(
@@ -547,9 +610,12 @@ export function cut(tt: TrainTrack, slits: readonly Slit[], blownUp: ReadonlySet
     });
     gPrime.setImage(edge.forward, EdgePath.from(image));
   }
+  connectEntries(tt, blownUp, partStars, pieceDrafts, gPrime);
   for (const v of graph.vertices) {
-    const e = graph.star(v)[0];
-    const first = e === undefined ? undefined : gPrime.image(e).first;
+    const first = graph
+      .star(v)
+      .map((e) => gPrime.image(e).first)
+      .find((x) => x !== undefined);
     if (first !== undefined) gPrime.setVertexImage(v, first.source);
   }
 
