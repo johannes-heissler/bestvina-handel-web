@@ -156,6 +156,23 @@ describe("cutting again (port note 26)", () => {
     expect(result).toMatchObject({ kind: "polygon", closed: false });
     expect(result.filled).toBeUndefined();
   }, 300_000);
+
+  it("contracts the walls on later moves too, choosing other walls if needed", () => {
+    // On the third move, the first choice of walls leaves a new puncture between a side of the polygon and a chord with
+    // the same ends, which convex cells can't draw; another choice can be.
+    const session = Session.create({ kind: "preset", preset: "Point push with Dehn twists" });
+    session.runAutopilot({ automatic });
+    session.apply({ kind: "mark as closed" });
+    for (let k = 0; k < 4; k++) {
+      session.runAutopilot({ automatic });
+      const suggestion = session.suggestion();
+      expect(suggestion.kind).toBe("closed surface");
+      session.apply((suggestion.options[0] as (typeof suggestion.options)[number]).move);
+      const model = session.current.model as PolygonModel;
+      expect(model).toMatchObject({ kind: "polygon", closed: false });
+      expect(model.filled).toBeUndefined();
+    }
+  }, 300_000);
 });
 
 /** The text of the last step that doesn't merge valence-2 lines. */

@@ -136,6 +136,19 @@ function build(
     const junction = drawn.junctions.get(v) as Complex;
     const near = nudge === 0 ? junction : junction.add(Complex.fromPolar(0.05 * radius, 2.4 * nudge));
     if (inside(corners, near)) return near;
+    // Else the centroid of a triangle of consecutive corners (an ear), the largest one inside.
+    const ears = corners
+      .map((z, i) => [corners.at(i - 1) as Complex, z, corners[(i + 1) % corners.length] as Complex])
+      .map((ear) => ({
+        at: ear.reduce((sum, z) => sum.add(z), Complex.ZERO).scale(1 / 3),
+        area: Math.abs(
+          cross((ear[1] as Complex).sub(ear[0] as Complex), (ear[2] as Complex).sub(ear[0] as Complex)),
+        ),
+      }))
+      .filter(({ at }) => inside(corners, at))
+      .sort((a, b) => b.area - a.area);
+    const ear = ears[nudge % Math.max(ears.length, 1)];
+    if (ear !== undefined) return ear.at;
     throw new Error(`The singularity of ${v} isn't inside its polygon`);
   });
   const given = model.geometry.kind === "flat" ? model.geometry.vertices : undefined;
@@ -349,24 +362,37 @@ function build(
       );
   }
 
-  // The punctures P to fill in: the vertex, and the points of the old model.
-  const filling = fillingIn({
-    model: mid,
-    spine: midSpine,
-    naming: finalNaming,
-    pPoints: oldPoints.map((_, i) => n + i),
-    qPoints: points.map((_, i) => n + oldPoints.length + i),
-  });
-  const slide = sliding({
-    original: model,
-    mid,
-    midSpine,
-    filling,
-    naming: finalNaming,
-    oldSpine,
-    toModel,
-    names: new Map(orbit.map((v, i) => [n + oldPoints.length + i, v.name])),
-  });
+  // The punctures P to fill in: the vertex, and the points of the old model. The walls are a choice: if contracting them
+  // can't be drawn with convex cells (e.g. a point of Q left between a polygon side and a chord with the same ends),
+  // other choices are tried before the walls have to stay.
+  const fillWith = (attempt: number) => {
+    const filling = fillingIn({
+      model: mid,
+      spine: midSpine,
+      naming: finalNaming,
+      pPoints: oldPoints.map((_, i) => n + i),
+      qPoints: points.map((_, i) => n + oldPoints.length + i),
+      attempt,
+    });
+    const slide = sliding({
+      original: model,
+      mid,
+      midSpine,
+      filling,
+      naming: finalNaming,
+      oldSpine,
+      toModel,
+      names: new Map(orbit.map((v, i) => [n + oldPoints.length + i, v.name])),
+    });
+    return { filling, slide };
+  };
+  let chosen = fillWith(0);
+  for (let attempt = 1; chosen.slide === undefined && attempt < WALL_ATTEMPTS; attempt++) {
+    const other = fillWith(attempt);
+    if (other.slide !== undefined) chosen = other;
+  }
+  const { filling } = chosen;
+  const slide: Remarking["slide"] = chosen.slide ?? (() => undefined);
   const filled = filling.fill;
   return {
     walls: filling.walls.map(({ text }) => text),
@@ -465,6 +491,8 @@ function fillingIn(context: {
   pPoints: readonly number[];
   /** The corners of the points of Q. */
   qPoints: readonly number[];
+  /** 0 for the walls in the order of the sides; else the sides are shuffled (reproducibly) for another choice. */
+  attempt: number;
 }): Filling {
   const { model, spine } = context;
   const n = model.word.length;
@@ -472,12 +500,15 @@ function fillingIn(context: {
   const cells = spine.cells ?? [];
   const node = (corner: number): Node => (corner < n ? "V" : corner);
   // The edges of G₀ in the order of the cells and their sides, with the nodes at the ends of their chords.
-  const sides = cells.flatMap((cell) =>
-    cell.exits.flatMap((x, i) => {
-      if (x === undefined) return [];
-      const [a, b] = [cell.corners[i] as number, cell.corners[(i + 1) % cell.corners.length] as number];
-      return [{ edge: x.edge, a, b }];
-    }),
+  const sides = shuffled(
+    cells.flatMap((cell) =>
+      cell.exits.flatMap((x, i) => {
+        if (x === undefined) return [];
+        const [a, b] = [cell.corners[i] as number, cell.corners[(i + 1) % cell.corners.length] as number];
+        return [{ edge: x.edge, a, b }];
+      }),
+    ),
+    context.attempt,
   );
 
   // The walls: outward from Q, in the order of the sides.
@@ -588,8 +619,8 @@ function fillingIn(context: {
  * filled-in point moves into its neighbour, and the point of Q in the vertex's tree slides into the vertex (a polygon
  * corner doesn't move); the points of Q that are left are placed anew, and μ maps letter by letter into the G₀ of the
  * explicit cells that {@link contractWalls} leaves (contracted edges of G₀ drop out). Without points left, that is the
- * plain closed polygon (for the first move: the original model with its own G₀). Undefined (for every surface) if the
- * contraction doesn't give convex cells.
+ * plain closed polygon (for the first move: the original model with its own G₀). Undefined if the contraction doesn't
+ * give convex cells.
  */
 function sliding(context: {
   original: PolygonModel;
@@ -601,7 +632,7 @@ function sliding(context: {
   toModel: (z: Complex) => Point2;
   /** The names of the junctions of Q, by the corners of their points. */
   names: ReadonlyMap<number, string>;
-}): Remarking["slide"] {
+}): Remarking["slide"] | undefined {
   const { mid, midSpine, oldSpine, original } = context;
   const { walls, walled } = context.filling;
   const cells = midSpine.cells ?? [];
@@ -646,7 +677,7 @@ function sliding(context: {
     cells.map((cell) => cell.corners),
     contractions,
   );
-  if (slid === undefined) return () => undefined;
+  if (slid === undefined) return undefined;
 
   // The model and G₀ after the contraction, and how the walled G₀ maps into it.
   let target: RibbonGraph;
@@ -729,6 +760,21 @@ function sliding(context: {
       }
     );
   };
+}
+
+/** How many choices of walls {@link remarkClosedSurface} tries before the walls have to stay. */
+const WALL_ATTEMPTS = 50;
+
+/** The list in a reproducible pseudo-random order for `seed` > 0 (a Fisher–Yates shuffle); for 0, as it is. */
+function shuffled<T>(list: readonly T[], seed: number): T[] {
+  const result = [...list];
+  let state = seed;
+  for (let i = result.length - 1; seed > 0 && i > 0; i--) {
+    state = (Math.imul(state, 1_103_515_245) + 12_345) >>> 0;
+    const j = state % (i + 1);
+    [result[i], result[j]] = [result[j] as T, result[i] as T];
+  }
+  return result;
 }
 
 /** The surface if its μ comes from an embedding into the final model, else undefined (reported). */
