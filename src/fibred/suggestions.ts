@@ -1070,6 +1070,36 @@ export const DEFAULT_AUTOMATIC: ReadonlySet<SuggestionKind> = new Set<Suggestion
   "closed surface",
 ]);
 
+/**
+ * The suggestion kind whose options include moves of this kind, for those the autopilot can apply; undefined for the
+ * decisions (setting the peripheral subgraph, splitting junctions, …) and the edits by hand. ("set peripheral subgraph"
+ * is also how invariant circles go into P, but it is a choice of the user as well, so it has none.)
+ */
+export function autopilotKind(move: Move): SuggestionKind | undefined {
+  switch (move.kind) {
+    case "collapse invariant subforest":
+    case "pull tight":
+    case "absorb into periphery":
+    case "remove valence-2 junctions":
+      return move.kind;
+    case "merge valence-2 lines":
+      return "remove valence-2 junctions";
+    case "move junction image":
+      return "move vertices";
+    case "fold":
+    case "fold peripheral inefficiency":
+    case "remove inefficiency":
+      return "fold";
+    case "cut along a singular leaf":
+    case "replace puncture by singularity":
+      return "closed surface";
+    case "reduce":
+      return "reducible";
+    default:
+      return undefined;
+  }
+}
+
 export interface AutopilotOptions {
   /** The moves beyond the original algorithm that are switched off: the autopilot stops at them. */
   readonly disabled?: ReadonlySet<OptionalMove>;

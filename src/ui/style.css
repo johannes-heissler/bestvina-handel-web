@@ -368,6 +368,15 @@ pre {
   fill: var(--ink);
   font-style: italic;
 }
+.history text.move .skipped {
+  fill: var(--muted);
+  font-style: normal;
+}
+.history .hide-automatic {
+  display: block;
+  font-size: 0.85rem;
+  margin: 0.3rem 0;
+}
 .history line {
   stroke: var(--rule);
   stroke-width: 1.5;

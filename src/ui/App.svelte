@@ -17,6 +17,7 @@
   import SurfaceView from "./SurfaceView.svelte";
 
   let secondView = $state(false);
+  let historyPane = $state<ReturnType<typeof Pane> | undefined>(undefined);
 
   $effect(() => {
     void decodeSession(location.hash)
@@ -140,8 +141,8 @@
       <div class="sidebar"><SuggestionPanel /></div>
     </Pane>
     <PaneResizer class="resizer" />
-    <!-- (Always there; drag it small to see more of the step.) -->
-    <Pane defaultSize={35} minSize={4}><HistoryView /></Pane>
+    <!-- (Always there; drag it small to see more of the step. Collapsing its heading shrinks it to the heading.) -->
+    <Pane defaultSize={35} minSize={2} bind:this={historyPane}><HistoryView pane={historyPane} /></Pane>
   </PaneGroup>
 {/snippet}
 

@@ -1,17 +1,22 @@
 <!--
   The history: back to the start or one step, forward to the moves made from here, what the last moves did, and the
   tree from the start (top) downwards (λ at each state, the move between the levels; click a state to go there).
-  Collapsible: its heading is a disclosure of its own, since the panel fills its pane as a column.
+  Collapsible: its heading is a disclosure of its own, since the panel fills its pane as a column; collapsing shrinks
+  the pane to the heading, opening gives it its height back. The steps of the kinds the autopilot applies can be hidden
+  from the tree (their moves are counted on the next edge shown).
 -->
 <script lang="ts">
   import { perronFrobenius } from "../fibred/perron-frobenius";
   import type { NarratedStep } from "../fibred/narration";
-  import type { Text } from "../fibred/suggestions";
+  import { autopilotKind, type Text } from "../fibred/suggestions";
   import { describeMove } from "../session/describe";
   import type { HistoryNode } from "../session/session";
   import { stripColors } from "./colors";
   import { app } from "./state.svelte";
   import TextView from "./TextView.svelte";
+
+  /** The pane the panel fills, to shrink it to the heading when collapsed. */
+  let { pane }: { pane?: { getSize(): number; resize(size: number): void } } = $props();
 
   const STEP_X = 190;
   const STEP_Y = 64;
@@ -50,14 +55,31 @@
     return pieces;
   }
 
+  /** Whether the tree leaves out the steps of the kinds the autopilot applies. */
+  let hideAutomatic = $state(false);
+
   const tree = $derived.by(() => {
     void app.version;
     const session = app.session;
     if (!session) return undefined;
+    const automatic = new Set(app.automatic);
+    // The start, the current state and the ends of the branches stay, so that they can be clicked.
+    const hidden = (node: HistoryNode): boolean => {
+      if (!hideAutomatic || !node.move || node === session.current || node.children.length === 0) return false;
+      const kind = autopilotKind(node.move);
+      return kind !== undefined && automatic.has(kind);
+    };
+    /** The children shown below a node: past the hidden ones, with the number of hidden steps before each. */
+    const shown = (node: HistoryNode, skipped = 0): { child: HistoryNode; skipped: number }[] =>
+      node.children.flatMap((child) => (hidden(child) ? shown(child, skipped + 1) : [{ child, skipped }]));
+    const above = new Map<HistoryNode, { parent: HistoryNode; skipped: number }>();
     const positions = new Map<HistoryNode, { x: number; y: number }>();
     let leaf = 0;
     const place = (node: HistoryNode, depth: number): number => {
-      const xs = node.children.map((c) => place(c, depth + 1));
+      const xs = shown(node).map(({ child, skipped }) => {
+        above.set(child, { parent: node, skipped });
+        return place(child, depth + 1);
+      });
       const x = xs.length === 0 ? leaf++ : (Math.min(...xs) + Math.max(...xs)) / 2;
       positions.set(node, { x, y: depth });
       return x;
@@ -66,9 +88,10 @@
     const onPath = new Set(session.path());
     const nodes = [...positions].map(([node, p]) => ({ node, x: 30 + p.x * STEP_X, y: 24 + p.y * STEP_Y }));
     const at = new Map(nodes.map((n) => [n.node, n]));
-    const edges = nodes
-      .filter((n) => n.node.parent)
-      .map((n) => ({ from: at.get(n.node.parent as HistoryNode)!, to: n, active: onPath.has(n.node) }));
+    const edges = nodes.flatMap((n) => {
+      const a = above.get(n.node);
+      return a ? [{ from: at.get(a.parent)!, to: n, skipped: a.skipped, active: onPath.has(n.node) }] : [];
+    });
     return {
       nodes,
       edges,
@@ -103,6 +126,22 @@
   }
 
   let open = $state(true);
+  let section = $state<HTMLElement | undefined>(undefined);
+  let heading = $state<HTMLDetailsElement | undefined>(undefined);
+  /** The size of the pane (%) before collapsing, given back when opening. */
+  let expandedSize: number | undefined;
+  function resizePane(): void {
+    if (!pane || !section || !heading) return;
+    if (!open) {
+      expandedSize = pane.getSize();
+      const height = section.getBoundingClientRect().height;
+      const headingHeight = heading.getBoundingClientRect().bottom - section.getBoundingClientRect().top + 6;
+      if (height > 0) pane.resize(Math.min(expandedSize, (expandedSize * headingHeight) / height));
+    } else if (expandedSize !== undefined) {
+      pane.resize(expandedSize);
+      expandedSize = undefined;
+    }
+  }
   let container = $state<HTMLDivElement | undefined>(undefined);
   $effect(() => {
     void tree;
@@ -110,8 +149,8 @@
   });
 </script>
 
-<section class="panel history">
-  <details class="toggle" bind:open><summary><h2>History</h2></summary></details>
+<section class="panel history" bind:this={section}>
+  <details class="toggle" bind:open bind:this={heading} ontoggle={resizePane}><summary><h2>History</h2></summary></details>
   {#if open && node}
     <div class="history-controls">
     <div class="buttons">
@@ -120,6 +159,9 @@
         ↑ Back{#if node.move}: <TextView text={describeMove(node.move)} surface={node.parent?.surface} />{/if}
       </button>
     </div>
+    <label class="hide-automatic" title="The steps of the kinds selected for the autopilot (in the options of the next step)">
+      <input type="checkbox" bind:checked={hideAutomatic} /> Hide the automatic steps in the tree
+    </label>
     {#if node.children.length > 0}
       <ul class="options">
         {#each node.children as child (child.id)}
@@ -161,7 +203,9 @@
         {#each tree.edges as e (e.to.node.id)}
           <line x1={e.from.x} y1={e.from.y} x2={e.to.x} y2={e.to.y} class:active={e.active} />
           <text class="move" x={(e.from.x + e.to.x) / 2 + 8} y={(e.from.y + e.to.y) / 2 + 4}
-            >{#each moveLabel(e.to.node) as piece, i (i)}<tspan fill={piece.color}>{piece.text}</tspan>{/each}</text
+            >{#if e.skipped > 0}<tspan class="skipped">+{e.skipped} · </tspan>{/if}{#each moveLabel(e.to.node) as piece, i (i)}<tspan
+                fill={piece.color}>{piece.text}</tspan
+              >{/each}</text
           >
         {/each}
         {#each tree.nodes as n (n.node.id)}

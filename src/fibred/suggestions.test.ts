@@ -4,7 +4,15 @@ import { buildPreset, PRESETS } from "../examples/presets";
 import { FibredSurface } from "./fibred-surface";
 import { applyMove, type Move } from "./move";
 import { perronFrobenius } from "./perron-frobenius";
-import { autopilot, combine, nextSuggestion, plainText, variants } from "./suggestions";
+import {
+  autopilot,
+  autopilotKind,
+  combine,
+  DEFAULT_AUTOMATIC,
+  nextSuggestion,
+  plainText,
+  variants,
+} from "./suggestions";
 
 const φ = (1 + Math.sqrt(5)) / 2;
 const growth = (fs: FibredSurface) => perronFrobenius(fs, { essentialOnly: true }).growth;
@@ -168,6 +176,14 @@ describe("autopilot", () => {
     expect(time.moves).toHaveLength(0);
     expect(time.limit).toBe("time");
     expect(autopilot(pointPush()).limit).toBeUndefined();
+  });
+
+  it("applies only moves of the kinds it was given (autopilotKind)", () => {
+    const pointPush = buildPreset(PRESETS.find((p) => p.name === "Point push")!);
+    const { moves } = autopilot(pointPush);
+    expect(moves.length).toBeGreaterThan(0);
+    for (const move of moves) expect(DEFAULT_AUTOMATIC.has(autopilotKind(move)!)).toBe(true);
+    expect(autopilotKind({ kind: "set peripheral subgraph", strips: [] })).toBeUndefined();
   });
 
   it("stops at a reduction by default", () => {
