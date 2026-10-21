@@ -147,7 +147,7 @@ describe("the length of L from the slits, without cutting (port note 15, update 
     const original = closedGenus2OneCusp();
     const tt = trainTrack(original);
     const q = original.graph.vertices.find((v) => v.name === "q")!;
-    const show = (s: Slit) => [s.path.map(String), s.heights, s.partial];
+    const show = (s: Slit) => [s.path.map(String), String(s.prong.below), s.partial];
     for (const prong of prongsOfOrbit(tt, q)) {
       const slitsFor = growingSlits(tt, prong, 60);
       for (const count of [1, 2, 17, 18, 60]) {

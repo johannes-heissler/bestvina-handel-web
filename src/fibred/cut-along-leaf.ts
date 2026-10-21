@@ -2,18 +2,16 @@
  * Cutting along a singular leaf L and its preimages (the thesis, Move "Cutting along a singular leaf"), giving a new
  * graph G′ with a map g′ for the same f and the same growth λ.
  *
- * The cut is carried out on the rectangles of TS(τ):
- * 1. Real branches are subdivided where a preimage slit ends inside them: combinatorially, in τ* (see
- *    `subdivided-track.ts`), so that no lengths are compared.
- * 2. Each piece of a branch is split horizontally at the heights of the slits running along it.
- * 3. Each singular arc (of a switch, or of a subdivision) is split into several switches at the heights where both
- *    sides of the arc have a boundary between pieces: where a slit passes through, and at the prong corner where
- *    a slit starts.
- * 4. g′ maps each piece along g_* of its sub-branch; the heights there come from the image strand of its branch
- *    (see `strands.ts`). Since f⁻¹ of the cut set lies in the cut set, the image of each piece fits exactly into whole
- *    pieces.
- *
- * The leaves are found combinatorially too (`leaf-paths.ts`); only the heights across the branches are still numbers.
+ * The cut is carried out on the rectangles of TS(τ), combinatorially (no lengths or heights decide anything):
+ * 1. The leaves are train paths found from g_τ (`leaf-paths.ts`); the slits are L and its preimages on them.
+ * 2. Real branches are subdivided where a preimage slit ends inside them, one after the other in τ*
+ *    (`subdivided-track.ts`).
+ * 3. Each sub-branch is split across into pieces by the passes of the slits through it, in their order across the
+ *    branch (`leaf-order.ts`: every pass is a point on the leaf of a prong).
+ * 4. Each singular arc (of a switch, or of a subdivision) is split into several switches where the same slit crosses
+ *    both sides (where it passes through, and at the prong corner where it starts).
+ * 5. g′ maps each piece along g_* of its sub-branch, into the piece of each branch next to the image of a pass bounding
+ *    it. Since f⁻¹ of the cut set lies in the cut set, the image of each piece fits into whole pieces.
  *
  * Only the junctions in `blownUp` are cut as the polygons of TS(τ) (port note 29): those of the new punctures Q. Before,
  * all of TS(τ) was cut, and the other polygons were contracted again afterwards. Every other junction stays a junction
@@ -27,21 +25,18 @@ import { CombinatorialMap } from "../graph/combinatorial-map";
 import { EdgePath } from "../graph/edge-path";
 import { firstUnusedName, letterIndex, VERTEX_NAMES } from "../graph/names";
 import { type Edge, type OrientedEdge, RibbonGraph, type Vertex } from "../graph/ribbon-graph";
-import { imageProng, type Prong, switchArc } from "./singular-leaves";
+import { imageProng, type Prong } from "./singular-leaves";
 import { leafThroughRealBranches, realCount, throughRealBranches } from "./leaf-paths";
+import { type LeafPoint, leafPoints } from "./leaf-order";
 import { type Letter, type SubBranch, SubdividedTrack } from "./subdivided-track";
-import { strands as computeStrands } from "./strands";
 import { type BranchKind, entriesInto, type TrainTrack } from "./train-track";
-
-const TOLERANCE = 1e-9;
-const near = (a: number, b: number, scale = 1) => Math.abs(a - b) <= TOLERANCE * Math.max(1, scale);
 
 /** A slit: a leaf segment from a prong corner, in τ and in τ* (where it ends at a point of τ*). */
 export interface Slit {
   /** Its branches of τ: real and infinitesimal alternating, starting and ending with a real one. */
   readonly path: readonly OrientedEdge[];
-  /** The height of the slit above the bottom of each branch of `path` (in the direction of traversal). */
-  readonly heights: readonly number[];
+  /** The prong it starts at (its leaf is the leaf of the prong). */
+  readonly prong: Prong;
   /** Whether it ends inside its last branch of τ (at a subdivision point). */
   readonly partial: boolean;
   /** Its letters in τ* (kept up to date when the track is subdivided further). */
@@ -56,46 +51,24 @@ export interface SlitSystem {
 
 /** The prong traced through `count` whole real branches. */
 export function traceProngThroughBranches(tt: TrainTrack, prong: Prong, count: number): Slit {
-  const { blocked, path, heights } = traceUntilCorner(tt, prong, count);
+  const { blocked, path } = traceUntilCorner(tt, prong, count);
   if (blocked !== undefined)
     throw new Error(`The leaf runs into a corner at ${blocked} (a saddle connection)`);
   const track = new SubdividedTrack(tt);
-  return { path, heights, partial: false, letters: track.expand(path) };
+  return { path, prong, partial: false, letters: track.expand(path) };
 }
 
 /**
- * The prong traced through `count` real branches (fewer if it runs into a corner, `blocked`). The train path of the
- * leaf is found combinatorially ({@link leafThroughRealBranches}); the heights are only computed along it (kept inside
- * each branch, where rounding would put the leaf just outside).
+ * The leaf of the prong through `count` real branches (fewer if it runs into a corner, `blocked`), found
+ * combinatorially ({@link leafThroughRealBranches}).
  */
 function traceUntilCorner(
   tt: TrainTrack,
   prong: Prong,
   count: number,
-): { path: OrientedEdge[]; heights: number[]; blocked?: Vertex } {
-  const widths = tt.widths as ReadonlyMap<Edge, number>;
-  const corner = switchArc(tt, prong.atSwitch).infinitesimal.find((i) => i.end === prong.below);
-  if (corner === undefined) throw new Error("The prong's lower branch doesn't start at its switch");
+): { path: OrientedEdge[]; blocked?: Vertex } {
   const leaf = leafThroughRealBranches(tt, prong, count);
-  const path: OrientedEdge[] = [];
-  const heights: number[] = [];
-  if (leaf === undefined) return { path, heights, blocked: prong.atSwitch };
-  let [s, h, side] = [prong.atSwitch, corner.top, "real" as BranchKind];
-  for (const x of leaf) {
-    const interval = switchArc(tt, s)[side].find((i) => i.end === x);
-    if (interval === undefined) throw new Error(`The leaf's branch ${x} doesn't leave ${s}`);
-    const y = Math.min(Math.max(h - interval.bottom, 0), interval.top - interval.bottom);
-    path.push(x);
-    heights.push(y);
-    const arrival = switchArc(tt, x.target)[side].find((i) => i.end === x.reversed);
-    if (arrival === undefined) throw new Error("Inconsistent arcs");
-    [s, h, side] = [
-      x.target,
-      arrival.bottom + ((widths.get(x.edge) as number) - y),
-      side === "real" ? "infinitesimal" : "real",
-    ];
-  }
-  return { path, heights };
+  return leaf === undefined ? { path: [], blocked: prong.atSwitch } : { path: leaf };
 }
 
 /**
@@ -147,13 +120,13 @@ export function growingSlits(
     const slits: Slit[] = [
       {
         path: L.path.slice(0, end),
-        heights: L.heights.slice(0, end),
+        prong,
         partial: false,
         letters: track.keep(track.expand(L.path.slice(0, end))),
       },
     ];
     for (let j = 1; j < P; j++) {
-      const preimage = lift(track, slits[j - 1] as Slit, (n) => leafOf(j, n));
+      const preimage = lift(track, slits[j - 1] as Slit, orbit[P - j] as Prong, (n) => leafOf(j, n));
       if (preimage === undefined) return undefined;
       slits.push(preimage);
     }
@@ -162,13 +135,14 @@ export function growingSlits(
 }
 
 /**
- * The initial segment of a leaf that g_* maps onto `target` (in τ*), with the sub-branch where it ends subdivided;
- * `leaf(n)` traces the leaf through at least n real branches. Undefined if the leaf runs into a corner first.
+ * The initial segment of the leaf of `prong` that g_* maps onto `target` (in τ*), with the sub-branch where it ends
+ * subdivided; `leaf(n)` traces the leaf through at least n real branches. Undefined if the leaf runs into a corner first.
  */
 function lift(
   track: SubdividedTrack,
   target: Slit,
-  leaf: (count: number) => { path: OrientedEdge[]; heights: number[]; blocked?: Vertex },
+  prong: Prong,
+  leaf: (count: number) => { path: OrientedEdge[]; blocked?: Vertex },
 ): Slit | undefined {
   const tt = track.tt;
   const goal = target.letters;
@@ -208,23 +182,23 @@ function lift(
       throw new Error("The preimage of a slit doesn't map onto it");
     return {
       path: traced.path.slice(0, t + 1),
-      heights: traced.heights.slice(0, t + 1),
+      prong,
       partial: q + 1 < last.length,
       letters,
     };
   }
 }
 
-/** A piece of τ′: a horizontal strip of a (subdivided) branch of τ. */
+/** A piece of τ′: a horizontal strip of a (subdivided) branch of τ, between two passes of slits (or its sides). */
 export interface Piece {
   readonly edge: Edge;
   /** The branch of τ it lies in, and the index of its sub-branch there (see SubdividedTrack). */
   readonly branch: Edge;
   readonly subBranch: number;
-  /** Its heights above the bottom of the branch (forward orientation). */
-  readonly bottom: number;
-  readonly top: number;
-  /** Its length range along the branch (forward orientation); [0, 0] for infinitesimal branches. */
+  /** Whether its lower and upper side (across the branch, forward orientation) lie on a slit. */
+  readonly bottomOnSlit: boolean;
+  readonly topOnSlit: boolean;
+  /** Its position along the branch (forward orientation; approximate, for drawing); [0, 0] for infinitesimal ones. */
   readonly start: number;
   readonly end: number;
 }
@@ -287,13 +261,12 @@ export interface CutTrack {
   readonly graph: RibbonGraph;
   readonly gPrime: CombinatorialMap;
   readonly kind: ReadonlyMap<Edge, BranchKind>;
-  readonly widths: ReadonlyMap<Edge, number>;
+  /** Approximate lengths of the pieces (for drawing). */
   readonly lengths: ReadonlyMap<Edge, number>;
   readonly pieces: ReadonlyMap<Edge, Piece>;
   /**
-   * The height of each piece's side on the boundary, for a traversal in each direction: the bottom for the
-   * forward direction (the face lies to the right, i.e. below), the top for the backward one. Sides at height
-   * strictly between 0 and the branch width lie on a slit.
+   * Whether the side of a piece on the boundary lies on a slit, for a traversal in each direction: the lower side for
+   * the forward direction (the face lies to the right, i.e. below), the upper side for the backward one.
    */
   readonly isOnSlit: (e: OrientedEdge) => boolean;
   /**
@@ -309,36 +282,49 @@ export interface CutTrack {
   readonly legacyDefaultNames: boolean;
 }
 
-/** An end of a piece on an arc, with its height interval on the arc. */
+/** A pass of a slit through a sub-branch: a point of the slit's leaf, and the letter of the slit in τ*. */
+interface Pass {
+  readonly point: LeafPoint;
+  readonly slit: number;
+  /** The index of the letter in `Slit.letters`. */
+  readonly letter: number;
+  /** Whether the slit runs along the branch (forward). */
+  readonly forward: boolean;
+}
+
+/** An end of a piece on an arc, and the boundary above it on the arc (a crossing of a slit, see `crossing`). */
 interface ArcEnd {
   readonly piece: PieceDraft;
   /** True if the piece starts at this arc (its forward orientation leaves the arc). */
   readonly leaves: boolean;
   readonly side: "right" | "left";
-  readonly low: number;
-  readonly high: number;
+  /** The crossing of a slit at the boundary above this end on the arc, if any. */
+  readonly above?: string;
 }
 
 interface PieceDraft {
   readonly branch: Edge;
   readonly subBranch: number;
-  readonly bottom: number;
-  readonly top: number;
+  /** The passes below and above it (undefined: the side of the branch). */
+  readonly below?: Pass;
+  readonly above?: Pass;
   readonly start: number;
   readonly end: number;
   edge?: Edge;
 }
 
 /**
- * Cuts along the slits; see the module documentation.
+ * Cuts along the slits; see the module documentation. Everything is decided combinatorially: the pieces are the gaps
+ * between the passes of the slits through each sub-branch of τ*, ordered across it ({@link LeafPoints.compare}); the arcs
+ * are split where the same slit crosses both sides; and the image of a piece is found from the images of the passes
+ * bounding it, which are points on the leaves of the prongs again.
  *
  * @param blownUp The junctions of G that are cut as their polygons of TS(τ): those of the new punctures Q.
  */
 export function cut(tt: TrainTrack, system: SlitSystem, blownUp: ReadonlySet<Vertex>): CutTrack {
   const { track, slits } = system;
-  const widths = tt.widths as ReadonlyMap<Edge, number>;
-  const lengthOf = (e: Edge) => tt.lengths.get(e) as number;
-  const widthOf = (e: Edge) => widths.get(e) as number;
+  const points = leafPoints(tt);
+  const lengthOf = (e: Edge) => tt.lengths.get(e) ?? 0;
   const isBlownUp = (s: Vertex) => blownUp.has(tt.junctionOf.get(s) as Vertex);
   /** The branches that get pieces: the real ones, and the infinitesimal ones of the junctions that are blown up. */
   const hasPieces = (e: Edge) => tt.kind.get(e) === "real" || isBlownUp(e.source);
@@ -347,43 +333,78 @@ export function cut(tt: TrainTrack, system: SlitSystem, blownUp: ReadonlySet<Ver
   const subBranchCount = (e: Edge) => Math.max(1, track.subBranches(e).length);
   /** The index of the sub-branch of a letter of τ* (0 for an infinitesimal branch). */
   const subIndex = (x: Letter) => (x.sub === undefined ? 0 : track.indexOf(x.sub));
-
-  // 2. Slit heights on each sub-branch (forward heights): each letter of a slit in τ* lies in its branch of τ, at the
-  // slit's height there.
-  const cuts = new Map<string, number[]>(); // "branchId/sub" → heights
   const key = (e: Edge, k: number) => `${e.id}/${k}`;
-  for (const slit of slits) {
+
+  // 2. The passes of the slits through each sub-branch, ordered across it (forward), and the pieces between them.
+  const passesAt = new Map<string, Pass[]>();
+  slits.forEach((slit, s) => {
+    const prong = points.indexOf(slit.prong);
     let i = -1;
     slit.letters.forEach((x, n) => {
       if (n === 0 || x.tau !== (slit.letters[n - 1] as Letter).tau) i++; // the next branch of τ
       if (!hasPieces(x.tau.edge)) return;
-      const w = widthOf(x.tau.edge);
-      const height = x.tau.isForward ? (slit.heights[i] as number) : w - (slit.heights[i] as number);
-      const list = cuts.get(key(x.tau.edge, subIndex(x))) ?? [];
-      if (!list.some((c) => near(c, height, w))) list.push(height);
-      cuts.set(key(x.tau.edge, subIndex(x)), list);
+      const list = passesAt.get(key(x.tau.edge, subIndex(x))) ?? [];
+      list.push({ point: { prong, index: i }, slit: s, letter: n, forward: x.isForward });
+      passesAt.set(key(x.tau.edge, subIndex(x)), list);
     });
-  }
-
-  // Pieces of each sub-branch.
+  });
+  const passes = (e: Edge, k: number) => passesAt.get(key(e, k)) ?? [];
   const pieceDrafts = new Map<string, PieceDraft[]>();
-  for (const e of tt.graph.edges.filter(hasPieces)) {
+  for (const e of tt.graph.edges.filter(hasPieces))
     for (let k = 0; k < subBranchCount(e); k++) {
-      const heights = [0, ...(cuts.get(key(e, k)) ?? []).sort((a, b) => a - b), widthOf(e)];
+      const list = passes(e, k).sort((p, q) => points.compare(p.point, q.point, e.forward));
+      list.forEach((p, j) => {
+        if (j > 0 && points.compare(p.point, (list[j - 1] as Pass).point, e.forward) === 0)
+          throw new Error(`Two slits pass through ${e} at the same place`);
+      });
       const sub = track.subBranches(e)[k];
       const [start, end] = sub === undefined ? [0, lengthOf(e)] : [sub.start, sub.end];
       pieceDrafts.set(
         key(e, k),
-        heights
-          .slice(1)
-          .map((top, j) => ({ branch: e, subBranch: k, bottom: heights[j] as number, top, start, end })),
+        Array.from({ length: list.length + 1 }, (_, j) => ({
+          branch: e,
+          subBranch: k,
+          ...(j > 0 && { below: list[j - 1] as Pass }),
+          ...(j < list.length && { above: list[j] as Pass }),
+          start,
+          end,
+        })),
       );
     }
-  }
 
-  // 3. Arcs with their piece ends, then split into switches.
+  /**
+   * Where a slit crosses from one letter of τ* into the next (or starts, n = 0): the same on both sides of an arc. A
+   * pass meets the arc at the forward start of its sub-branch where it enters its letter if it runs forward.
+   */
+  const crossing = (slit: number, n: number) => `${slit}:${n}`;
+  const crossingAt = (p: Pass, atForwardStart: boolean) =>
+    crossing(p.slit, p.forward === atForwardStart ? p.letter : p.letter + 1);
+  /**
+   * The ends of the pieces of a sub-branch on an arc, from bottom to top, with the crossings between them: at the
+   * forward start of the sub-branch (`leaves`) or its end, in their order across it or `reversed` (a branch arriving
+   * at a switch: its rectangle is turned by 180° there).
+   */
+  const endsOn = (
+    e: Edge,
+    k: number,
+    side: "right" | "left",
+    leaves: boolean,
+    reversed: boolean,
+  ): ArcEnd[] => {
+    const list = pieceDrafts.get(key(e, k)) as PieceDraft[];
+    const ordered = reversed ? list.toReversed() : list;
+    return ordered.map((piece, j) => {
+      const between = j + 1 === ordered.length ? undefined : reversed ? piece.below : piece.above;
+      return { piece, leaves, side, ...(between !== undefined && { above: crossingAt(between, leaves) }) };
+    });
+  };
+  /** The ends at a switch of the pieces of the branch leaving it along `e`. */
+  const endsAtSwitch = (e: OrientedEdge, side: "right" | "left") =>
+    endsOn(e.edge, e.isForward ? 0 : subBranchCount(e.edge) - 1, side, e.isForward, !e.isForward);
+
+  // 3. Arcs with their piece ends, then split into switches where the same slit crosses both sides.
   const graph = new RibbonGraph();
-  const arcs: { name: string; junction: Vertex | undefined; ends: ArcEnd[] }[] = [];
+  const arcs: { name: string; junction: Vertex | undefined; right: ArcEnd[]; left: ArcEnd[] }[] = [];
   // The arcs of the subdivisions get new names that no junction of G and no switch has (port note 25).
   const used = new Set([...tt.junctionOf.values(), ...tt.graph.vertices].map((v) => v.name));
   const subdivisionName = () => {
@@ -391,41 +412,41 @@ export function cut(tt: TrainTrack, system: SlitSystem, blownUp: ReadonlySet<Ver
     used.add(name);
     return name;
   };
+  /** The ends of the branches leaving a switch on one side of its arc, bottom to top. */
+  const sideOfArc = (s: Vertex, kind: BranchKind): OrientedEdge[] => {
+    const ends = tt.graph.star(s).filter((e) => tt.kind.get(e.edge) === kind);
+    return kind === "real" ? ends : ends.toReversed();
+  };
   for (const s of tt.graph.vertices.filter(isBlownUp)) {
-    const arc = switchArc(tt, s);
-    const ends: ArcEnd[] = [];
-    for (const [sideName, intervals] of [
-      ["right", arc.real],
-      ["left", arc.infinitesimal],
-    ] as const)
-      for (const interval of intervals) {
-        const e = interval.end;
-        const k = e.isForward ? 0 : subBranchCount(e.edge) - 1;
-        const w = widthOf(e.edge);
-        for (const piece of pieceDrafts.get(key(e.edge, k)) as PieceDraft[])
-          ends.push({
-            piece,
-            leaves: e.isForward,
-            side: sideName,
-            low: interval.bottom + (e.isForward ? piece.bottom : w - piece.top),
-            high: interval.bottom + (e.isForward ? piece.top : w - piece.bottom),
-          });
-      }
-    arcs.push({ name: s.name, junction: tt.junctionOf.get(s), ends });
+    const sideEnds = (kind: BranchKind, side: "right" | "left") => {
+      const branches = sideOfArc(s, kind);
+      return branches.flatMap((e, i) => {
+        const ends = endsAtSwitch(e, side);
+        // The boundary between two branch ends is the corner of a prong where a slit may start.
+        const next = branches[i + 1];
+        const start = slits.findIndex(
+          (slit) => slit.prong.atSwitch === s && slit.prong.below === e && slit.prong.above === next,
+        );
+        if (kind === "infinitesimal" && start >= 0 && ends.length > 0)
+          ends[ends.length - 1] = { ...(ends.at(-1) as ArcEnd), above: crossing(start, 0) };
+        return ends;
+      });
+    };
+    arcs.push({
+      name: s.name,
+      junction: tt.junctionOf.get(s),
+      right: sideEnds("real", "right"),
+      left: sideEnds("infinitesimal", "left"),
+    });
   }
   for (const e of tt.graph.edges.filter(hasPieces))
-    for (let k = 1; k < subBranchCount(e); k++) {
-      const ends: ArcEnd[] = [];
-      for (const piece of pieceDrafts.get(key(e, k)) as PieceDraft[])
-        ends.push({ piece, leaves: true, side: "right", low: piece.bottom, high: piece.top });
-      for (const piece of pieceDrafts.get(key(e, k - 1)) as PieceDraft[])
-        ends.push({ piece, leaves: false, side: "left", low: piece.bottom, high: piece.top });
+    for (let k = 1; k < subBranchCount(e); k++)
       arcs.push({
         name: tt.legacyDefaultNames ? `${e.name}@${k}` : subdivisionName(),
         junction: undefined,
-        ends,
+        right: endsOn(e, k, "right", true, false),
+        left: endsOn(e, k - 1, "left", false, false),
       });
-    }
 
   const switchOfEnd = new Map<PieceDraft, { start?: Vertex; end?: Vertex }>();
   const starOf = new Map<Vertex, ArcEnd[]>();
@@ -439,73 +460,58 @@ export function cut(tt: TrainTrack, system: SlitSystem, blownUp: ReadonlySet<Ver
     }
   };
   for (const arc of arcs) {
-    const width = Math.max(...arc.ends.map((x) => x.high));
-    const boundaries = (side: "right" | "left") =>
-      arc.ends.filter((x) => x.side === side).flatMap((x) => [x.low, x.high]);
-    const [right, left] = [boundaries("right"), boundaries("left")];
-    const splits = right
-      .filter(
-        (h) => h > TOLERANCE * width && h < width * (1 - TOLERANCE) && left.some((g) => near(g, h, width)),
-      )
-      .sort((a, b) => a - b)
-      .filter((h, i, all) => i === 0 || !near(h, all[i - 1] as number, width));
-    const bounds = [0, ...splits, width];
-    for (let j = 0; j + 1 < bounds.length; j++) {
-      const [lo, hi] = [bounds[j] as number, bounds[j + 1] as number];
-      const inside = arc.ends.filter(
-        (x) => x.low >= lo - TOLERANCE * width && x.high <= hi + TOLERANCE * width,
-      );
+    const onLeft = new Set(arc.left.flatMap((x) => (x.above === undefined ? [] : [x.above])));
+    const splits = new Set(
+      arc.right.flatMap((x) => (x.above !== undefined && onLeft.has(x.above) ? [x.above] : [])),
+    );
+    /** The ends of a side, grouped into the parts of the arc between the splits. */
+    const parts = (ends: readonly ArcEnd[]) => {
+      const result: ArcEnd[][] = [[]];
+      for (const x of ends) {
+        (result.at(-1) as ArcEnd[]).push(x);
+        if (x.above !== undefined && splits.has(x.above)) result.push([]);
+      }
+      return result;
+    };
+    const [right, left] = [parts(arc.right), parts(arc.left)];
+    if (right.length !== left.length)
+      throw new Error(`The arc of ${arc.name} splits differently on its two sides`);
+    right.forEach((ends, j) => {
       // The parts of a split arc: v_a_a, v_a_b, … (before session format 4: v_0_0, v_0_1, …).
       const part = tt.legacyDefaultNames ? String(j) : letterIndex(j);
-      const v = graph.addVertex(bounds.length > 2 ? `${arc.name}_${part}` : arc.name);
+      const v = graph.addVertex(right.length > 1 ? `${arc.name}_${part}` : arc.name);
+      // The star: the right side from bottom to top, then the left side from top to bottom.
+      const inside = [...ends, ...(left[j] as ArcEnd[]).toReversed()];
       starOf.set(v, inside);
       junctionOf.set(v, arc.junction);
       attach(v, inside);
-    }
+    });
   }
 
   // The junctions that aren't blown up: their disks, split by the chords of the slits (in counterclockwise order).
   const partStars = new Map<Vertex, ArcEnd[]>();
   for (const [v, switches] of tt.switchesOf) {
     if (switches.length === 0 || isBlownUp(switches[0] as Vertex)) continue;
-    // The piece ends around the junction, counterclockwise, with the switch and arc height of the gap after each.
-    const around: { end: ArcEnd; s: Vertex }[] = [];
-    for (const s of switches)
-      for (const interval of switchArc(tt, s).real) {
-        const e = interval.end;
-        const k = e.isForward ? 0 : subBranchCount(e.edge) - 1;
-        const w = widthOf(e.edge);
-        const ends = (pieceDrafts.get(key(e.edge, k)) as PieceDraft[]).map((piece) => ({
-          piece,
-          leaves: e.isForward,
-          side: "right" as const,
-          low: interval.bottom + (e.isForward ? piece.bottom : w - piece.top),
-          high: interval.bottom + (e.isForward ? piece.top : w - piece.bottom),
-        }));
-        for (const end of ends.sort((a, b) => a.low - b.low)) around.push({ end, s });
-      }
-    const gapAt = (s: Vertex, height: number) => {
-      const width = switchArc(tt, s).width;
-      const i = around.findIndex((x) => x.s === s && near(x.end.high, height, width));
+    // The piece ends around the junction, counterclockwise, with the crossing at the gap after each.
+    const around = switches.flatMap((s) => sideOfArc(s, "real").flatMap((e) => endsAtSwitch(e, "right")));
+    const gapAt = (at: string) => {
+      const i = around.findIndex((x) => x.above === at);
       if (i < 0) throw new Error(`A slit through ${v} doesn't end between two pieces`);
       return i;
     };
     // The chords: a slit arrives along a real branch at the switch s, runs along an infinitesimal branch to the switch
     // t, and leaves along a real branch. Each connects the gap after one piece end with the gap after another.
     const chord = new Map<number, number>();
-    for (const slit of slits)
-      slit.path.forEach((x, i) => {
-        const next = slit.path[i + 2];
-        if (tt.kind.get(x.edge) !== "real" || next === undefined) return;
-        const s = x.target;
-        if (tt.junctionOf.get(s) !== v) return;
-        const arrival = switchArc(tt, s).real.find((a) => a.end === x.reversed) as { bottom: number };
-        const departure = switchArc(tt, next.source).real.find((a) => a.end === next) as { bottom: number };
-        const a = gapAt(s, arrival.bottom + widthOf(x.edge) - (slit.heights[i] as number));
-        const b = gapAt(next.source, departure.bottom + (slit.heights[i + 2] as number));
+    slits.forEach((slit, s) =>
+      slit.letters.forEach((x, n) => {
+        const [through, next] = [slit.letters[n + 1], slit.letters[n + 2]];
+        if (x.sub === undefined || through?.sub !== undefined || next === undefined) return;
+        if (tt.junctionOf.get(x.tau.target) !== v) return;
+        const [a, b] = [gapAt(crossing(s, n + 1)), gapAt(crossing(s, n + 2))];
         chord.set(a, b);
         chord.set(b, a);
-      });
+      }),
+    );
     // The parts: walking along the boundary of each, counterclockwise, crossing over along the chords.
     const seen = new Set<number>();
     for (let start = 0; start < around.length; start++) {
@@ -513,7 +519,7 @@ export function cut(tt: TrainTrack, system: SlitSystem, blownUp: ReadonlySet<Ver
       const ends: ArcEnd[] = [];
       for (let i = start; !seen.has(i); i = ((chord.get(i) ?? i) + 1) % around.length) {
         seen.add(i);
-        ends.push((around[i] as { end: ArcEnd }).end);
+        ends.push(around[i] as ArcEnd);
       }
       const part = graph.addVertex(v.name);
       partStars.set(part, ends);
@@ -533,7 +539,7 @@ export function cut(tt: TrainTrack, system: SlitSystem, blownUp: ReadonlySet<Ver
   // 4. Edges, stars.
   const kind = new Map<Edge, BranchKind>();
   const pieces = new Map<Edge, Piece>();
-  const newWidths = new Map<Edge, number>();
+  const draftOf = new Map<Edge, PieceDraft>();
   const newLengths = new Map<Edge, number>();
   for (const [piece, { start, end }] of switchOfEnd) {
     if (start === undefined || end === undefined) throw new Error("A piece is missing an end");
@@ -548,17 +554,17 @@ export function cut(tt: TrainTrack, system: SlitSystem, blownUp: ReadonlySet<Ver
       color: piece.branch.color,
     });
     piece.edge = edge;
+    draftOf.set(edge, piece);
     kind.set(edge, tt.kind.get(piece.branch) as BranchKind);
     pieces.set(edge, {
       edge,
       branch: piece.branch,
       subBranch: piece.subBranch,
-      bottom: piece.bottom,
-      top: piece.top,
+      bottomOnSlit: piece.below !== undefined,
+      topOnSlit: piece.above !== undefined,
       start: piece.start,
       end: piece.end,
     });
-    newWidths.set(edge, piece.top - piece.bottom);
     newLengths.set(edge, piece.end - piece.start);
   }
   const side = new Map<OrientedEdge, "right" | "left">();
@@ -571,70 +577,105 @@ export function cut(tt: TrainTrack, system: SlitSystem, blownUp: ReadonlySet<Ver
     for (const x of ends) side.set(orient(x), "right");
   }
   for (const [v, ends] of starOf) {
-    const right = ends.filter((x) => x.side === "right").sort((a, b) => a.low - b.low);
-    const left = ends.filter((x) => x.side === "left").sort((a, b) => b.low - a.low);
-    graph.setStar(v, [...right, ...left].map(orient));
-    for (const x of right) side.set(orient(x), "right");
-    for (const x of left) side.set(orient(x), "left");
+    graph.setStar(v, ends.map(orient));
+    for (const x of ends) side.set(orient(x), x.side);
   }
 
-  // 5. The carrying map g′ along the image strands.
-  const strandOf = computeStrands(tt);
-  const λ = tt.growth;
+  // 5. The carrying map g′: each piece along g_* of its sub-branch, into the piece of each branch that its image lies in.
   const gPrime = new CombinatorialMap(graph, graph);
-  const piecesAt = (e: Edge, k: number) => pieceDrafts.get(key(e, k)) as PieceDraft[];
-  // The heights of the slits are traced through branches of very different widths, so their rounding errors are
-  // absolute, on the scale of the widest branch: a thin (e.g. infinitesimal) branch needs more than TOLERANCE · w.
-  const heightError = 1e-11 * Math.max(...widths.values());
+  /** The point of `p` in the n-th branch of g_τ of its branch, counted along g_τ(b) for b forward. */
+  const imageAt = (p: LeafPoint, n: number) => {
+    const x = points.letter(p);
+    return points.image(p, x.isForward ? n : tt.gTau.image(x).length - 1 - n);
+  };
   /**
-   * For each branch b: g_* of its sub-branches, one after the other, is its strand g_τ(b) in letters of τ*; for each
-   * position there, the index of the branch of the strand it lies in.
+   * Whether f keeps the order across b in the n-th branch of g_τ(b) (seen forward in both): decided by two points
+   * of b and their images.
+   */
+  const keepsOrder = new Map<string, boolean>();
+  const keeps = (b: Edge, n: number) => {
+    const k = `${b.id}/${n}`;
+    let result = keepsOrder.get(k);
+    if (result === undefined) {
+      const [p, q] = points.pointsIn(b, 2) as [LeafPoint, LeafPoint];
+      const c = (tt.gTau.image(b.forward).letters[n] as OrientedEdge).edge;
+      result =
+        Math.sign(points.compare(p, q, b.forward)) ===
+        Math.sign(points.compare(imageAt(p, n), imageAt(q, n), c.forward));
+      keepsOrder.set(k, result);
+    }
+    return result;
+  };
+  /** How many passes of a sorted list lie below a point, and whether one is the point. */
+  const rank = (list: readonly Pass[], q: LeafPoint, frame: OrientedEdge) => {
+    let [lo, hi] = [0, list.length];
+    while (lo < hi) {
+      const mid = (lo + hi) >> 1;
+      if (points.compare((list[mid] as Pass).point, q, frame) < 0) lo = mid + 1;
+      else hi = mid;
+    }
+    const on = lo < list.length && points.compare((list[lo] as Pass).point, q, frame) === 0;
+    return { below: lo, on };
+  };
+  /**
+   * For each branch b: g_* of its sub-branches, one after the other, is g_τ(b) in letters of τ*; for each position
+   * there, the index of the branch of g_τ(b) it lies in.
    */
   const strandIndex = new Map<Edge, number[]>();
-  const strandIndexOf = (b: Edge, path: readonly OrientedEdge[]) => {
+  const strandIndexOf = (b: Edge) => {
     let list = strandIndex.get(b);
     if (list === undefined) {
-      list = path.flatMap((c, i) => track.expand([c]).map(() => i));
+      list = tt.gTau.image(b.forward).letters.flatMap((c, i) => track.expand([c]).map(() => i));
       strandIndex.set(b, list);
     }
     return list;
   };
+  const interior = new Map<Edge, LeafPoint>();
   for (const [edge, piece] of pieces) {
-    const strand = strandOf.get(piece.branch);
-    if (strand === undefined) throw new Error(`No strand for ${piece.branch}`);
+    const draft = draftOf.get(edge) as PieceDraft;
+    const b = piece.branch;
+    const strand = tt.gTau.image(b.forward).letters;
     // The image of the piece: g_* of its sub-branch, which starts after the images of the sub-branches before it.
-    const subs = track.subBranches(piece.branch);
+    const subs = track.subBranches(b);
     const letters =
       subs.length === 0
-        ? track.image(track.expand([piece.branch.forward])[0] as Letter)
+        ? track.image(track.expand([b.forward])[0] as Letter)
         : track.image((subs[piece.subBranch] as SubBranch).forward);
     const before = subs.slice(0, piece.subBranch).reduce((n, sub) => n + track.image(sub.forward).length, 0);
-    const indices = strandIndexOf(piece.branch, strand.path);
+    const indices = strandIndexOf(b);
     const image: OrientedEdge[] = [];
-    letters.forEach((z, n) => {
-      const i = indices[before + n];
-      if (i === undefined || strand.path[i] !== z.tau)
-        throw new Error(`The image of a piece of ${piece.branch} doesn't follow its strand`);
+    letters.forEach((z, m) => {
+      const n = indices[before + m];
+      if (n === undefined || strand[n] !== z.tau)
+        throw new Error(`The image of a piece of ${b} doesn't follow g_τ`);
       const c = z.tau;
       if (!hasPieces(c.edge)) return; // (an infinitesimal branch of a junction that isn't blown up)
-      const o = strand.offsets[i] as number;
-      // Heights are measured from the bottom of the arc where a traversal starts. For real branches (which leave
-      // to the right) that is the rectangle's own bottom; for infinitesimal ones (which leave to the left) it is
-      // its top. So the image is flipped when exactly one of the two branches is infinitesimal.
-      const flipped =
-        (tt.kind.get(piece.branch) === "infinitesimal") !== (tt.kind.get(c.edge) === "infinitesimal");
-      const [y0, y1] = flipped
-        ? [o + strand.width - piece.top / λ, o + strand.width - piece.bottom / λ]
-        : [o + piece.bottom / λ, o + piece.top / λ];
-      const w = widthOf(c.edge);
-      const [low, high] = c.isForward ? [y0, y1] : [w - y1, w - y0];
-      const tolerance = Math.max(TOLERANCE * w, heightError);
-      const candidate = piecesAt(c.edge, subIndex(z)).find(
-        (p) => p.bottom <= low + tolerance && high <= p.top + tolerance,
-      );
-      if (candidate === undefined)
-        throw new Error(`The image of a piece of ${piece.branch} doesn't fit into a piece of ${c.edge}`);
-      const e = candidate.edge as Edge;
+      const list = passes(c.edge, subIndex(z));
+      const frame = c.edge.forward;
+      // The piece of c the image lies in: next to the image of a pass bounding the piece, on the side of the piece.
+      let j: number;
+      if (draft.below !== undefined || draft.above !== undefined) {
+        const bound = (draft.below ?? draft.above) as Pass;
+        const { below, on } = rank(list, imageAt(bound.point, n), frame);
+        // The piece lies above its lower pass (below its upper one); f keeps or reverses that in c.
+        const up = (draft.below !== undefined) === keeps(b, n);
+        j = up ? below + (on ? 1 : 0) : below;
+      } else {
+        // No slit passes through this sub-branch: any point of a leaf in b (its height is the same all along b) lies
+        // inside the image, and on no slit of c there (the slit's preimage would cross the sub-branch).
+        let p = interior.get(b);
+        if (p === undefined) {
+          p = points.pointsIn(b, 1)[0] as LeafPoint;
+          interior.set(b, p);
+        }
+        const { below, on } = rank(list, imageAt(p, n), frame);
+        if (on) throw new Error("A slit crosses the image of a piece");
+        j = below;
+      }
+      const target = (pieceDrafts.get(key(c.edge, subIndex(z))) as PieceDraft[])[j];
+      if (target === undefined)
+        throw new Error(`The image of a piece of ${b} doesn't fit into a piece of ${c.edge}`);
+      const e = target.edge as Edge;
       image.push(c.isForward ? e.forward : e.backward);
     });
     gPrime.setImage(edge.forward, EdgePath.from(image));
@@ -651,15 +692,12 @@ export function cut(tt: TrainTrack, system: SlitSystem, blownUp: ReadonlySet<Ver
   const isOnSlit = (e: OrientedEdge) => {
     const piece = pieces.get(e.edge) as Piece;
     if (kind.get(e.edge) !== "real") return false;
-    const h = e.isForward ? piece.bottom : piece.top;
-    const w = widthOf(piece.branch);
-    return h > TOLERANCE * w && h < w * (1 - TOLERANCE);
+    return e.isForward ? piece.bottomOnSlit : piece.topOnSlit;
   };
   return {
     graph,
     gPrime,
     kind,
-    widths: newWidths,
     lengths: newLengths,
     pieces,
     isOnSlit,

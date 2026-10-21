@@ -26,6 +26,7 @@ import { type BranchPart, forgetInMarking, type Remarking } from "../remarking";
 import type { Text, TextPart } from "../suggestions";
 import { imageProng, type Prong, prongs } from "../singular-leaves";
 import type { TrainTrack } from "../train-track";
+import { type LeafPoint, leafPoints } from "../leaf-order";
 import { SubdividedTrack } from "../subdivided-track";
 import { tightenMarking } from "./isotopy";
 import { mergeAllValenceTwoLines } from "./valence";
@@ -232,7 +233,8 @@ interface Traversal {
   readonly slit: number;
   /** Its index in the slit's path. */
   readonly k: number;
-  readonly distance: number;
+  /** Where it passes, across the branch. */
+  readonly point: LeafPoint;
   /** Whether the slit runs along the letter (else against it). */
   readonly along: boolean;
   /** Whether it is the last branch of a slit that ends inside it. */
@@ -250,7 +252,7 @@ interface Traversal {
  * The cusp is then the only switch of the ring with valence > 2.
  */
 export function ringsCutOff(tt: TrainTrack, rings: readonly RingLetters[], slits: readonly Slit[]): boolean {
-  const widths = tt.widths as ReadonlyMap<Edge, number>;
+  const points = leafPoints(tt);
   const occurrences = new Map<Edge, { ring: number; i: number; letter: OrientedEdge }[]>();
   rings.forEach(({ letters }, ring) =>
     letters.forEach((letter, i) => {
@@ -265,13 +267,13 @@ export function ringsCutOff(tt: TrainTrack, rings: readonly RingLetters[], slits
   slits.forEach((slit, s) =>
     slit.path.forEach((x, k) => {
       for (const { ring, i, letter } of occurrences.get(x.edge) ?? []) {
-        const y = slit.heights[k] as number;
+        const point = { prong: points.indexOf(slit.prong), index: k };
         const along = x === letter;
-        const distance = along ? y : (widths.get(x.edge) as number) - y;
         const old = (nearest[ring] as (Traversal | undefined)[])[i];
-        if (old === undefined || distance < old.distance) {
+        // Nearest to the puncture: lowest, seen along the letter (p lies on its right).
+        if (old === undefined || points.compare(point, old.point, letter) < 0) {
           const partial = slit.partial && k === slit.path.length - 1;
-          (nearest[ring] as (Traversal | undefined)[])[i] = { slit: s, k, distance, along, partial };
+          (nearest[ring] as (Traversal | undefined)[])[i] = { slit: s, k, point, along, partial };
         }
       }
     }),

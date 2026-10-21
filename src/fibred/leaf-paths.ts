@@ -11,7 +11,7 @@
  * @module
  */
 import type { OrientedEdge } from "../graph/ribbon-graph";
-import { imageProng, type Prong, switchArc } from "./singular-leaves";
+import { imageProng, type Prong } from "./singular-leaves";
 import type { TrainTrack } from "./train-track";
 
 const same = (p: Prong, q: Prong) => p.atSwitch === q.atSwitch && p.below === q.below;
@@ -41,7 +41,7 @@ export function firstBranch(
     return y;
   };
   // The images shrink to the periodic part of Dg_τ^P on these ends within as many steps as there are ends.
-  let ends = new Set(switchArc(tt, prong.atSwitch).real.map((i) => i.end));
+  let ends = new Set(tt.graph.star(prong.atSwitch).filter((e) => tt.kind.get(e.edge) === "real"));
   for (let k = ends.size; k > 0; k--) ends = new Set([...ends].map(firstOfPower));
   return ends.size === 1 ? ([...ends][0] as OrientedEdge) : undefined;
 }
