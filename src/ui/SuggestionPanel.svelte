@@ -11,7 +11,6 @@
     type OptionalMove,
     type SuggestionKind,
     type Text,
-    variants,
   } from "../fibred/suggestions";
   import type { FibredSurface } from "../fibred/fibred-surface";
   import { foldHighlight, type Wedge } from "../fibred/fold-highlight";
@@ -87,13 +86,13 @@
   let choices = $state.raw<{ list?: MoveOption[]; error?: string } | undefined>(undefined);
   $effect(() => {
     const option = suggestion?.options[focused];
-    const surface = node?.surface;
+    const session = app.session;
     choices = undefined;
-    if (!option || !surface) return;
+    if (!option || !session) return;
     const multiple = suggestion?.multiple;
     const timer = setTimeout(() => {
       try {
-        const list = variants(surface, option.move);
+        const list = session.variants(option.move);
         choices = { list };
         if (!multiple && list.length > 0) chosen = 0;
       } catch (e) {
@@ -300,7 +299,8 @@
                       </label>
                       {#if choice.ratingText !== undefined}<span
                           class="rating"
-                          title="side crossings of all strips after the fold">{choice.ratingText}</span
+                          title={choice.ratingTitle ?? "side crossings of all strips after the fold"}
+                          >{choice.ratingText}</span
                         >{/if}
                     </li>
                   {/each}

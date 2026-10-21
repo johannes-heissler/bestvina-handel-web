@@ -4,12 +4,15 @@ import { runAlgorithm } from "../algorithm";
 import { inefficiencies } from "./inefficiency";
 import { perronFrobenius } from "../perron-frobenius";
 import { entriesInto, trainTrack } from "../train-track";
-import { entersQ } from "./closed-surface-fixtures";
+import { awayFromQ, entersQ } from "./closed-surface-fixtures";
+import { plainText } from "../suggestions";
 import {
   blowUpOrbit,
+  fillings,
   fillPuncture,
   hasOneCuspPuncture,
   polygonSingularities,
+  ratedFillings,
   replacePunctureBySingularity,
 } from "./fill-puncture";
 
@@ -86,5 +89,49 @@ describe("closed surfaces: replacing the puncture by a singularity", () => {
     const next = replacePunctureBySingularity(fs, q);
     expect(next.checkIntegrity()).toEqual([]);
     expect(next.g.preservesBoundaryWords()).toBe(true);
+  });
+
+  it("offers every side of Q next to p for a single puncture, rated by the growth after pulling tight", () => {
+    const fs = closedGenus2OneCusp();
+    const [q] = polygonSingularities(fs);
+    const { surface, polygons } = blowUpOrbit(fs, q!);
+    const sides = [...polygons.values()].flat();
+    expect(fillings(surface).map((f) => f.map((x) => x.edge))).toEqual(sides.map((e) => [e]));
+    const rated = ratedFillings(fs, q!);
+    expect(rated).toHaveLength(sides.length);
+    expect(rated.map((r) => r.growth)).toEqual(rated.map((r) => r.growth).toSorted((a, b) => a - b));
+    expect(plainText(rated[0]!.label)).toMatch(/^Delete the side \S+ of \S+ \(between \S+ and \S+\)$/);
+    for (const r of rated)
+      expect(replacePunctureBySingularity(fs, q!, undefined, undefined, r.letters).checkIntegrity()).toEqual(
+        [],
+      );
+  });
+
+  it("fills in punctures of P that don't border Q across real strips to other punctures", () => {
+    const fs = awayFromQ();
+    const q = polygonSingularities(fs).find((s) => s.junction.name === "w")!;
+    const { surface } = blowUpOrbit(fs, q);
+    const ways = fillings(surface);
+    expect(ways.length).toBeGreaterThan(1);
+    // Each way deletes one strip per puncture of P (3), at least one of them a real strip.
+    for (const way of ways) {
+      expect(way).toHaveLength(3);
+      expect(way.some((x) => !surface.peripheral.has(x.edge))).toBe(true);
+    }
+    const rated = ratedFillings(fs, q);
+    expect(rated.length).toBeGreaterThan(0);
+    const next = replacePunctureBySingularity(fs, q, undefined, undefined, rated[0]!.letters);
+    expect(next.checkIntegrity()).toEqual([]);
+    expect(next.graph.boundaryWords()).toHaveLength(1); // only the puncture of Q is left
+  });
+
+  it("rejects a strip that doesn't fill in one puncture of P", () => {
+    const fs = awayFromQ();
+    const q = polygonSingularities(fs).find((s) => s.junction.name === "w")!;
+    const { surface } = blowUpOrbit(fs, q);
+    const [way] = fillings(surface);
+    // The side of Q taken from the polygon's face would fill in the puncture of Q.
+    const wrong = way!.map((x) => (surface.peripheral.has(x.edge) ? x.reversed : x).name);
+    expect(() => replacePunctureBySingularity(fs, q, undefined, undefined, wrong)).toThrow(/doesn't fill in/);
   });
 });

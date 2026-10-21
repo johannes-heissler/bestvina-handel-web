@@ -74,3 +74,22 @@ export const thinSide = (): FibredSurface =>
     ],
     "x ↦ x y d x y d x, y ↦ y d x C, d ↦ u x y d x y d x y d x C u x y d, z ↦ A, a ↦ Y C u x y d U Z B z u x y d x y d x y d x C u x y d x y d x y d x C u x y d U Z a Y C u x y d U Z B z, b ↦ d x C Z b z u D Y X U c y A z u D Y X U c X D Y X D Y X D Y X U c X D Y X D Y X D Y X U Z b z u D Y X U c y, u ↦ z u, c ↦ b z u D Y X U c",
   );
+
+/**
+ * g2-twistpush:T8P1:s481021, after a cut at q (period 3): D_d ∘ D_c₁⁻¹ ∘ D_c ∘ D_a ∘ D_c⁻¹ ∘ D_b⁻¹ ∘ D_c⁻¹ ∘ D_a ∘ P_β̄⁻¹.
+ * The three punctures of P are an orbit, but only one of them borders the polygon of the fixed singularity w: the
+ * shortcut at w has to delete strips between punctures of P too.
+ */
+export const awayFromQ = (): FibredSurface =>
+  build(
+    [
+      ["v_4_b", ["A", "w_γ_1", "u_4", "A_2", "X"]],
+      ["v_5_c", ["s_γ_1", "c_15", "u_3", "W_Γ_1"]],
+      ["w", ["D", "a", "C"]],
+      ["v", ["U_4", "U_3", "c"]],
+      ["q", ["Z_9", "a_2", "d"]],
+      ["r", ["S_Γ_1", "z_9", "b"]],
+      ["p", ["C_15", "B", "x"]],
+    ],
+    "s_γ_1 ↦ x u_4 c a X B z_9 d C U_3 c_15 x A_2, c_15 ↦ x A_2 d a w_γ_1 s_γ_1, w_γ_1 ↦ u_4 c a X B z_9 d C U_3 c_15 x A_2 d a w_γ_1 s_γ_1 b x u_4 c a X B z_9 d C U_3 c_15 x A_2 d a w_γ_1 s_γ_1 b, u_4 ↦ u_4 c a X B z_9 d C U_3 c_15 x A_2 d a w_γ_1 s_γ_1 b x u_4 c a X B z_9 d C U_3 c_15 x A_2 d a w_γ_1, a ↦ a X B z_9 d a, c ↦ u_3 c, d ↦ c a X B z_9 d, a_2 ↦ U_3 W_Γ_1 A D a_2 X C_15 u_3 c D Z_9 b x A C U_4 X B S_Γ_1 W_Γ_1 A D a_2 X C_15 u_3 c D Z_9 b x A C U_4, z_9 ↦ d a u_4, b ↦ Z_9, x ↦ b x, u_3 ↦ C_15",
+  );

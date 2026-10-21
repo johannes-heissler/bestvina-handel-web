@@ -290,19 +290,18 @@ export class FibredSurface {
     if (duplicateVertex !== undefined) problems.push(`The vertex name ${duplicateVertex.name} is used twice`);
 
     // Strips at a junction whose images start with the same strip must be adjacent in the cyclic order,
-    // since the homeomorphism preserves the cyclic order. The pretrivial strips (mapped to a point, or into such strips)
-    // say nothing at their junction: they form a g-invariant forest, which is contracted first, so that the strips at
-    // their other ends join the star (e.g. after a shortcut, where filling in deletes a side of a polygon from the
-    // images), and the strips are compared by Dg* of their reduced images (before pulling tight, an image can start
-    // with a backtrack that the homeomorphism doesn't see).
-    const pretrivial = pretrivialEdges(this.graph, this.g);
+    // since the homeomorphism preserves the cyclic order. This is checked for the reduced images (before pulling
+    // tight, an image can start with a backtrack that the homeomorphism doesn't see, or reduce to a point). The
+    // pretrivial strips (mapped to a point, or into such strips) say nothing at their junction: they form a g-invariant
+    // forest, which is contracted first, so that the strips at their other ends join the star (e.g. after a shortcut,
+    // where filling in deletes strips from the images), and the strips are compared by Dg*.
+    const reduced = new CombinatorialMap(this.graph, this.graph);
+    for (const v of this.graph.vertices) reduced.setVertexImage(v, this.g.vertexImage(v));
+    for (const e of this.graph.edges) reduced.setImage(e.forward, this.g.image(e.forward).reduced());
+    const pretrivial = pretrivialEdges(this.graph, reduced);
     const collapsed = (e: Edge) => pretrivial.has(e);
     for (const star of starsAfterContracting(this.graph, collapsed)) {
-      const first = (e: OrientedEdge) =>
-        this.g
-          .image(e)
-          .reduced()
-          .letters.find((x) => !collapsed(x.edge));
+      const first = (e: OrientedEdge) => reduced.image(e).letters.find((x) => !collapsed(x.edge));
       for (const [d, edges] of Map.groupBy(star, first))
         if (d !== undefined && !isCyclicInterval(star, new Set(edges)))
           problems.push(

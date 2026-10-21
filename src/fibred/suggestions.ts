@@ -18,7 +18,7 @@ import {
   preimageShrinking,
   prongsOfOrbit,
 } from "./moves/cut-closed-surface";
-import { oneCuspPunctures, polygonSingularities } from "./moves/fill-puncture";
+import { oneCuspPunctures, polygonSingularities, ratedFillings } from "./moves/fill-puncture";
 import type { FoldOption } from "./moves/fold";
 import {
   type FoldCandidate,
@@ -79,6 +79,8 @@ export interface MoveOption {
   readonly rating?: number;
   /** The rating as shown, e.g. "3 side crossings" (otherwise the number alone). */
   readonly ratingText?: string;
+  /** What the rating measures (a tooltip); by default the side crossings after a fold. */
+  readonly ratingTitle?: string;
   /** Possible, but not the step of the algorithm now (shown greyed out). */
   readonly discouraged?: boolean;
   /** More about the option, shown under it (e.g. the inefficiency points behind a fold). */
@@ -822,9 +824,10 @@ export function combine(moves: readonly Move[]): Move {
 /**
  * The concrete choices within a move, computed on demand (some need the move to be tried on a copy): the fold
  * options of an inefficiency step, the centres of a collapse, the strip to remove at a valence-2 junction, the pieces
- * of a reduction, the cuts of a closed surface. Empty if the move has no further choice.
+ * of a reduction, the cuts of a closed surface, the strips to delete for the shortcut. Empty if the move has no further
+ * choice. `remark` keeps the model through the closed-surface moves, so that μ can be rated (see `MoveHooks.remark`).
  */
-export function variants(fs: FibredSurface, move: Move): MoveOption[] {
+export function variants(fs: FibredSurface, move: Move, remark?: RemarkingProvider): MoveOption[] {
   switch (move.kind) {
     case "collapse invariant subforest": {
       const components = fs.graph.components([...move.strips].map((n) => strip(fs, n).edge));
@@ -1018,6 +1021,25 @@ export function variants(fs: FibredSurface, move: Move): MoveOption[] {
           }),
         };
       });
+    }
+    case "replace puncture by singularity": {
+      if (move.fill !== undefined) return [];
+      const q = polygonSingularities(fs).find((s) => s.junction.name === move.junction);
+      if (q === undefined) return [];
+      return ratedFillings(fs, q, remark && ((tt) => remark(fs, tt, q.orbit))).map((f) => ({
+        move: { ...move, fill: f.letters },
+        label: f.label,
+        rating: f.growth,
+        ratingText: [
+          `λ ${f.growth.toFixed(4)}`,
+          ...(f.sideCrossings === undefined
+            ? []
+            : [`${f.sideCrossings} side ${f.sideCrossings === 1 ? "crossing" : "crossings"}`]),
+        ].join(", "),
+        ratingTitle:
+          "the growth after deleting the strips and pulling tight" +
+          (f.sideCrossings === undefined ? "" : ", and the side crossings of all strips then"),
+      }));
     }
     default:
       return [];
