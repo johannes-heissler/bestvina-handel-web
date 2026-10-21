@@ -195,4 +195,16 @@ describe("a finished result with a single cusp at the only puncture", () => {
     const reduced = autopilot(applyMove(cutOpen.surface.copy(), cutOpen.stoppedAt.options[0]!.move));
     expect(reduced.stoppedAt.classification).toMatchObject({ kind: "finite order", order: 1 });
   });
+
+  it("lists cuts that are too fine for the floating-point cut last, after the shortcuts, and says why", () => {
+    const { surface, stoppedAt } = autopilot(buildPreset(PRESETS.find((p) => p.name === "Point push")!));
+    const next = nextSuggestion(applyMove(surface.copy(), stoppedAt.options[0]!.move));
+    expect(next.kind).toBe("closed surface");
+    const kinds = next.options.map((o) => (o.discouraged ? "too fine" : o.move.kind));
+    // The period-4 orbit's preimages would be ~10¹⁵ times shorter than its leaf.
+    expect(kinds).toContain("too fine");
+    expect(kinds.slice(kinds.indexOf("too fine")).every((k) => k === "too fine")).toBe(true);
+    expect(kinds.indexOf("replace puncture by singularity")).toBeLessThan(kinds.indexOf("too fine"));
+    expect(plainText(next.description)).toMatch(/too short for the floating-point cut/);
+  });
 });

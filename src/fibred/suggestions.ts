@@ -11,7 +11,7 @@ import type { FibredSurface } from "./fibred-surface";
 import { applyMove, type FollowUp, type FoldRef, foldRef, type Move, type MoveKind, strip } from "./move";
 import { needsAbsorbing } from "./moves/absorb-periphery";
 import { candidateCenters, invariantSubforests, isPeripheryFriendlyForest } from "./moves/collapse-forest";
-import { cutOptions, cutTooFine, preimageShrinking, prongsOfOrbit } from "./moves/cut-closed-surface";
+import { cutOptions, cutTooFine, NoCutFound, preimageShrinking, prongsOfOrbit } from "./moves/cut-closed-surface";
 import { oneCuspPunctures, polygonSingularities } from "./moves/fill-puncture";
 import type { FoldOption } from "./moves/fold";
 import {
@@ -506,17 +506,20 @@ function nextStep(fs: FibredSurface, context: SuggestionContext): Suggestion {
     };
 
   const oneCusp = oneCuspPunctures(fs);
-  if (fs.isClosed && oneCusp > 0)
+  if (fs.isClosed && oneCusp > 0) {
+    const { options, note } = closedSurfaceOptions(fs);
     return {
       kind: "closed surface",
       description: [
         oneCusp === 1
           ? "The map is efficient, but τ has only one cusp at the artificial puncture. Replace it by the orbit of a singularity q."
           : `The map is efficient, but τ has only one cusp at each of the ${oneCusp} artificial punctures (an orbit). Replace them by the orbit of a singularity q.`,
+        ...note,
       ],
-      options: closedSurfaceOptions(fs),
+      options,
       multiple: false,
     };
+  }
 
   if (!fs.ignoreReducible) {
     const disconnected = disconnectedJunctions(fs);
@@ -553,9 +556,10 @@ function nextStep(fs: FibredSurface, context: SuggestionContext): Suggestion {
 
 /**
  * The moves of the closed-surface case: cut along a leaf from a singularity, or the shortcut, one option per orbit of
- * singularities, by period. Cuts that the floating-point cut can't resolve are shown greyed out.
+ * singularities, by period. Cuts that the floating-point cut can't resolve ({@link cutTooFine}) come last, greyed out,
+ * so that the default is a cut that works or else the shortcut; `note` says why for the description.
  */
-function closedSurfaceOptions(fs: FibredSurface): MoveOption[] {
+function closedSurfaceOptions(fs: FibredSurface): { options: MoveOption[]; note: Text } {
   const tt = trainTrack(fs);
   const seen = new Set<Vertex>();
   // (sorted by period) One per orbit.
@@ -574,37 +578,61 @@ function closedSurfaceOptions(fs: FibredSurface): MoveOption[] {
           ),
           "; period " + orbit.length + ")",
         ];
-  return [
-    ...singularities.map((q) => {
-      const tooFine = cutTooFine(tt, q.junction);
-      return {
-        move: { kind: "cut along a singular leaf" as const, junction: q.junction.name },
-        label: [
-          "Cut along a leaf from ",
-          { junction: q.junction.name },
-          ...orbitText(q.orbit),
-          ...(tooFine
-            ? [
-                ": not possible yet, its preimages would be " +
-                  preimageShrinking(tt, q.junction).toExponential(0) +
-                  " times shorter",
-              ]
-            : []),
-        ] as Text,
-        rating: q.orbit.length,
-        ...(tooFine && { discouraged: true }),
-      };
-    }),
-    ...singularities.map((q) => ({
-      move: { kind: "replace puncture by singularity" as const, junction: q.junction.name },
+  const cuts = singularities.map((q) => {
+    const tooFine = cutTooFine(tt, q.junction);
+    const option: MoveOption = {
+      move: { kind: "cut along a singular leaf" as const, junction: q.junction.name },
       label: [
-        "Shortcut: fill the puncture at ",
+        "Cut along a leaf from ",
         { junction: q.junction.name },
         ...orbitText(q.orbit),
+        ...(tooFine
+          ? [
+              ": not possible yet, its preimages would be " +
+                preimageShrinking(tt, q.junction).toExponential(0) +
+                " times shorter",
+            ]
+          : []),
       ] as Text,
       rating: q.orbit.length,
-    })),
-  ];
+      ...(tooFine && { discouraged: true }),
+    };
+    return { q, tooFine, option };
+  });
+  const shortcuts = singularities.map(
+    (q): MoveOption => ({
+      move: { kind: "replace puncture by singularity" as const, junction: q.junction.name },
+      label: ["Shortcut: fill the puncture at ", { junction: q.junction.name }, ...orbitText(q.orbit)] as Text,
+      rating: q.orbit.length,
+    }),
+  );
+  const tooFine = cuts.filter((c) => c.tooFine);
+  const note: Text =
+    tooFine.length === 0
+      ? []
+      : [
+          tooFine.length === cuts.length
+            ? " No cut is possible yet: the preimages of every leaf would be too short for the floating-point cut, so the shortcut is the default."
+            : tooFine.length === 1
+              ? " The cut from "
+              : " The cuts from ",
+          ...(tooFine.length === cuts.length
+            ? []
+            : [
+                ...tooFine.flatMap((c, i): TextPart[] => [...(i === 0 ? [] : [", "]), { junction: c.q.junction.name }]),
+                tooFine.length === 1
+                  ? " isn't possible yet: the preimages of its leaf would be too short for the floating-point cut."
+                  : " aren't possible yet: the preimages of their leaves would be too short for the floating-point cut.",
+              ]),
+        ];
+  return {
+    options: [
+      ...cuts.filter((c) => !c.tooFine).map((c) => c.option),
+      ...shortcuts,
+      ...tooFine.map((c) => c.option),
+    ],
+    note,
+  };
 }
 
 /**
@@ -1111,16 +1139,35 @@ export function autopilot(fs: FibredSurface, options: AutopilotOptions = {}): Au
   while (automatic.has(suggestion.kind) && moves.length < maxSteps) {
     // A default that is greyed out (a move switched off in the options) is left to the user.
     if (suggestion.autopilotMove === undefined && suggestion.options[0]?.discouraged) break;
-    const move = suggestion.autopilotMove ?? (suggestion.options[0] as MoveOption).move;
+    // The closed-surface options are tried in turn while a cut finds no length (they don't change the surface).
+    const candidates =
+      suggestion.autopilotMove !== undefined
+        ? [suggestion.autopilotMove]
+        : suggestion.kind === "closed surface"
+          ? suggestion.options.filter((o) => !o.discouraged).map((o) => o.move)
+          : [(suggestion.options[0] as MoveOption).move];
+    let move = candidates[0] as Move;
     // A fold starts a new follow-up (or ends it); the bookkeeping steps in between keep it.
-    const folds = move.kind === "fold" || move.kind === "remove inefficiency";
     let next: FollowUp | undefined;
-    const done = narrated(() =>
-      applyMove(surface, move, {
-        followUp: (point) => (next = point),
-        ...(options.remark && { remark: options.remark }),
-      }),
-    );
+    const apply = (m: Move) =>
+      narrated(() =>
+        applyMove(surface, m, {
+          followUp: (point) => (next = point),
+          ...(options.remark && { remark: options.remark }),
+        }),
+      );
+    let done: ReturnType<typeof apply> | undefined;
+    for (const [i, candidate] of candidates.entries()) {
+      move = candidate;
+      try {
+        done = apply(candidate);
+        break;
+      } catch (e) {
+        if (!(e instanceof NoCutFound) || i === candidates.length - 1) throw e;
+      }
+    }
+    if (done === undefined) break;
+    const folds = move.kind === "fold" || move.kind === "remove inefficiency";
     surface = done.result;
     if (folds) followUp = next;
     moves.push(move);

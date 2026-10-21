@@ -207,6 +207,9 @@ export function circleDefects(ct: CutTrack): Vertex[] | undefined {
   return words.flatMap((word) => word.letters.map((x) => x.target).filter((s) => ct.graph.valence(s) > 2));
 }
 
+/** No prong of the orbit gives a cut ({@link cutOptions} is empty); another closed-surface option may still work. */
+export class NoCutFound extends Error {}
+
 /** A way to cut: along `prong` through `realBranches` real branches, after which B is a circle attached at one switch. */
 export interface CutOption {
   readonly prong: Prong;
