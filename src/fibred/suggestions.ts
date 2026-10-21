@@ -11,7 +11,13 @@ import type { FibredSurface } from "./fibred-surface";
 import { applyMove, type FollowUp, type FoldRef, foldRef, type Move, type MoveKind, strip } from "./move";
 import { needsAbsorbing } from "./moves/absorb-periphery";
 import { candidateCenters, invariantSubforests, isPeripheryFriendlyForest } from "./moves/collapse-forest";
-import { cutOptions, cutTooFine, NoCutFound, preimageShrinking, prongsOfOrbit } from "./moves/cut-closed-surface";
+import {
+  cutOptions,
+  cutTooFine,
+  NoCutFound,
+  preimageShrinking,
+  prongsOfOrbit,
+} from "./moves/cut-closed-surface";
 import { oneCuspPunctures, polygonSingularities } from "./moves/fill-puncture";
 import type { FoldOption } from "./moves/fold";
 import {
@@ -599,13 +605,11 @@ function closedSurfaceOptions(fs: FibredSurface): { options: MoveOption[]; note:
     };
     return { q, tooFine, option };
   });
-  const shortcuts = singularities.map(
-    (q): MoveOption => ({
-      move: { kind: "replace puncture by singularity" as const, junction: q.junction.name },
-      label: ["Shortcut: fill the puncture at ", { junction: q.junction.name }, ...orbitText(q.orbit)] as Text,
-      rating: q.orbit.length,
-    }),
-  );
+  const shortcuts = singularities.map((q): MoveOption => ({
+    move: { kind: "replace puncture by singularity" as const, junction: q.junction.name },
+    label: ["Shortcut: fill the puncture at ", { junction: q.junction.name }, ...orbitText(q.orbit)] as Text,
+    rating: q.orbit.length,
+  }));
   const tooFine = cuts.filter((c) => c.tooFine);
   const note: Text =
     tooFine.length === 0
@@ -619,7 +623,10 @@ function closedSurfaceOptions(fs: FibredSurface): { options: MoveOption[]; note:
           ...(tooFine.length === cuts.length
             ? []
             : [
-                ...tooFine.flatMap((c, i): TextPart[] => [...(i === 0 ? [] : [", "]), { junction: c.q.junction.name }]),
+                ...tooFine.flatMap((c, i): TextPart[] => [
+                  ...(i === 0 ? [] : [", "]),
+                  { junction: c.q.junction.name },
+                ]),
                 tooFine.length === 1
                   ? " isn't possible yet: the preimages of its leaf would be too short for the floating-point cut."
                   : " aren't possible yet: the preimages of their leaves would be too short for the floating-point cut.",
