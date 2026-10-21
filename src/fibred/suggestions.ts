@@ -950,7 +950,7 @@ export function variants(fs: FibredSurface, move: Move, remark?: RemarkingProvid
             prong: all.findIndex((p) => p.atSwitch === o.prong.atSwitch && p.above === o.prong.above),
             realBranches: o.realBranches,
           },
-          label: ["leaf ", ...branches(L.path, 8), " from ", from(L.path), ` (length ${o.realBranches})`],
+          label: ["Leaf ", ...branches(L.path, 8), " from ", from(L.path), ` (length ${o.realBranches})`],
           rating: o.realBranches,
           ratingText: `${slits.length} ${slits.length === 1 ? "leaf" : "leaves"}, ${total} branches`,
           ratingTitle:
