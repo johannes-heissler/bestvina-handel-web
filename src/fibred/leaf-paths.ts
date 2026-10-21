@@ -47,12 +47,16 @@ export function firstBranch(
 }
 
 /** The real branches of a path. */
-function realCount(tt: TrainTrack, path: readonly OrientedEdge[]): number {
+export function realCount(tt: TrainTrack, path: readonly OrientedEdge[]): number {
   return path.reduce((n, x) => n + (tt.kind.get(x.edge) === "real" ? 1 : 0), 0);
 }
 
 /** The initial segment of a path through `max` real branches (with the infinitesimal branches between them). */
-function throughRealBranches(tt: TrainTrack, path: readonly OrientedEdge[], max: number): OrientedEdge[] {
+export function throughRealBranches(
+  tt: TrainTrack,
+  path: readonly OrientedEdge[],
+  max: number,
+): OrientedEdge[] {
   let count = 0;
   const last = path.findIndex((x) => tt.kind.get(x.edge) === "real" && ++count === max);
   return last < 0 ? [...path] : path.slice(0, last + 1);

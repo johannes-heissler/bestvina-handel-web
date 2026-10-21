@@ -127,15 +127,15 @@ describe("the length of L from the slits, without cutting (port note 15, update 
         const slitsFor = growingSlits(tt, prong, max);
         const blownUp = new Set(cutOrbit(tt, prong));
         for (let count = 1; count <= max; count++) {
-          const slits = slitsFor(count);
-          if (slits === undefined) break;
+          const system = slitsFor(count);
+          if (system === undefined) break;
           let truth: boolean;
           try {
-            truth = attachedCircles(cut(tt, slits, blownUp), rings.length) !== undefined;
+            truth = attachedCircles(cut(tt, system, blownUp), rings.length) !== undefined;
           } catch {
             continue;
           }
-          expect(ringsCutOff(tt, rings, slits), `${name}, count ${count}`).toBe(truth);
+          expect(ringsCutOff(tt, rings, system.slits), `${name}, count ${count}`).toBe(truth);
           if (truth) successes++;
         }
       }
@@ -147,14 +147,14 @@ describe("the length of L from the slits, without cutting (port note 15, update 
     const original = closedGenus2OneCusp();
     const tt = trainTrack(original);
     const q = original.graph.vertices.find((v) => v.name === "q")!;
-    const show = (s: Slit) => [s.path.map(String), s.heights, s.partialLength];
+    const show = (s: Slit) => [s.path.map(String), s.heights, s.partial];
     for (const prong of prongsOfOrbit(tt, q)) {
       const slitsFor = growingSlits(tt, prong, 60);
       for (const count of [1, 2, 17, 18, 60]) {
-        const [L, ...preimages] = slitsFor(count)!;
+        const [L, ...preimages] = slitsFor(count)!.slits;
         expect(show(L!)).toEqual(show(traceProngThroughBranches(tt, prong, count)));
         // The preimages, traced only as far as this length needs.
-        expect(preimages.map(show)).toEqual(growingSlits(tt, prong, count)(count)!.slice(1).map(show));
+        expect(preimages.map(show)).toEqual(growingSlits(tt, prong, count)(count)!.slits.slice(1).map(show));
       }
     }
   });

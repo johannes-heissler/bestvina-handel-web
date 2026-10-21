@@ -3,13 +3,17 @@
  * graph G′ with a map g′ for the same f and the same growth λ.
  *
  * The cut is carried out on the rectangles of TS(τ):
- * 1. Real branches are subdivided (lengthwise) where a preimage slit ends inside them.
+ * 1. Real branches are subdivided where a preimage slit ends inside them: combinatorially, in τ* (see
+ *    `subdivided-track.ts`), so that no lengths are compared.
  * 2. Each piece of a branch is split horizontally at the heights of the slits running along it.
  * 3. Each singular arc (of a switch, or of a subdivision) is split into several switches at the heights where both
  *    sides of the arc have a boundary between pieces: where a slit passes through, and at the prong corner where
  *    a slit starts.
- * 4. g′ maps each piece along the image strand of its branch (see `strands.ts`). Since f⁻¹ of the cut set lies in
- *    the cut set, the image of each piece fits exactly into whole pieces.
+ * 4. g′ maps each piece along g_* of its sub-branch; the heights there come from the image strand of its branch
+ *    (see `strands.ts`). Since f⁻¹ of the cut set lies in the cut set, the image of each piece fits exactly into whole
+ *    pieces.
+ *
+ * The leaves are found combinatorially too (`leaf-paths.ts`); only the heights across the branches are still numbers.
  *
  * Only the junctions in `blownUp` are cut as the polygons of TS(τ) (port note 29): those of the new punctures Q. Before,
  * all of TS(τ) was cut, and the other polygons were contracted again afterwards. Every other junction stays a junction
@@ -24,88 +28,70 @@ import { EdgePath } from "../graph/edge-path";
 import { firstUnusedName, letterIndex, VERTEX_NAMES } from "../graph/names";
 import { type Edge, type OrientedEdge, RibbonGraph, type Vertex } from "../graph/ribbon-graph";
 import { imageProng, type Prong, switchArc } from "./singular-leaves";
-import { leafPath } from "./leaf-paths";
+import { leafThroughRealBranches, realCount, throughRealBranches } from "./leaf-paths";
+import { type Letter, type SubBranch, SubdividedTrack } from "./subdivided-track";
 import { strands as computeStrands } from "./strands";
 import { type BranchKind, entriesInto, type TrainTrack } from "./train-track";
 
 const TOLERANCE = 1e-9;
 const near = (a: number, b: number, scale = 1) => Math.abs(a - b) <= TOLERANCE * Math.max(1, scale);
 
-/** A slit: a leaf segment given by its path of branches and its height in each. */
+/** A slit: a leaf segment from a prong corner, in τ and in τ* (where it ends at a point of τ*). */
 export interface Slit {
-  /** Real and infinitesimal branches, alternating, starting with a real one. */
+  /** Its branches of τ: real and infinitesimal alternating, starting and ending with a real one. */
   readonly path: readonly OrientedEdge[];
-  /** The height of the slit above the bottom of each branch (in the direction of traversal). */
+  /** The height of the slit above the bottom of each branch of `path` (in the direction of traversal). */
   readonly heights: readonly number[];
-  /** If the slit ends inside its last (real) branch: the length it runs along that branch. */
-  readonly partialLength?: number;
+  /** Whether it ends inside its last branch of τ (at a subdivision point). */
+  readonly partial: boolean;
+  /** Its letters in τ* (kept up to date when the track is subdivided further). */
+  readonly letters: readonly Letter[];
 }
 
-/**
- * The prong traced until its length (sum of the lengths of the real branches) is `length`. The last real branch
- * is entered only partially unless the length ends exactly at a switch.
- */
-export function traceProngToLength(tt: TrainTrack, prong: Prong, length: number): Slit {
-  return traceProng(tt, prong, { length });
+/** The slits of a cut, and τ subdivided where their ends lie. */
+export interface SlitSystem {
+  readonly track: SubdividedTrack;
+  readonly slits: readonly Slit[];
 }
 
 /** The prong traced through `count` whole real branches. */
 export function traceProngThroughBranches(tt: TrainTrack, prong: Prong, count: number): Slit {
-  return traceProng(tt, prong, { count });
-}
-
-function traceProng(tt: TrainTrack, prong: Prong, until: { length?: number; count?: number }): Slit {
-  const { blocked, ...slit } = traceUntilCorner(tt, prong, until);
+  const { blocked, path, heights } = traceUntilCorner(tt, prong, count);
   if (blocked !== undefined)
     throw new Error(`The leaf runs into a corner at ${blocked} (a saddle connection)`);
-  return slit;
+  const track = new SubdividedTrack(tt);
+  return { path, heights, partial: false, letters: track.expand(path) };
 }
 
 /**
- * {@link traceProng}, but returning where the leaf runs into a corner (`blocked`) instead of throwing. The train path
- * of the leaf is found combinatorially ({@link leafPath}); the heights are only computed along it (kept inside each
- * branch, where rounding would put the leaf just outside).
+ * The prong traced through `count` real branches (fewer if it runs into a corner, `blocked`). The train path of the
+ * leaf is found combinatorially ({@link leafThroughRealBranches}); the heights are only computed along it (kept inside
+ * each branch, where rounding would put the leaf just outside).
  */
 function traceUntilCorner(
   tt: TrainTrack,
   prong: Prong,
-  until: { length?: number; count?: number },
-): Slit & { blocked?: Vertex } {
+  count: number,
+): { path: OrientedEdge[]; heights: number[]; blocked?: Vertex } {
   const widths = tt.widths as ReadonlyMap<Edge, number>;
   const corner = switchArc(tt, prong.atSwitch).infinitesimal.find((i) => i.end === prong.below);
   if (corner === undefined) throw new Error("The prong's lower branch doesn't start at its switch");
-  const real = (x: OrientedEdge) => tt.kind.get(x.edge) === "real";
-  const leaf = leafPath(tt, prong, (p) =>
-    until.count !== undefined
-      ? p.filter(real).length >= until.count
-      : p.reduce((l, x) => l + (tt.lengths.get(x.edge) as number), 0) >= (until.length as number),
-  );
+  const leaf = leafThroughRealBranches(tt, prong, count);
   const path: OrientedEdge[] = [];
   const heights: number[] = [];
   if (leaf === undefined) return { path, heights, blocked: prong.atSwitch };
   let [s, h, side] = [prong.atSwitch, corner.top, "real" as BranchKind];
-  let [travelled, count] = [0, 0];
   for (const x of leaf) {
     const interval = switchArc(tt, s)[side].find((i) => i.end === x);
     if (interval === undefined) throw new Error(`The leaf's branch ${x} doesn't leave ${s}`);
     const y = Math.min(Math.max(h - interval.bottom, 0), interval.top - interval.bottom);
-    path.push(interval.end);
+    path.push(x);
     heights.push(y);
-    if (side === "real") {
-      const l = tt.lengths.get(interval.end.edge) as number;
-      count++;
-      if (until.length !== undefined && travelled + l > until.length + TOLERANCE * until.length) {
-        return { path, heights, partialLength: until.length - travelled };
-      }
-      travelled += l;
-      if (until.length !== undefined && near(travelled, until.length, until.length)) break;
-      if (until.count !== undefined && count >= until.count) break; // end on the arc right after a real branch
-    }
-    const arrival = switchArc(tt, interval.end.target)[side].find((i) => i.end === interval.end.reversed);
+    const arrival = switchArc(tt, x.target)[side].find((i) => i.end === x.reversed);
     if (arrival === undefined) throw new Error("Inconsistent arcs");
     [s, h, side] = [
-      interval.end.target,
-      arrival.bottom + ((widths.get(interval.end.edge) as number) - y),
+      x.target,
+      arrival.bottom + ((widths.get(x.edge) as number) - y),
       side === "real" ? "infinitesimal" : "real",
     ];
   }
@@ -114,73 +100,127 @@ function traceUntilCorner(
 
 /**
  * The slits for cutting along the prong `prong` through `count` real branches: L itself and its preimages f⁻ʲ[L]
- * for j = 1, …, P − 1, where P is the period of the prong under f. f⁻ʲ[L] is the initial segment of length ℓ(L)/λʲ
- * of the prong mapped to `prong` by fʲ.
+ * for j = 1, …, P − 1, where P is the period of the prong under f. f⁻ʲ[L] is the initial segment of the leaf of the
+ * prong f⁻ʲ(prong) that g_τʲ maps onto L.
  */
-export function slitsForProng(tt: TrainTrack, prong: Prong, count: number): Slit[] {
-  const slits = growingSlits(tt, prong, count)(count);
-  if (slits === undefined) throw new Error("A slit runs into a corner (a saddle connection)");
-  return slits;
+export function slitsForProng(tt: TrainTrack, prong: Prong, count: number): SlitSystem {
+  const system = growingSlits(tt, prong, count)(count);
+  if (system === undefined) throw new Error("A slit runs into a corner (a saddle connection)");
+  return system;
 }
 
 /**
- * The slits of {@link slitsForProng} for every count up to `maxCount`, from a single trace of each prong of the
- * orbit: those for a smaller count are initial segments. `undefined` for the counts where a slit runs into a corner.
+ * The slits of {@link slitsForProng} for every count up to `maxCount`, from one leaf path per prong of the orbit:
+ * those for a smaller count are initial segments. `undefined` for the counts where a slit runs into a corner.
+ *
+ * The preimages are located one after the other in τ* (see `subdivided-track.ts`): f⁻ʲ(L) runs along the leaf of
+ * f⁻ʲ(prong) until the images of its letters cover f⁻⁽ʲ⁻¹⁾(L), letter for letter, and its last sub-branch is
+ * subdivided where they end.
+ *
+ * @throws Error if the images of a preimage leaf don't follow the slit they should cover.
  */
 export function growingSlits(
   tt: TrainTrack,
   prong: Prong,
   maxCount: number,
-): (count: number) => Slit[] | undefined {
+): (count: number) => SlitSystem | undefined {
   const same = (p: Prong, q: Prong) => p.atSwitch === q.atSwitch && p.below === q.below;
   const orbit = [prong]; // prong, f(prong), f²(prong), …
   for (let p = imageProng(tt, prong); !same(p, prong) && orbit.length < 10_000; p = imageProng(tt, p))
     orbit.push(p);
-  const L = traceUntilCorner(tt, prong, { count: maxCount });
-  // The index in L.path of the n-th real branch, and the length of L through it.
-  const ends: number[] = [];
-  const lengths: number[] = [];
-  let length = 0;
-  L.path.forEach((e, k) => {
-    length += tt.lengths.get(e.edge) as number;
-    if (tt.kind.get(e.edge) === "real") [ends[ends.length], lengths[lengths.length]] = [k, length];
-  });
   const P = orbit.length;
-  // f⁻ʲ(prong) = f^{P−j}(prong), traced as far as the longest L needs.
-  const scale = (j: number) => tt.growth ** j;
-  const preimages = Array.from({ length: P - 1 }, (_, i) =>
-    traceUntilCorner(tt, orbit[P - 1 - i] as Prong, { length: length / scale(i + 1) }),
-  );
+  const L = traceUntilCorner(tt, prong, maxCount);
+  /** The leaves of f⁻ʲ(prong) = f^{P−j}(prong), as long as they were needed so far (traced on demand). */
+  const leaves = new Map<number, ReturnType<typeof traceUntilCorner>>();
+  const leafOf = (j: number, count: number) => {
+    const known = leaves.get(j);
+    if (known !== undefined && (known.blocked !== undefined || realCount(tt, known.path) >= count))
+      return known;
+    const traced = traceUntilCorner(tt, orbit[P - j] as Prong, count);
+    leaves.set(j, traced);
+    return traced;
+  };
   return (count) => {
-    const end = ends[count - 1];
-    if (end === undefined) return undefined;
-    const prefix = { path: L.path.slice(0, end + 1), heights: L.heights.slice(0, end + 1) };
-    const ℓ = lengths[count - 1] as number;
-    const shorter = preimages.map((trace, i) => initialSegment(tt, trace, ℓ / scale(i + 1)));
-    return shorter.every((s) => s !== undefined) ? [prefix, ...shorter] : undefined;
+    if (L.blocked !== undefined || realCount(tt, L.path) < count) return undefined;
+    const track = new SubdividedTrack(tt);
+    const end = throughRealBranches(tt, L.path, count).length;
+    const slits: Slit[] = [
+      {
+        path: L.path.slice(0, end),
+        heights: L.heights.slice(0, end),
+        partial: false,
+        letters: track.keep(track.expand(L.path.slice(0, end))),
+      },
+    ];
+    for (let j = 1; j < P; j++) {
+      const preimage = lift(track, slits[j - 1] as Slit, (n) => leafOf(j, n));
+      if (preimage === undefined) return undefined;
+      slits.push(preimage);
+    }
+    return { track, slits };
   };
 }
 
-/** The initial segment of length `length` of a traced leaf, as {@link traceProngToLength} ends it; else undefined. */
-function initialSegment(tt: TrainTrack, trace: Slit, length: number): Slit | undefined {
-  let travelled = 0;
-  for (let k = 0; k < trace.path.length; k++) {
-    const e = trace.path[k] as OrientedEdge;
-    if (tt.kind.get(e.edge) !== "real") continue;
-    const l = tt.lengths.get(e.edge) as number;
-    const prefix = { path: trace.path.slice(0, k + 1), heights: trace.heights.slice(0, k + 1) };
-    if (travelled + l > length + TOLERANCE * length) return { ...prefix, partialLength: length - travelled };
-    travelled += l;
-    if (near(travelled, length, length)) return prefix;
+/**
+ * The initial segment of a leaf that g_* maps onto `target` (in τ*), with the sub-branch where it ends subdivided;
+ * `leaf(n)` traces the leaf through at least n real branches. Undefined if the leaf runs into a corner first.
+ */
+function lift(
+  track: SubdividedTrack,
+  target: Slit,
+  leaf: (count: number) => { path: OrientedEdge[]; heights: number[]; blocked?: Vertex },
+): Slit | undefined {
+  const tt = track.tt;
+  const goal = target.letters;
+  for (let n = 4; ; n *= 2) {
+    const traced = leaf(n);
+    // Walk along the leaf in τ*, comparing the images of its letters with the target, until they cover it.
+    let covered = 0;
+    let found: { t: number; q: number; k: number } | undefined;
+    for (const [t, x] of traced.path.entries()) {
+      for (const [q, y] of track.expand([x]).entries()) {
+        const image = track.image(y);
+        image.forEach((z, i) => {
+          if (covered + i < goal.length && z !== goal[covered + i])
+            throw new Error(
+              `The preimage of a slit doesn't follow it (${z.tau} instead of ${goal[covered + i]?.tau})`,
+            );
+        });
+        if (covered + image.length >= goal.length) {
+          found = { t, q, k: goal.length - covered };
+          break;
+        }
+        covered += image.length;
+      }
+      if (found !== undefined) break;
+    }
+    if (found === undefined) {
+      if (traced.blocked !== undefined || realCount(tt, traced.path) < n) return undefined;
+      continue;
+    }
+    const { t, q, k } = found;
+    const x = traced.path[t] as OrientedEdge;
+    const y = track.expand([x])[q] as Letter;
+    if (k < track.image(y).length) track.subdivide(y, k);
+    const last = track.expand([x]);
+    const letters = track.keep([...track.expand(traced.path.slice(0, t)), ...last.slice(0, q + 1)]);
+    if (letters.flatMap((z) => track.image(z)).some((z, i) => z !== goal[i]))
+      throw new Error("The preimage of a slit doesn't map onto it");
+    return {
+      path: traced.path.slice(0, t + 1),
+      heights: traced.heights.slice(0, t + 1),
+      partial: q + 1 < last.length,
+      letters,
+    };
   }
-  return undefined;
 }
 
 /** A piece of τ′: a horizontal strip of a (subdivided) branch of τ. */
 export interface Piece {
   readonly edge: Edge;
-  /** The branch of τ it lies in. */
+  /** The branch of τ it lies in, and the index of its sub-branch there (see SubdividedTrack). */
   readonly branch: Edge;
+  readonly subBranch: number;
   /** Its heights above the bottom of the branch (forward orientation). */
   readonly bottom: number;
   readonly top: number;
@@ -294,7 +334,8 @@ interface PieceDraft {
  *
  * @param blownUp The junctions of G that are cut as their polygons of TS(τ): those of the new punctures Q.
  */
-export function cut(tt: TrainTrack, slits: readonly Slit[], blownUp: ReadonlySet<Vertex>): CutTrack {
+export function cut(tt: TrainTrack, system: SlitSystem, blownUp: ReadonlySet<Vertex>): CutTrack {
+  const { track, slits } = system;
   const widths = tt.widths as ReadonlyMap<Edge, number>;
   const lengthOf = (e: Edge) => tt.lengths.get(e) as number;
   const widthOf = (e: Edge) => widths.get(e) as number;
@@ -302,53 +343,35 @@ export function cut(tt: TrainTrack, slits: readonly Slit[], blownUp: ReadonlySet
   /** The branches that get pieces: the real ones, and the infinitesimal ones of the junctions that are blown up. */
   const hasPieces = (e: Edge) => tt.kind.get(e) === "real" || isBlownUp(e.source);
 
-  // 1. Subdivision points of the real branches (forward length coordinates).
-  const points = new Map<Edge, number[]>(tt.graph.edges.map((e) => [e, [0, lengthOf(e)]]));
-  for (const slit of slits) {
-    if (slit.partialLength === undefined) continue;
-    const last = slit.path.at(-1) as OrientedEdge;
-    const l = lengthOf(last.edge);
-    const p = last.isForward ? slit.partialLength : l - slit.partialLength;
-    const list = points.get(last.edge) as number[];
-    if (!list.some((q) => near(q, p, l))) list.push(p);
-  }
-  for (const list of points.values()) list.sort((a, b) => a - b);
-  const subBranchCount = (e: Edge) => Math.max(1, (points.get(e) as number[]).length - 1);
+  // 1. The sub-branches of the real branches: τ subdivided where the slits end (see SlitSystem).
+  const subBranchCount = (e: Edge) => Math.max(1, track.subBranches(e).length);
+  /** The index of the sub-branch of a letter of τ* (0 for an infinitesimal branch). */
+  const subIndex = (x: Letter) => (x.sub === undefined ? 0 : track.indexOf(x.sub));
 
-  // 2. Slit heights on each sub-branch (forward heights).
+  // 2. Slit heights on each sub-branch (forward heights): each letter of a slit in τ* lies in its branch of τ, at the
+  // slit's height there.
   const cuts = new Map<string, number[]>(); // "branchId/sub" → heights
   const key = (e: Edge, k: number) => `${e.id}/${k}`;
-  slits.forEach((slit) =>
-    slit.path.forEach((x, i) => {
-      if (!hasPieces(x.edge)) return;
-      const w = widthOf(x.edge);
-      const l = lengthOf(x.edge);
-      const height = x.isForward ? (slit.heights[i] as number) : w - (slit.heights[i] as number);
-      const partial = i === slit.path.length - 1 && slit.partialLength !== undefined;
-      const [from, to] = !partial
-        ? [0, l]
-        : x.isForward
-          ? [0, slit.partialLength as number]
-          : [l - (slit.partialLength as number), l];
-      const pts = points.get(x.edge) as number[];
-      for (let k = 0; k < subBranchCount(x.edge); k++) {
-        const [a, b] = [pts[k] as number, pts[k + 1] ?? l];
-        if (a >= from - TOLERANCE * Math.max(1, l) && b <= to + TOLERANCE * Math.max(1, l)) {
-          const list = cuts.get(key(x.edge, k)) ?? [];
-          if (!list.some((c) => near(c, height, w))) list.push(height);
-          cuts.set(key(x.edge, k), list);
-        }
-      }
-    }),
-  );
+  for (const slit of slits) {
+    let i = -1;
+    slit.letters.forEach((x, n) => {
+      if (n === 0 || x.tau !== (slit.letters[n - 1] as Letter).tau) i++; // the next branch of τ
+      if (!hasPieces(x.tau.edge)) return;
+      const w = widthOf(x.tau.edge);
+      const height = x.tau.isForward ? (slit.heights[i] as number) : w - (slit.heights[i] as number);
+      const list = cuts.get(key(x.tau.edge, subIndex(x))) ?? [];
+      if (!list.some((c) => near(c, height, w))) list.push(height);
+      cuts.set(key(x.tau.edge, subIndex(x)), list);
+    });
+  }
 
   // Pieces of each sub-branch.
   const pieceDrafts = new Map<string, PieceDraft[]>();
   for (const e of tt.graph.edges.filter(hasPieces)) {
-    const pts = points.get(e) as number[];
     for (let k = 0; k < subBranchCount(e); k++) {
       const heights = [0, ...(cuts.get(key(e, k)) ?? []).sort((a, b) => a - b), widthOf(e)];
-      const [start, end] = [pts[k] as number, pts[k + 1] ?? lengthOf(e)];
+      const sub = track.subBranches(e)[k];
+      const [start, end] = sub === undefined ? [0, lengthOf(e)] : [sub.start, sub.end];
       pieceDrafts.set(
         key(e, k),
         heights
@@ -529,6 +552,7 @@ export function cut(tt: TrainTrack, slits: readonly Slit[], blownUp: ReadonlySet
     pieces.set(edge, {
       edge,
       branch: piece.branch,
+      subBranch: piece.subBranch,
       bottom: piece.bottom,
       top: piece.top,
       start: piece.start,
@@ -562,20 +586,37 @@ export function cut(tt: TrainTrack, slits: readonly Slit[], blownUp: ReadonlySet
   // The heights of the slits are traced through branches of very different widths, so their rounding errors are
   // absolute, on the scale of the widest branch: a thin (e.g. infinitesimal) branch needs more than TOLERANCE · w.
   const heightError = 1e-11 * Math.max(...widths.values());
+  /**
+   * For each branch b: g_* of its sub-branches, one after the other, is its strand g_τ(b) in letters of τ*; for each
+   * position there, the index of the branch of the strand it lies in.
+   */
+  const strandIndex = new Map<Edge, number[]>();
+  const strandIndexOf = (b: Edge, path: readonly OrientedEdge[]) => {
+    let list = strandIndex.get(b);
+    if (list === undefined) {
+      list = path.flatMap((c, i) => track.expand([c]).map(() => i));
+      strandIndex.set(b, list);
+    }
+    return list;
+  };
   for (const [edge, piece] of pieces) {
     const strand = strandOf.get(piece.branch);
     if (strand === undefined) throw new Error(`No strand for ${piece.branch}`);
-    // The image of the piece along the strand. Where the piece ends at a switch, so does its image (exactly: the PF
-    // lengths span many orders of magnitude, and a short branch at the end must not be lost to the tolerance).
-    const l0 = lengthOf(piece.branch);
-    const s0 = piece.start <= 0 ? -Infinity : λ * piece.start;
-    const s1 = piece.end >= l0 ? Infinity : λ * piece.end;
-    const scale = Math.max(1, λ * piece.end);
+    // The image of the piece: g_* of its sub-branch, which starts after the images of the sub-branches before it.
+    const subs = track.subBranches(piece.branch);
+    const letters =
+      subs.length === 0
+        ? track.image(track.expand([piece.branch.forward])[0] as Letter)
+        : track.image((subs[piece.subBranch] as SubBranch).forward);
+    const before = subs.slice(0, piece.subBranch).reduce((n, sub) => n + track.image(sub.forward).length, 0);
+    const indices = strandIndexOf(piece.branch, strand.path);
     const image: OrientedEdge[] = [];
-    let a = 0; // cumulative length along the path
-    strand.path.forEach((c, i) => {
-      if (!hasPieces(c.edge)) return; // (an infinitesimal branch of a junction that isn't blown up: no length)
-      const l = lengthOf(c.edge);
+    letters.forEach((z, n) => {
+      const i = indices[before + n];
+      if (i === undefined || strand.path[i] !== z.tau)
+        throw new Error(`The image of a piece of ${piece.branch} doesn't follow its strand`);
+      const c = z.tau;
+      if (!hasPieces(c.edge)) return; // (an infinitesimal branch of a junction that isn't blown up)
       const o = strand.offsets[i] as number;
       // Heights are measured from the bottom of the arc where a traversal starts. For real branches (which leave
       // to the right) that is the rectangle's own bottom; for infinitesimal ones (which leave to the left) it is
@@ -588,37 +629,13 @@ export function cut(tt: TrainTrack, slits: readonly Slit[], blownUp: ReadonlySet
       const w = widthOf(c.edge);
       const [low, high] = c.isForward ? [y0, y1] : [w - y1, w - y0];
       const tolerance = Math.max(TOLERANCE * w, heightError);
-      const choose = (k: number) => {
-        const candidate = piecesAt(c.edge, k).find(
-          (p) => p.bottom <= low + tolerance && high <= p.top + tolerance,
-        );
-        if (candidate === undefined)
-          throw new Error(`The image of a piece of ${piece.branch} doesn't fit into a piece of ${c.edge}`);
-        const e = candidate.edge as Edge;
-        image.push(c.isForward ? e.forward : e.backward);
-      };
-      if (tt.kind.get(c.edge) === "infinitesimal") {
-        if (
-          tt.kind.get(piece.branch) === "infinitesimal" ||
-          (a >= s0 - TOLERANCE * scale && a < s1 - TOLERANCE * scale)
-        )
-          choose(0);
-      } else {
-        // A branch inside the image is taken whole, however short; one the image only overlaps needs a real overlap.
-        const whole = s0 <= a && a + l <= s1;
-        const [u0, u1] = whole ? [0, l] : [Math.max(s0, a) - a, Math.min(s1, a + l) - a];
-        if (whole || u1 - u0 > TOLERANCE * scale) {
-          const [f0, f1] = c.isForward ? [u0, u1] : [l - u1, l - u0];
-          const pts = points.get(c.edge) as number[];
-          const ks = Array.from({ length: subBranchCount(c.edge) }, (_, k) => k).filter(
-            (k) =>
-              (pts[k] as number) >= f0 - TOLERANCE * Math.max(1, l) &&
-              (pts[k + 1] ?? l) <= f1 + TOLERANCE * Math.max(1, l),
-          );
-          for (const k of c.isForward ? ks : ks.toReversed()) choose(k);
-        }
-      }
-      a += l;
+      const candidate = piecesAt(c.edge, subIndex(z)).find(
+        (p) => p.bottom <= low + tolerance && high <= p.top + tolerance,
+      );
+      if (candidate === undefined)
+        throw new Error(`The image of a piece of ${piece.branch} doesn't fit into a piece of ${c.edge}`);
+      const e = candidate.edge as Edge;
+      image.push(c.isForward ? e.forward : e.backward);
     });
     gPrime.setImage(edge.forward, EdgePath.from(image));
   }

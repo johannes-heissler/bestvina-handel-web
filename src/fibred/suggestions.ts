@@ -11,13 +11,7 @@ import type { FibredSurface } from "./fibred-surface";
 import { applyMove, type FollowUp, type FoldRef, foldRef, type Move, type MoveKind, strip } from "./move";
 import { needsAbsorbing } from "./moves/absorb-periphery";
 import { candidateCenters, invariantSubforests, isPeripheryFriendlyForest } from "./moves/collapse-forest";
-import {
-  cutOptions,
-  cutTooFine,
-  NoCutFound,
-  preimageShrinking,
-  prongsOfOrbit,
-} from "./moves/cut-closed-surface";
+import { cutOptions, NoCutFound, prongsOfOrbit } from "./moves/cut-closed-surface";
 import { oneCuspPunctures, polygonSingularities, ratedFillings } from "./moves/fill-puncture";
 import type { FoldOption } from "./moves/fold";
 import {
@@ -514,20 +508,17 @@ function nextStep(fs: FibredSurface, context: SuggestionContext): Suggestion {
     };
 
   const oneCusp = oneCuspPunctures(fs);
-  if (fs.isClosed && oneCusp > 0) {
-    const { options, note } = closedSurfaceOptions(fs);
+  if (fs.isClosed && oneCusp > 0)
     return {
       kind: "closed surface",
       description: [
         oneCusp === 1
           ? "The map is efficient, but τ has only one cusp at the artificial puncture. Replace it by the orbit of a singularity q."
           : `The map is efficient, but τ has only one cusp at each of the ${oneCusp} artificial punctures (an orbit). Replace them by the orbit of a singularity q.`,
-        ...note,
       ],
-      options,
+      options: closedSurfaceOptions(fs),
       multiple: false,
     };
-  }
 
   if (!fs.ignoreReducible) {
     const disconnected = disconnectedJunctions(fs);
@@ -564,10 +555,9 @@ function nextStep(fs: FibredSurface, context: SuggestionContext): Suggestion {
 
 /**
  * The moves of the closed-surface case: cut along a leaf from a singularity, or the shortcut, one option per orbit of
- * singularities, by period. Cuts that the floating-point cut can't resolve ({@link cutTooFine}) come last, greyed out,
- * so that the default is a cut that works or else the shortcut; `note` says why for the description.
+ * singularities, by period.
  */
-function closedSurfaceOptions(fs: FibredSurface): { options: MoveOption[]; note: Text } {
+function closedSurfaceOptions(fs: FibredSurface): MoveOption[] {
   const tt = trainTrack(fs);
   const seen = new Set<Vertex>();
   // (sorted by period) One per orbit.
@@ -586,62 +576,22 @@ function closedSurfaceOptions(fs: FibredSurface): { options: MoveOption[]; note:
           ),
           "; period " + orbit.length + ")",
         ];
-  const cuts = singularities.map((q) => {
-    const tooFine = cutTooFine(tt, q.junction);
-    const option: MoveOption = {
+  return [
+    ...singularities.map((q) => ({
       move: { kind: "cut along a singular leaf" as const, junction: q.junction.name },
+      label: ["Cut along a leaf from ", { junction: q.junction.name }, ...orbitText(q.orbit)] as Text,
+      rating: q.orbit.length,
+    })),
+    ...singularities.map((q) => ({
+      move: { kind: "replace puncture by singularity" as const, junction: q.junction.name },
       label: [
-        "Cut along a leaf from ",
+        "Shortcut: fill the puncture at ",
         { junction: q.junction.name },
         ...orbitText(q.orbit),
-        ...(tooFine
-          ? [
-              ": not possible yet, its preimages would be " +
-                preimageShrinking(tt, q.junction).toExponential(0) +
-                " times shorter",
-            ]
-          : []),
       ] as Text,
       rating: q.orbit.length,
-      ...(tooFine && { discouraged: true }),
-    };
-    return { q, tooFine, option };
-  });
-  const shortcuts = singularities.map((q): MoveOption => ({
-    move: { kind: "replace puncture by singularity" as const, junction: q.junction.name },
-    label: ["Shortcut: fill the puncture at ", { junction: q.junction.name }, ...orbitText(q.orbit)] as Text,
-    rating: q.orbit.length,
-  }));
-  const tooFine = cuts.filter((c) => c.tooFine);
-  const note: Text =
-    tooFine.length === 0
-      ? []
-      : [
-          tooFine.length === cuts.length
-            ? " No cut is possible yet: the preimages of every leaf would be too short for the floating-point cut, so the shortcut is the default."
-            : tooFine.length === 1
-              ? " The cut from "
-              : " The cuts from ",
-          ...(tooFine.length === cuts.length
-            ? []
-            : [
-                ...tooFine.flatMap((c, i): TextPart[] => [
-                  ...(i === 0 ? [] : [", "]),
-                  { junction: c.q.junction.name },
-                ]),
-                tooFine.length === 1
-                  ? " isn't possible yet: the preimages of its leaf would be too short for the floating-point cut."
-                  : " aren't possible yet: the preimages of their leaves would be too short for the floating-point cut.",
-              ]),
-        ];
-  return {
-    options: [
-      ...cuts.filter((c) => !c.tooFine).map((c) => c.option),
-      ...shortcuts,
-      ...tooFine.map((c) => c.option),
-    ],
-    note,
-  };
+    })),
+  ];
 }
 
 /**
@@ -974,8 +924,6 @@ export function variants(fs: FibredSurface, move: Move, remark?: RemarkingProvid
       const all = prongs(tt);
       const q = fs.graph.vertices.find((v) => v.name === move.junction);
       if (q === undefined) return [];
-      if (cutTooFine(tt, q))
-        throw new Error("the preimages of the leaf are too short for the floating-point cut");
       /** The real branches of a slit, the first `max` of them (as strip names). */
       const branches = (path: readonly OrientedEdge[], max = Infinity): TextPart[] => {
         const real = path.filter((x) => tt.kind.get(x.edge) === "real");
@@ -988,7 +936,7 @@ export function variants(fs: FibredSurface, move: Move, remark?: RemarkingProvid
         junction: (tt.junctionOf.get((path[0] as OrientedEdge).source) as Vertex).name,
       });
       return cutOptions(tt, prongsOfOrbit(tt, q)).map((o) => {
-        const [L, ...preimages] = slitsForProng(tt, o.prong, o.realBranches) as [Slit, ...Slit[]];
+        const [L, ...preimages] = slitsForProng(tt, o.prong, o.realBranches).slits as [Slit, ...Slit[]];
         return {
           move: {
             ...move,
@@ -1014,7 +962,7 @@ export function variants(fs: FibredSurface, move: Move, remark?: RemarkingProvid
                 from(slit.path),
                 ": ",
                 ...branches(slit.path),
-                ...(slit.partialLength !== undefined ? [" (the last partly)"] : []),
+                ...(slit.partial ? [" (the last partly)"] : []),
               ]),
               ".",
             ] as Text,
