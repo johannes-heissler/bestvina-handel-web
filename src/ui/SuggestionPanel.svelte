@@ -1,8 +1,9 @@
 <!--
   The next step of the algorithm with its options (the C# suggestion menu) and, under the focused option, its further
   choices. "What will happen" shows what the selected move does, step by step, computed before it is applied (and
-  used when it is), with a timeline to see each step in the views. After a step, the kinds ticked under "Automatic
-  steps" follow by themselves (e.g. pulling tight). Going back and forth is in the history panel (`HistoryView`).
+  used when it is), with a timeline to see each step in the views; the row with Apply and the timeline stay in sight.
+  After a step, the kinds ticked under "Options" follow by themselves (e.g. pulling tight), within its limits. "What
+  will happen" and "Options" are collapsible. Going back and forth is in the history panel (`HistoryView`).
 -->
 <script lang="ts">
   import {
@@ -15,7 +16,7 @@
   } from "../fibred/suggestions";
   import type { FibredSurface } from "../fibred/fibred-surface";
   import { foldHighlight, type Wedge } from "../fibred/fold-highlight";
-  import { PREVIEW_AUTOMATIC_STEPS, PREVIEW_TIME_LIMIT, type Preview } from "../session/session";
+  import type { AutomaticLimits, Preview } from "../session/session";
   import type { Motion } from "../fibred/narration";
   import { describeMove } from "../session/describe";
   import { app } from "./state.svelte";
@@ -150,9 +151,10 @@
     const move = selectedMove;
     const session = app.session;
     const automatic = new Set(app.automatic);
+    const limits = { ...app.previewLimits };
     preview = undefined;
     if (!move || !session) return;
-    const timer = setTimeout(() => (preview = session.preview(move, automatic)), 0);
+    const timer = setTimeout(() => (preview = session.preview(move, automatic, limits)), 0);
     return () => clearTimeout(timer);
   });
 
@@ -239,6 +241,16 @@
     else if (selectedMove) app.apply(selectedMove, { thenAutomatic: true });
   }
 
+  /** The height of the bar with Apply, which the timeline row sticks under. */
+  let barHeight = $state(0);
+  let willHappenOpen = $state(true);
+  let optionsOpen = $state(false);
+
+  /** Sets a limit of the automatic steps after a move (ignoring what isn't a positive number). */
+  function setPreviewLimit(key: keyof AutomaticLimits, value: number) {
+    if (Number.isFinite(value) && value > 0) app.previewLimits = { ...app.previewLimits, [key]: value };
+  }
+
   function toggleAutomatic(kind: SuggestionKind) {
     app.automatic = app.automatic.includes(kind) ? app.automatic.filter((k) => k !== kind) : [...app.automatic, kind];
   }
@@ -312,43 +324,28 @@
       </ul>
     {/if}
   {/if}
-  {#if suggestion?.options.length || suggestion?.kind !== "finished"}
-    <div class="buttons">
-      {#if suggestion?.options.length}<button class="primary" onclick={applySelected}>Apply</button>{/if}
-      {#if suggestion?.kind !== "finished"}
-        <button onclick={runToTheEnd} title="Apply the default of every step until the algorithm stops">Run to the end</button>
-      {/if}
-    </div>
-  {/if}
+</section>
 
-  <details class="automatic">
-    <summary>Options</summary>
-    <h4>Automatic steps ({app.automatic.length})</h4>
-    <p class="hint">After each step you apply, steps of these kinds are done automatically; each is kept in the history.</p>
-    <div class="checklist">
-      {#each KINDS as { kind, label } (kind)}
-        <label><input type="checkbox" checked={app.automatic.includes(kind)} onchange={() => toggleAutomatic(kind)} /> {label}</label>
-      {/each}
-    </div>
-    <h4>Moves beyond the original algorithm</h4>
-    <p class="hint">Switched off, their options are greyed out and never applied automatically.</p>
-    <div class="checklist">
-      {#each OPTIONAL as { move, label, title } (move)}
-        <label {title}><input type="checkbox" checked={!app.disabled.includes(move)} onchange={() => app.toggleMove(move)} /> {label}</label>
-      {/each}
-    </div>
-  </details>
+<!-- (Stays in sight at the top while the panel scrolls, with the timeline of "What will happen" under it.) -->
+{#if suggestion?.options.length || suggestion?.kind !== "finished"}
+  <div class="action-bar" bind:clientHeight={barHeight}>
+    {#if suggestion?.options.length}<button class="primary" onclick={applySelected}>Apply</button>{/if}
+    {#if suggestion?.kind !== "finished"}
+      <button onclick={runToTheEnd} title="Apply the default of every step until the algorithm stops">Run to the end</button>
+    {/if}
+  </div>
+{/if}
 
-  {#if suggestion?.options.length}
-    <div class="will-happen-block">
-    <h3>What will happen</h3>
+{#if suggestion?.options.length}
+  <details class="panel will-happen-block" bind:open={willHappenOpen}>
+    <summary><h2>What will happen</h2></summary>
     {#if preview === undefined}
       <p class="note">Computing…</p>
     {:else if preview.error !== undefined}
       <p class="note">This can't be applied here: {preview.error}</p>
     {:else}
       <!-- (A short horizontal slider in a row that stays in sight: a slider as tall as the list scrolled the panel.) -->
-      <div class="timeline-controls">
+      <div class="timeline-controls" style:top="{barHeight}px">
         <button onclick={play} title="Show the steps one after the other in the views">{playing ? "⏸" : "▶"}</button>
         <input
           class="timeline"
@@ -407,14 +404,71 @@
         {#if preview.automatic.length === 1}Step {moments.length} is the automatic step after it.
         {:else if preview.automatic.length > 1}Steps {preview.steps.length + 1}–{moments.length} are the automatic steps
           after it.
-        {/if}{#if preview.limit === "steps"}{" "}The automatic steps stop there, at the limit of {PREVIEW_AUTOMATIC_STEPS}, though
+        {/if}{#if preview.limit === "steps"}{" "}The automatic steps stop there, at the limit of {app.previewLimits.maxSteps}, though
           there are more.
-        {:else if preview.limit === "time"}{" "}The automatic steps stop there, after {PREVIEW_TIME_LIMIT / 1000} seconds,
+        {:else if preview.limit === "time"}{" "}The automatic steps stop there, after {app.previewLimits.timeLimit / 1000} seconds,
           though there are more.
         {/if}{" "}Afterwards: {preview.growth === undefined ? "the growth can't be computed" : `growth λ = ${preview.growth.toFixed(6)}`}
         <span class="timing">({preview.time.toFixed(0)} ms)</span>
       </p>
     {/if}
+  </details>
+{/if}
+
+<details class="panel" bind:open={optionsOpen}>
+  <summary><h2>Options</h2></summary>
+    <h3>Automatic steps ({app.automatic.length})</h3>
+    <p class="hint">After each step you apply, steps of these kinds are done automatically; each is kept in the history.</p>
+    <div class="checklist">
+      {#each KINDS as { kind, label } (kind)}
+        <label><input type="checkbox" checked={app.automatic.includes(kind)} onchange={() => toggleAutomatic(kind)} /> {label}</label>
+      {/each}
     </div>
-  {/if}
-</section>
+    <h3>Moves beyond the original algorithm</h3>
+    <p class="hint">Switched off, their options are greyed out and never applied automatically.</p>
+    <div class="checklist">
+      {#each OPTIONAL as { move, label, title } (move)}
+        <label {title}><input type="checkbox" checked={!app.disabled.includes(move)} onchange={() => app.toggleMove(move)} /> {label}</label>
+      {/each}
+    </div>
+    <h3>Limits</h3>
+    <p class="hint">
+      So that a surface on which the algorithm never ends doesn't hang the app. When a limit stops the steps, a message
+      says so; applying the next step or running to the end again continues.
+    </p>
+    <div class="limits">
+      <label
+        >Automatic steps after a move (and in “What will happen”): at most
+        <input
+          type="number"
+          min="1"
+          step="1"
+          value={app.previewLimits.maxSteps}
+          onchange={(event) => setPreviewLimit("maxSteps", Math.round(event.currentTarget.valueAsNumber))}
+        />
+        steps,
+        <input
+          type="number"
+          min="0.1"
+          step="0.5"
+          value={app.previewLimits.timeLimit / 1000}
+          onchange={(event) => setPreviewLimit("timeLimit", event.currentTarget.valueAsNumber * 1000)}
+        />
+        seconds</label
+      >
+      <label
+        >Run to the end: at most
+        <input
+          type="number"
+          min="0.1"
+          step="1"
+          value={app.runTimeLimit / 1000}
+          onchange={(event) => {
+            const seconds = event.currentTarget.valueAsNumber;
+            if (Number.isFinite(seconds) && seconds > 0) app.runTimeLimit = seconds * 1000;
+          }}
+        />
+        seconds</label
+      >
+    </div>
+</details>

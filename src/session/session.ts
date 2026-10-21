@@ -86,8 +86,7 @@ export interface Preview {
   /** The automatic steps after the move: each move, its explanation and the surface after it. */
   readonly automatic: readonly { move: Move; steps: readonly NarratedStep[]; surface: FibredSurface }[];
   /**
-   * The limit that stopped the automatic steps while there were more to do: {@link PREVIEW_AUTOMATIC_STEPS} steps or
-   * {@link PREVIEW_TIME_LIMIT}.
+   * The limit that stopped the automatic steps while there were more to do (see {@link AutomaticLimits}).
    */
   readonly limit?: AutopilotLimit;
   /** The growth of g after the move and the automatic steps (undefined if it can't be computed). */
@@ -98,10 +97,17 @@ export interface Preview {
   readonly time: number;
 }
 
-/** How many automatic steps a preview (and so applying a move) does at most. */
-export const PREVIEW_AUTOMATIC_STEPS = 50;
-/** After how many ms a preview starts no further automatic step. */
-export const PREVIEW_TIME_LIMIT = 3000;
+/**
+ * How far the automatic steps after a move go at most: `maxSteps` steps, and no step is started after `timeLimit` ms
+ * (so that a surface on which they never end doesn't hang the app).
+ */
+export interface AutomaticLimits {
+  readonly maxSteps: number;
+  readonly timeLimit: number;
+}
+
+/** The limits of the automatic steps in a preview (and so after applying a move), unless the options say otherwise. */
+export const DEFAULT_PREVIEW_LIMITS: AutomaticLimits = { maxSteps: 50, timeLimit: 3000 };
 
 export class Session {
   readonly root: HistoryNode;
@@ -201,13 +207,15 @@ export class Session {
 
   /**
    * What `move` will do from the current state (computed once per state, move and automatic kinds): applied to a
-   * copy, with its explanation and the states in between, then the automatic steps (at most
-   * {@link PREVIEW_AUTOMATIC_STEPS} and for at most {@link PREVIEW_TIME_LIMIT}, so that a surface on which they never
-   * end doesn't hang the app).
+   * copy, with its explanation and the states in between, then the automatic steps (within `limits`).
    */
-  preview(move: Move, automatic: ReadonlySet<SuggestionKind> = new Set()): Preview {
+  preview(
+    move: Move,
+    automatic: ReadonlySet<SuggestionKind> = new Set(),
+    limits: AutomaticLimits = DEFAULT_PREVIEW_LIMITS,
+  ): Preview {
     const node = this.current;
-    const key = JSON.stringify([move, [...automatic].sort(), [...this.disabled].sort()]);
+    const key = JSON.stringify([move, [...automatic].sort(), [...this.disabled].sort(), limits]);
     let byKey = this.previews.get(node);
     if (byKey === undefined) this.previews.set(node, (byKey = new Map()));
     const cached = byKey.get(key);
@@ -246,8 +254,8 @@ export class Session {
           automatic,
           remark: this.remarker(node),
           disabled: this.disabled,
-          maxSteps: PREVIEW_AUTOMATIC_STEPS,
-          timeLimit: PREVIEW_TIME_LIMIT,
+          maxSteps: limits.maxSteps,
+          timeLimit: limits.timeLimit,
           ...(hint.followUp && { followUp: hint.followUp }),
           onStep: (m, surface, texts) => auto.push({ move: m, steps: texts, surface: surface.copy() }),
         }));

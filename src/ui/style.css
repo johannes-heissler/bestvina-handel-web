@@ -213,10 +213,28 @@ input[type="number"] {
   font-size: 0.95rem;
   line-height: 1.5;
 }
-.automatic summary {
-  cursor: pointer;
-  font-weight: 600;
-  margin: 0.6rem 0 0.3rem;
+/* The limits of the automatic steps (the options of the algorithm panel). */
+.limits {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  font-size: 0.85rem;
+}
+.limits input[type="number"] {
+  width: 4rem;
+}
+/* Apply and Run to the end: a row at the top of the algorithm panel that stays in sight while it scrolls. */
+.action-bar {
+  display: flex;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+  align-items: center;
+  padding: 0.4rem 0.9rem;
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--panel);
+  border-bottom: 1px solid var(--rule);
 }
 .rating {
   color: var(--muted);
@@ -368,13 +386,16 @@ pre {
   stroke: var(--accent);
 }
 
+/* (Above the rows that stay in sight, which have their own z-index.) */
 .overlay {
   position: fixed;
   inset: 0;
+  z-index: 10;
   background: rgb(0 0 0 / 0.35);
 }
 .dialog {
   position: fixed;
+  z-index: 11;
   left: 50%;
   top: 50%;
   transform: translate(-50%, -50%);
@@ -435,11 +456,13 @@ pre {
   color: var(--muted);
 }
 
-details.panel > summary {
+details.panel > summary,
+details.toggle > summary {
   cursor: pointer;
   list-style-position: inside;
 }
-details.panel > summary h2 {
+details.panel > summary h2,
+details.toggle > summary h2 {
   display: inline;
 }
 .table-scroll {

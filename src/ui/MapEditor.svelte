@@ -90,7 +90,7 @@
 <details class="panel" bind:open>
   <summary>
     <h2>Graph map <span class="math">g: G ⟶ G</span></h2>
-    {#if !editing}
+    {#if open && !editing}
       <!-- in the summary, a click would also toggle the panel: prevent that, and open it for editing -->
       <button
         class="edit"

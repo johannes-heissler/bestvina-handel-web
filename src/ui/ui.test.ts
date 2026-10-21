@@ -7,6 +7,13 @@ import { app } from "./state.svelte";
 import HistoryView from "./HistoryView.svelte";
 import SuggestionPanel from "./SuggestionPanel.svelte";
 
+// (jsdom has no ResizeObserver; the panel measures the height of its row with Apply with it.)
+globalThis.ResizeObserver ??= class {
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+};
+
 describe("components", () => {
   it("shows the result of a finished example", () => {
     app.start({ kind: "preset", preset: "Anosov map of the torus" });

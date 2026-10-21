@@ -1,6 +1,7 @@
 <!--
   The history: back to the start or one step, forward to the moves made from here, what the last moves did, and the
   tree from the start (top) downwards (λ at each state, the move between the levels; click a state to go there).
+  Collapsible: its heading is a disclosure of its own, since the panel fills its pane as a column.
 -->
 <script lang="ts">
   import { perronFrobenius } from "../fibred/perron-frobenius";
@@ -101,6 +102,7 @@
     return steps.map((s) => (s.note ? { text: s.text } : { text: s.text, number: ++k }));
   }
 
+  let open = $state(true);
   let container = $state<HTMLDivElement | undefined>(undefined);
   $effect(() => {
     void tree;
@@ -109,8 +111,8 @@
 </script>
 
 <section class="panel history">
-  <h2>History</h2>
-  {#if node}
+  <details class="toggle" bind:open><summary><h2>History</h2></summary></details>
+  {#if open && node}
     <div class="history-controls">
     <div class="buttons">
       <button disabled={!node.parent} onclick={() => app.session && app.select(app.session.root)}>⤒ Start</button>
@@ -153,7 +155,7 @@
     {/if}
     </div>
   {/if}
-  {#if tree}
+  {#if open && tree}
     <div class="scroll" bind:this={container}>
       <svg width={tree.width} height={tree.height} role="tree" aria-label="The history of moves">
         {#each tree.edges as e (e.to.node.id)}
