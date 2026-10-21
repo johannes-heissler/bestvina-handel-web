@@ -952,7 +952,16 @@ export function variants(fs: FibredSurface, move: Move): MoveOption[] {
         junction: (tt.junctionOf.get((path[0] as OrientedEdge).source) as Vertex).name,
       });
       return cutOptions(tt, prongsOfOrbit(tt, q)).map((o) => {
-        const [L, ...preimages] = slitsForProng(tt, o.prong, o.realBranches) as [Slit, ...Slit[]];
+        const slits = slitsForProng(tt, o.prong, o.realBranches);
+        const [L, ...preimages] = slits as [Slit, ...Slit[]];
+        const total = slits.reduce(
+          (n, slit) => n + slit.path.filter((x) => tt.kind.get(x.edge) === "real").length,
+          0,
+        );
+        const cutAlong =
+          preimages.length === 0
+            ? "L alone"
+            : `L and ${preimages.length} ${preimages.length === 1 ? "preimage" : "preimages"}`;
         return {
           move: {
             ...move,
@@ -966,6 +975,7 @@ export function variants(fs: FibredSurface, move: Move): MoveOption[] {
             from(L.path),
             ": ",
             ...branches(L.path, 8),
+            ` (prong period ${slits.length}: cut along ${cutAlong}, ${total} branches in total)`,
           ],
           rating: o.realBranches,
           ratingText: `${o.realBranches} branches`,
