@@ -339,12 +339,12 @@ export function analyzeProngs(fs: FibredSurface, maxRealBranches = 500): ProngAn
         let found: number | undefined;
         let failure: string | undefined = "not within limit";
         for (let count = 1; count <= maxRealBranches; count++) {
-          const system = slitsFor(count);
-          if (system === undefined) {
+          const slits = slitsFor(count);
+          if (slits === undefined) {
             failure = "corner";
             break;
           }
-          if (ringsCutOff(tt, rings, system.slits)) {
+          if (ringsCutOff(tt, rings, slits)) {
             found = count;
             failure = undefined;
             break;

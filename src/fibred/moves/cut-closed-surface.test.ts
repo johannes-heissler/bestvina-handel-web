@@ -2,7 +2,13 @@ import { describe, expect, it } from "vitest";
 import { closedGenus2OneCusp } from "../../examples/maps";
 import { Color } from "../../math/color";
 import { runAlgorithm } from "../algorithm";
-import { cut, growingSlits, type Slit, slitsForProng, traceProngThroughBranches } from "../cut-along-leaf";
+import {
+  cut,
+  growingSlits,
+  type SlitPath,
+  slitsForProng,
+  traceProngThroughBranches,
+} from "../cut-along-leaf";
 import { perronFrobenius } from "../perron-frobenius";
 import { trainTrack } from "../train-track";
 import {
@@ -127,15 +133,16 @@ describe("the length of L from the slits, without cutting (port note 15, update 
         const slitsFor = growingSlits(tt, prong, max);
         const blownUp = new Set(cutOrbit(tt, prong));
         for (let count = 1; count <= max; count++) {
-          const system = slitsFor(count);
-          if (system === undefined) break;
+          const slits = slitsFor(count);
+          if (slits === undefined) break;
           let truth: boolean;
           try {
-            truth = attachedCircles(cut(tt, system, blownUp), rings.length) !== undefined;
+            truth =
+              attachedCircles(cut(tt, slitsForProng(tt, prong, count), blownUp), rings.length) !== undefined;
           } catch {
             continue;
           }
-          expect(ringsCutOff(tt, rings, system.slits), `${name}, count ${count}`).toBe(truth);
+          expect(ringsCutOff(tt, rings, slits), `${name}, count ${count}`).toBe(truth);
           if (truth) successes++;
         }
       }
@@ -147,14 +154,16 @@ describe("the length of L from the slits, without cutting (port note 15, update 
     const original = closedGenus2OneCusp();
     const tt = trainTrack(original);
     const q = original.graph.vertices.find((v) => v.name === "q")!;
-    const show = (s: Slit) => [s.path.map(String), String(s.prong.below), s.partial];
+    const show = (s: SlitPath) => [s.path.map(String), String(s.prong.below), s.partial];
     for (const prong of prongsOfOrbit(tt, q)) {
       const slitsFor = growingSlits(tt, prong, 60);
       for (const count of [1, 2, 17, 18, 60]) {
-        const [L, ...preimages] = slitsFor(count)!.slits;
+        const [L, ...preimages] = slitsFor(count)!;
         expect(show(L!)).toEqual(show(traceProngThroughBranches(tt, prong, count)));
         // The preimages, traced only as far as this length needs.
-        expect(preimages.map(show)).toEqual(growingSlits(tt, prong, count)(count)!.slits.slice(1).map(show));
+        expect(preimages.map(show)).toEqual(growingSlits(tt, prong, count)(count)!.slice(1).map(show));
+        // The numbers of letters locate the ends as the lifts in τ* do.
+        expect(slitsFor(count)!.map(show)).toEqual(slitsForProng(tt, prong, count).slits.map(show));
       }
     }
   });

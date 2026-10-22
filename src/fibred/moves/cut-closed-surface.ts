@@ -16,7 +16,7 @@ import {
   type CutTrack,
   growingSlits,
   type Piece,
-  type Slit,
+  type SlitPath,
   type SlitSystem,
   slitsForProng,
 } from "../cut-along-leaf";
@@ -251,7 +251,22 @@ interface Traversal {
  *   that lies between the letters.
  * The cusp is then the only switch of the ring with valence > 2.
  */
-export function ringsCutOff(tt: TrainTrack, rings: readonly RingLetters[], slits: readonly Slit[]): boolean {
+export function ringsCutOff(
+  tt: TrainTrack,
+  rings: readonly RingLetters[],
+  slits: readonly SlitPath[],
+): boolean {
+  return ringsCutOffAsGrowing(tt, rings)(slits);
+}
+
+/**
+ * {@link ringsCutOff} for slits that grow from one call to the next (each slit an extension of its previous version, as
+ * L is prolonged): only the new passes are compared with the nearest ones so far. Starts afresh if they don't grow.
+ */
+export function ringsCutOffAsGrowing(
+  tt: TrainTrack,
+  rings: readonly RingLetters[],
+): (slits: readonly SlitPath[]) => boolean {
   const points = leafPoints(tt);
   const occurrences = new Map<Edge, { ring: number; i: number; letter: OrientedEdge }[]>();
   rings.forEach(({ letters }, ring) =>
@@ -261,41 +276,55 @@ export function ringsCutOff(tt: TrainTrack, rings: readonly RingLetters[], slits
       occurrences.set(letter.edge, list);
     }),
   );
-  const nearest = rings.map(({ letters }) =>
-    new Array<Traversal | undefined>(letters.length).fill(undefined),
-  );
-  slits.forEach((slit, s) =>
-    slit.path.forEach((x, k) => {
-      for (const { ring, i, letter } of occurrences.get(x.edge) ?? []) {
-        const point = { prong: points.indexOf(slit.prong), index: k };
-        const along = x === letter;
-        const old = (nearest[ring] as (Traversal | undefined)[])[i];
-        // Nearest to the puncture: lowest, seen along the letter (p lies on its right).
-        if (old === undefined || points.compare(point, old.point, letter) < 0) {
-          const partial = slit.partial && k === slit.path.length - 1;
-          (nearest[ring] as (Traversal | undefined)[])[i] = { slit: s, k, point, along, partial };
+  type Nearest = Omit<Traversal, "partial">;
+  let nearest: (Nearest | undefined)[][] = [];
+  let seen: readonly SlitPath[] = [];
+  return (slits) => {
+    const grows =
+      seen.length === slits.length &&
+      seen.every((old, s) => {
+        const now = slits[s] as SlitPath;
+        return old.prong === now.prong && old.path.length <= now.path.length;
+      });
+    if (!grows)
+      nearest = rings.map(({ letters }) => new Array<Nearest | undefined>(letters.length).fill(undefined));
+    slits.forEach((slit, s) => {
+      const prong = points.indexOf(slit.prong);
+      for (let k = grows ? (seen[s] as SlitPath).path.length : 0; k < slit.path.length; k++) {
+        const x = slit.path[k] as OrientedEdge;
+        for (const { ring, i, letter } of occurrences.get(x.edge) ?? []) {
+          const point = { prong, index: k };
+          const old = (nearest[ring] as (Nearest | undefined)[])[i];
+          // Nearest to the puncture: lowest, seen along the letter (p lies on its right).
+          if (old === undefined || points.compare(point, old.point, letter) < 0)
+            (nearest[ring] as (Nearest | undefined)[])[i] = { slit: s, k, point, along: x === letter };
         }
       }
-    }),
-  );
-  return rings.every(({ letters, cusp }, ring) => {
-    const ts = nearest[ring] as (Traversal | undefined)[];
-    if (ts.some((t) => t === undefined || t.partial)) return false;
-    const n = letters.length;
-    for (let i = 0; i < n; i++) {
-      if (i === cusp) continue;
-      const [t, u] = [ts[i] as Traversal, ts[(i + 1) % n] as Traversal];
-      const joined = t.slit === u.slit && t.along === u.along && u.k - t.k === (t.along ? 2 : -2);
-      const start = (x: Traversal) => ((slits[x.slit] as Slit).path[0] as OrientedEdge).source;
-      const closedByQ =
-        t.k === 0 &&
-        u.k === 0 &&
-        start(t) === (letters[i] as OrientedEdge).target &&
-        start(u) === (letters[(i + 1) % n] as OrientedEdge).source;
-      if (!joined && !closedByQ) return false;
-    }
-    return true;
-  });
+    });
+    seen = slits;
+    const isPartial = (t: Nearest) => {
+      const slit = slits[t.slit] as SlitPath;
+      return slit.partial && t.k === slit.path.length - 1;
+    };
+    return rings.every(({ letters, cusp }, ring) => {
+      const ts = nearest[ring] as (Nearest | undefined)[];
+      if (ts.some((t) => t === undefined || isPartial(t))) return false;
+      const n = letters.length;
+      for (let i = 0; i < n; i++) {
+        if (i === cusp) continue;
+        const [t, u] = [ts[i] as Nearest, ts[(i + 1) % n] as Nearest];
+        const joined = t.slit === u.slit && t.along === u.along && u.k - t.k === (t.along ? 2 : -2);
+        const start = (x: Nearest) => ((slits[x.slit] as SlitPath).path[0] as OrientedEdge).source;
+        const closedByQ =
+          t.k === 0 &&
+          u.k === 0 &&
+          start(t) === (letters[i] as OrientedEdge).target &&
+          start(u) === (letters[(i + 1) % n] as OrientedEdge).source;
+        if (!joined && !closedByQ) return false;
+      }
+      return true;
+    });
+  };
 }
 
 /**
@@ -310,17 +339,19 @@ export function cutOptions(tt: TrainTrack, candidates: readonly Prong[], maxReal
   const rings = ringLetters(tt);
   const found = candidates.flatMap((prong) => {
     const slitsFor = growingSlits(tt, prong, maxRealBranches);
+    const cutOff = ringsCutOffAsGrowing(tt, rings);
     for (let count = 1; count <= maxRealBranches; count++) {
-      const system = slitsFor(count);
-      if (system === undefined) return []; // a slit runs into a corner
-      if (ringsCutOff(tt, rings, system.slits)) return [{ prong, realBranches: count, system }];
+      const slits = slitsFor(count);
+      if (slits === undefined) return []; // a slit runs into a corner
+      if (cutOff(slits)) return [{ prong, realBranches: count }];
     }
     return [];
   });
   const options: CutOption[] = [];
-  for (const { prong, realBranches, system } of found.sort((a, b) => a.realBranches - b.realBranches)) {
+  for (const { prong, realBranches } of found.sort((a, b) => a.realBranches - b.realBranches)) {
     if (options.length > 0 && realBranches >= 2 * (options[0] as CutOption).realBranches) break;
     try {
+      const system = slitsForProng(tt, prong, realBranches);
       if (attachedCircles(cut(tt, system, new Set(cutOrbit(tt, prong))), punctures) !== undefined)
         options.push({ prong, realBranches });
     } catch {

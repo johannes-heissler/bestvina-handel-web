@@ -31,8 +31,18 @@ import { type LeafPoint, leafPoints } from "./leaf-order";
 import { type Letter, type SubBranch, SubdividedTrack } from "./subdivided-track";
 import { type BranchKind, entriesInto, type TrainTrack } from "./train-track";
 
+/** A slit as a path of τ: a leaf segment from a prong corner (enough to predict the length of a cut). */
+export interface SlitPath {
+  /** Its branches of τ: real and infinitesimal alternating, starting and ending with a real one. */
+  readonly path: readonly OrientedEdge[];
+  /** The prong it starts at (its leaf is the leaf of the prong). */
+  readonly prong: Prong;
+  /** Whether it ends inside its last branch of τ. */
+  readonly partial: boolean;
+}
+
 /** A slit: a leaf segment from a prong corner, in τ and in τ* (where it ends at a point of τ*). */
-export interface Slit {
+export interface Slit extends SlitPath {
   /** Its branches of τ: real and infinitesimal alternating, starting and ending with a real one. */
   readonly path: readonly OrientedEdge[];
   /** The prong it starts at (its leaf is the leaf of the prong). */
@@ -77,14 +87,92 @@ function traceUntilCorner(
  * prong f⁻ʲ(prong) that g_τʲ maps onto L.
  */
 export function slitsForProng(tt: TrainTrack, prong: Prong, count: number): SlitSystem {
-  const system = growingSlits(tt, prong, count)(count);
+  const system = slitSystems(tt, prong, count)(count);
   if (system === undefined) throw new Error("A slit runs into a corner (a saddle connection)");
   return system;
 }
 
 /**
- * The slits of {@link slitsForProng} for every count up to `maxCount`, from one leaf path per prong of the orbit:
- * those for a smaller count are initial segments. `undefined` for the counts where a slit runs into a corner.
+ * The paths of the slits of {@link slitsForProng} for every count up to `maxCount` (for predicting the length of a
+ * cut, without τ*): f⁻ʲ(L) is the shortest initial segment of the leaf of f⁻ʲ(prong) whose image under g_τʲ covers L,
+ * found from the exact numbers of letters |g_τʲ(x)| (as BigInt: they grow like λʲ); it ends inside its last branch iff
+ * that image is longer than L. `undefined` for the counts where a slit runs into a corner.
+ */
+export function growingSlits(
+  tt: TrainTrack,
+  prong: Prong,
+  maxCount: number,
+): (count: number) => SlitPath[] | undefined {
+  const same = (p: Prong, q: Prong) => p.atSwitch === q.atSwitch && p.below === q.below;
+  const orbit = [prong]; // prong, f(prong), f²(prong), …
+  for (let p = imageProng(tt, prong); !same(p, prong) && orbit.length < 10_000; p = imageProng(tt, p))
+    orbit.push(p);
+  const P = orbit.length;
+  const L = traceUntilCorner(tt, prong, maxCount);
+  // |g_τʲ(x)| for the branches x of τ, j = 0, …, P − 1.
+  const letters: Map<Edge, bigint>[] = [new Map(tt.graph.edges.map((e) => [e, 1n]))];
+  for (let j = 1; j < P; j++) {
+    const before = letters[j - 1] as Map<Edge, bigint>;
+    letters.push(
+      new Map(
+        tt.graph.edges.map((e) => [
+          e,
+          tt.gTau.image(e.forward).letters.reduce((n, y) => n + (before.get(y.edge) as bigint), 0n),
+        ]),
+      ),
+    );
+  }
+  const points = leafPoints(tt);
+  /** For each j: the leaf of f⁻ʲ(prong) as far as needed, and the numbers of letters of g_τʲ of its prefixes. */
+  const leaves = new Map<number, { prong: number; sums: bigint[] }>();
+  /** The number of branches of the leaf of f⁻ʲ(prong) whose image under g_τʲ covers m letters, and that image's length. */
+  const cover = (j: number, m: bigint): { length: number; letters: bigint } => {
+    let leaf = leaves.get(j);
+    if (leaf === undefined) {
+      leaf = { prong: points.indexOf(orbit[P - j] as Prong), sums: [0n] };
+      leaves.set(j, leaf);
+    }
+    const { sums } = leaf;
+    const count = letters[j] as Map<Edge, bigint>;
+    while ((sums.at(-1) as bigint) < m) {
+      const path = points.path(leaf.prong, sums.length);
+      sums.push(
+        (sums.at(-1) as bigint) + (count.get((path[sums.length - 1] as OrientedEdge).edge) as bigint),
+      );
+    }
+    // The first prefix that reaches m (binary search: the sums increase).
+    let [lo, hi] = [1, sums.length - 1];
+    while (lo < hi) {
+      const mid = (lo + hi) >> 1;
+      if ((sums[mid] as bigint) >= m) hi = mid;
+      else lo = mid + 1;
+    }
+    return { length: lo, letters: sums[lo] as bigint };
+  };
+  return (count) => {
+    if (L.blocked !== undefined || realCount(tt, L.path) < count) return undefined;
+    const end = throughRealBranches(tt, L.path, count).length;
+    const slits: SlitPath[] = [{ path: L.path.slice(0, end), prong, partial: false }];
+    try {
+      for (let j = 1; j < P; j++) {
+        const { length, letters: covered } = cover(j, BigInt(end));
+        const leaf = points.path((leaves.get(j) as { prong: number }).prong, length);
+        slits.push({
+          path: leaf.slice(0, length),
+          prong: orbit[P - j] as Prong,
+          partial: covered > BigInt(end),
+        });
+      }
+    } catch {
+      return undefined; // (a leaf runs into a corner)
+    }
+    return slits;
+  };
+}
+
+/**
+ * The slits of {@link slitsForProng} in τ*, for every count up to `maxCount`, from one leaf path per prong of the
+ * orbit. `undefined` for the counts where a slit runs into a corner.
  *
  * The preimages are located one after the other in τ* (see `subdivided-track.ts`): f⁻ʲ(L) runs along the leaf of
  * f⁻ʲ(prong) until the images of its letters cover f⁻⁽ʲ⁻¹⁾(L), letter for letter, and its last sub-branch is
@@ -92,7 +180,7 @@ export function slitsForProng(tt: TrainTrack, prong: Prong, count: number): Slit
  *
  * @throws Error if the images of a preimage leaf don't follow the slit they should cover.
  */
-export function growingSlits(
+function slitSystems(
   tt: TrainTrack,
   prong: Prong,
   maxCount: number,
