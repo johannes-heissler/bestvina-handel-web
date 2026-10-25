@@ -414,9 +414,35 @@ Reference: Farb–Margalit, *Primer*, §4.2 and §14.1.
 ## 9. Dehn filling, meridians and rational longitudes
 
 Removing an open tubular neighbourhood $N(\gamma)$ of a knot $\gamma\subset X$ gives $E=X\setminus N(\gamma)$ with a torus boundary
-component $T$. A *slope* is an isotopy class of essential simple closed curves on $T$, written $p\mu+q\ell$ in a basis. The
-*meridian* $\mu$ bounds a disc in $N(\gamma)$. Gluing a solid torus back so that a slope $s$ bounds the disc is *Dehn filling*
-along $s$; filling along the meridian gives back $X$, other slopes give (usually) different manifolds.
+component $T$. (In Part II, $\dot M_k$ is the open manifold with cusps and $E$ its compact version. The interior of $E$ is $\dot M_k$,
+and $E$ is a deformation retract of it, so the two have the same homology and, up to isotopy, the same homeomorphisms.)
+
+**Meridian and longitude.** Think of $N(\gamma)$ as a solid torus $D^2\times S^1$ with core $\gamma=\{0\}\times S^1$, and of $T$ as its
+boundary $\partial D^2\times S^1$.
+- The **meridian** $\mu=\partial D^2\times\{pt\}$ is a small circle *around* the knot. It bounds a disc in $N(\gamma)$; when the solid
+  torus is retracted onto its core, $\mu$ goes to a point. It is unique up to isotopy on $T$ (and orientation).
+- A **longitude** $\ell$ is a curve on $T$ that runs once *along* the knot, parallel to it; under the retraction it goes once
+  around $\gamma$. It is **not** unique: any curve on $T$ that meets $\mu$ exactly once is a longitude, so $\ell+k\mu$ (winding $k$
+  times around the knot while going once along it) is one too. For knots in $S^3$ there is a preferred one, the *Seifert
+  longitude*, which bounds a surface in $E$; in general there is none, and nothing below depends on the choice.
+
+A *slope* is an isotopy class of essential simple closed curves on $T$ (up to orientation), written $p\mu+q\ell$ in such a basis.
+Gluing a solid torus back so that a slope $s$ bounds the disc is *Dehn filling* along $s$; filling along the meridian gives
+back $X$, other slopes give (usually) different manifolds.
+
+**Rational longitude.** The *rational longitude* of $T$ is the slope that is zero in $H_1(E;\mathbb Q)$, i.e. torsion in $H_1(E;\mathbb Z)$;
+when $E$ has a single boundary torus, it always exists and is unique ("half lives, half dies"). With several boundary
+tori this can fail for an individual torus, which is what Lemma 9.1 below is about. **Beware of the names:**
+"meridian" describes a curve by the solid torus (it bounds a disc there), "rational longitude" by $E$ (it dies in $H_1(E)$).
+For a knot in $S^3$ the rational longitude is the Seifert longitude, so the names agree. In our situation it is the
+**meridian** (Lemma 9.1), which is why the lemma is called "rational longitudes" while being about meridians.
+
+*What "torsion" means geometrically.* $n\mu=0$ in $H_1(E;\mathbb Z)$ means: there is an oriented surface in $E$ whose oriented
+boundary consists of $n$ parallel copies of $\mu$, **all oriented the same way** (in 3-manifolds such a surface can be chosen
+embedded). An annulus between two parallel copies does not count: its boundary, with the induced orientation, is $\mu-\mu'$, one
+copy against the other. That only says $[\mu]=[\mu']$ (parallel curves are homologous), not $2\mu=0$. In $M_k=M_f\setminus N(\gamma_k)$ the
+surface is the fibre: it meets $\gamma$ in $n$ points, all crossings positive, and cutting out a small disc around each one leaves
+a surface whose boundary is $n$ meridian circles, all oriented the same way.
 
 The point of this section: if we are only given the drilled manifold $E$ (for example as a triangulation, or as
 `o10_019758` from the census), can we tell which slope was the meridian, and so recover $X$? In our situation, yes. The meridian
