@@ -681,13 +681,22 @@ $5.7346906416$, $H_1=\mathbb Z^2$); filling both gives a non-hyperbolic manifold
 stage gives a different, three-cusped manifold with 34 tetrahedra.)
 
 **Computation 12.4 (the classes and the cone).** Take the triangulation $V$ of stage p2 as the model and let $e_1$ be its fibre
-class. For every other stage there is exactly one co-orientation preserving isomorphism of veering triangulations from $V$;
+class. For every other **computed** stage (p1–p10, q2–q8) there is exactly one co-orientation preserving isomorphism of veering
+triangulations from $V$;
 pulling the fibre class back gives $e_1+(P-6)e_2$ for a fixed second class $e_2$ (table above). The upward dual graph of $V$ has
 11865 simple directed cycles with 16 distinct classes, among them $(2,0)$, $(4,0)$ and $(6,1)$ in the coordinates
 $(e_1(z),e_2(z))$. Hence (Theorem 10.2) the fibred cone of $V$ is
 $$C(V)=\{a\,e_1+b\,e_2:\ a>0,\ b>-6a\}.$$
+(This is a complete computation, not a sample. The dual graph is finite, every directed cycle is a sum of simple ones, and all
+simple ones were enumerated.)
 The Thurston norm on it is $x_{\dot M}(a,b)=18a+2b$ (the fully punctured fibre has $|\chi|=2P+6$); on $M=$ `o10_019758` it is
 $x_M(a,b)=8a+b$ ($|\chi(\Sigma\setminus P)|=P+2$).
+
+*Scope.* Like every Computation, this is a statement about finitely many objects: the triangulations of the stages that were
+actually computed. It says nothing about the stages after them. The extension to all stages is Theorem 14.6, by induction.
+12.4 supplies (a) the **base case** (step 1), (b) **enough data points** to apply Lemma 14.5 and to determine the linear map
+$T$ (steps 2–3), and (c) the **cone** $C(V)$ of the one model triangulation (step 4), which is a finite and complete computation.
+The induction step (step 5) then needs no further computation: it uses only the fixed objects $V$, $V'$, $h$ and $T$.
 
 *How $e_2$ is chosen, and the values on the cusps.* The script takes $e_1$ = the fibre cocycle of $V$ and $e_2$ = the first
 cocycle of a computed basis of $H^1$ that is independent of $e_1$; a priori this is an arbitrary choice. It is pinned down by
