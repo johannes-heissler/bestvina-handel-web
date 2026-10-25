@@ -19,7 +19,9 @@ the chain could only stop by detecting reducibility. From the second stage on, e
 fibration of **one and the same** hyperbolic 3-manifold, the census manifold `o10_019758`; only the fibration class
 changes. In suitable coordinates $(a,b)$ on $H^1$ the stage with $P$ punctures has class $e_1+(P-6)\,e_2$, and **each
 cut adds $4e_2$**. The fibred cone is $\{a>0,\ b>-6a\}$, with $e_2$ on its boundary, so the classes stay in the cone
-forever and approach its boundary, where $\lambda\to1$ (Theorem 14.6). All growth rates fit one polynomial,
+forever and approach its boundary, where $\lambda\to1$ (Theorem 14.6). Geometrically, $e_1$ is the fibre and $e_2$ the JSJ torus
+of the mapping torus of $f$: each cut adds four copies of this torus to the fibre (Proposition 14.8). §11 lists precisely how
+the stages are identified with each other. All growth rates fit one polynomial,
 $$G_N(x)=x^{2N+1}-x^{2N}-x^{N+3}-x^{N+2}-x^{N-1}-x^{N-2}-x+1,\qquad N=P+2.$$
 
 **In general (§16).** In about 2000 random examples, 87% of finished chains need one cut. But long, regular chains are
@@ -52,8 +54,8 @@ point $(x,0)$ flows to $(x,1)\sim(\varphi(x),0)$: the *first-return map* to the 
 - **Periodic orbits are closed orbits.** A periodic orbit $x,\varphi(x),\dots,\varphi^{n-1}(x)$ of period $n$ is the trace on
   the fibre of one closed orbit of the flow, which crosses the fibre $n$ times. Conversely every closed orbit arises so.
 - **Conjugacy.** If $\varphi'=h\varphi h^{-1}$, then $(x,s)\mapsto(h(x),s)$ is a homeomorphism $M_\varphi\to M_{\varphi'}$. If $\varphi'$ is
-  isotopic to $\varphi$, the isotopy gives a homeomorphism as well. So $M_\varphi$ depends only on the conjugacy class of the
-  *mapping class* of $\varphi$; and $M_{\varphi^{-1}}\cong M_\varphi$ with the opposite orientation.
+  isotopic to $\varphi$, the isotopy gives a homeomorphism as well (Lemma 1.3). So $M_\varphi$ depends only on the conjugacy
+  class of the *mapping class* of $\varphi$; and $M_{\varphi^{-1}}\cong M_\varphi$ with the opposite orientation.
 - **Punctures** become cusps: a puncture orbit of period $n$ is a closed curve missing from $M_\varphi$; in the compact model,
   a torus boundary component.
 
@@ -75,6 +77,26 @@ dimension as its kernel. $\square$
 *Example.* For a Dehn twist $T_c$ on a closed surface of genus $g$, $T_{c*}-1$ is $x\mapsto (x\cdot c)\,c$, of rank 1, so
 $b_1(M_{T_c})=1+(2g-1)=2g$. For our closed class $f$ (§11), $\operatorname{rank}(f_*-1)=3$ on $H_1(\Sigma)\cong\mathbb Z^4$, so
 $b_1(M_f)=2$.
+
+**Lemma 1.3 (isotopic monodromies: a canonical identification).** Let $\Sigma$ be a closed surface of genus $\ge2$ and
+$\varphi\simeq\varphi'$ isotopic homeomorphisms. An isotopy defines a homeomorphism $\Psi\colon M_\varphi\to M_{\varphi'}$ that maps the fibre
+$\Sigma\times\{0\}$ to the fibre, so $\Psi^*[\Sigma]=[\Sigma]$. **Any two homeomorphisms obtained like this are isotopic.** If $Q$ is a
+finite set with $\varphi(Q)=\varphi'(Q)=Q$, $\varphi|_Q=\varphi'|_Q$, and the isotopy is rel $Q$, then $\Psi$ maps the suspension of $Q$ in
+$M_\varphi$ onto the suspension of $Q$ in $M_{\varphi'}$.
+
+*Proof.* Put $\Psi(x,s)=(k_s(x),s)$ for a path $k_s$ of homeomorphisms. It respects the gluings $(x,1)\sim(\varphi(x),0)$ and
+$(y,1)\sim(\varphi'(y),0)$ exactly when $\varphi'\circ k_1=k_0\circ\varphi$. Take $k_0=\mathrm{id}$ and $k_1=\varphi'^{-1}\varphi$, which is isotopic to
+the identity; any isotopy $k_s$ from $\mathrm{id}$ to $\varphi'^{-1}\varphi$ works. Two such paths differ by a loop in
+$\operatorname{Homeo}_0(\Sigma)$, the identity component. For genus $\ge2$ this group is **contractible** (Hamstrom; Earle–Eells for
+diffeomorphisms), so the two paths are homotopic rel endpoints, and the homotopy is an isotopy between the two $\Psi$. For the
+relative version use paths in $\operatorname{Homeo}_0(\Sigma,Q)$, the homeomorphisms fixing $Q$ pointwise and isotopic to $\mathrm{id}$ rel $Q$;
+it is again contractible ($\Sigma\setminus Q$ is hyperbolic). Then $k_s(q)=q$ for $q\in Q$, and $\Psi(q,s)=(q,s)$: the suspension of
+$Q$ is mapped to itself. $\square$
+
+*Why contractibility matters.* Without it, a non-trivial loop of homeomorphisms could twist $M_\varphi$ around the circle
+direction, and the identification would depend on the isotopy chosen. For the torus ($\operatorname{Homeo}_0(T^2)\simeq T^2$) this
+really happens. In genus $\ge2$ the identification $M_\varphi\cong M_{\varphi'}$ is canonical up to isotopy, and so is every curve
+defined through it.
 
 ## 2. The geometry of mapping tori
 
@@ -115,6 +137,39 @@ hyperbolic surface $S$ ($\chi(S)<0$) everything is explicit and matches the Niel
 twist (Nil geometry), Anosov (Sol geometry). For a hyperbolic surface, a Dehn twist $T_c$ gives a graph manifold:
 $(S\setminus c)\times S^1$ glued to itself along the torus over $c$ with a shear. Our $f$ is periodic on $\Sigma\setminus\delta$
 and twists along $\delta$ (§11), so $M_f$ is a graph manifold with one JSJ torus $T_\delta$, the suspension of $\delta$.
+
+**Rigidity: how many homeomorphisms there are.** Hyperbolic 3-manifolds have very few self-homeomorphisms, and this is
+what makes identifications between them essentially unique.
+
+**Theorem 2.1 (Mostow 1968, Prasad 1973).** Let $M,M'$ be complete hyperbolic manifolds of **finite volume** and dimension
+$n\ge3$. Every isomorphism $\pi_1(M)\to\pi_1(M')$ is induced by a unique isometry $M\to M'$.
+
+**Theorem 2.2 (Waldhausen 1968).** Two homeomorphisms between compact irreducible Haken 3-manifolds (for example fibred ones)
+that are homotopic are isotopic.
+
+**Corollary 2.3.** For a hyperbolic 3-manifold $M$ of finite volume, every homeomorphism $M\to M'$ is isotopic to exactly one
+isometry, and the mapping class group $\operatorname{Mod}(M)$ is the isometry group: a **finite** group.
+
+*Proof.* A homeomorphism $g$ induces an isomorphism on $\pi_1$ (up to conjugation, i.e. an element of $\operatorname{Out}$), and by
+Theorem 2.1 an isometry $g'$ induces the same one. $M$ is aspherical (its universal cover is $\mathbb H^3$), so maps that agree on
+$\pi_1$ up to conjugation are homotopic, and by Theorem 2.2 $g\simeq g'$ by an isotopy. Two isometries that are isotopic induce the
+same element of $\operatorname{Out}(\pi_1)$, hence are equal by the uniqueness in Theorem 2.1. The isometry group of a finite-volume
+hyperbolic manifold is a discrete group acting on a set of finite volume, hence finite. $\square$
+
+*Where the hypotheses matter.*
+- **Dimension $n\ge3$.** For $n=2$ the theorem is false: a hyperbolic surface has a whole Teichmüller space of hyperbolic
+  structures, and its mapping class group is infinite. This is the only reason; "closed" is **not** needed.
+- **Finite volume** is needed, but cusps are allowed (Prasad's extension). All drilled manifolds in Part II are cusped and of
+  finite volume. For the compact model with torus boundary, homeomorphisms may move the boundary tori; they correspond to
+  homeomorphisms of the interior, so the corollary applies.
+- **Consistency check with the fibre.** For pseudo-Anosov $\varphi$ on $S$, $\operatorname{Mod}(S)$ is infinite but $\operatorname{Mod}(M_\varphi)$ is
+  finite. No contradiction: a mapping class $c$ of $S$ gives a homeomorphism $(x,s)\mapsto(c(x),s)$ of $M_\varphi$ only if
+  $c\varphi c^{-1}=\varphi$, and the centraliser of a pseudo-Anosov is virtually cyclic, generated up to finite index by $\varphi$
+  itself. And $\varphi$ induces on $M_\varphi$ the time-1 map of the suspension flow, $(x,s)\mapsto(\varphi(x),s)\sim(x,s+1)$, which is
+  isotopic to the identity (flow back for time $t\in[0,1]$).
+- **Non-hyperbolic manifolds** can have infinite mapping class groups. For $M_f$ (a graph manifold) this happens: a *torus
+  twist* along $T_\delta$ (§14, Proposition 14.8) has infinite order. Rigidity therefore applies to the drilled manifolds of the
+  chain, not to $M_f$ itself.
 
 References: P. Scott, *The geometries of 3-manifolds*; W. Thurston, *Hyperbolic structures on 3-manifolds II*;
 J.-P. Otal, *The hyperbolization theorem for fibered 3-manifolds*.
@@ -229,6 +284,38 @@ parallel to some long orbits, return times along them become huge, and the entro
 So the *normalised entropy* $x(\alpha)\,h(\alpha)=|\chi(S_\alpha)|\log\lambda$ is bounded on compact parts of the face but tends to
 infinity towards its boundary. In the cut chain, $|\chi|\log\lambda$ grows like $\log N$ (§16): the classes run to the boundary.
 
+**What "the same flow" means.** Theorem 5.4 is used in two different senses, and it helps to separate them.
+
+1. *Literally the same.* Fix one flow $\psi_F$ on $M$. Then, for every class $\alpha$ in the cone, the fibre $S_\alpha$ is chosen
+   as a cross-section of **this** flow, and $\varphi_\alpha$ is its first-return map. The closed orbits, in particular the
+   singular ones, are then literally the same curves in $M$ for all $\alpha$; only the surface cutting through them changes.
+   Consequence 1 above is meant in this sense.
+2. *The same up to isotopy.* A pseudo-Anosov built independently (for example the output of the Bestvina–Handel algorithm
+   for one class) has its own suspension flow. It is not literally $\psi_F$, but it agrees with it up to an isotopy of $M$:
+
+**Lemma 5.5 (uniqueness of the face flow).** Let $\alpha$ be in the cone of the fibred face $F$, and let $M\to S^1$ be any fibration
+in the class $\alpha$ whose monodromy $\varphi'$ is pseudo-Anosov, with suspension flow $\psi'$. Then there is a homeomorphism
+$\Phi\colon M\to M$, **isotopic to the identity**, that maps the orbits of $\psi'$ onto the orbits of $\psi_F$, preserving their
+direction (an *orbit equivalence*; the speed may change).
+
+*Proof.* (a) *The fibres agree up to isotopy.* Two fibrations of $M$ in the same cohomology class are isotopic
+(Laudenbach–Blank for closed $M$; for torus boundary, Thurston's norm paper: a fibre is the only norm-minimising surface in its
+class, up to isotopy). So after an isotopy of $M$ the fibre $S'$ of $\varphi'$ is the cross-section $S_\alpha$ of $\psi_F$. (b) *The
+monodromies agree up to conjugation.* The monodromy of a fibration is determined by the fibration up to isotopy, so $\varphi'$
+and the first-return map $\varphi_\alpha$ are isotopic homeomorphisms of $S_\alpha$, and both are pseudo-Anosov. A pseudo-Anosov
+representative is unique in its isotopy class up to conjugation by a homeomorphism isotopic to the identity (FLP,
+Exposé 12): $\varphi'=c\,\varphi_\alpha c^{-1}$ with $c\simeq\mathrm{id}$. (c) *The flows agree.* The map $(x,s)\mapsto(c(x),s)$ takes the
+suspension flow of $\varphi_\alpha$, which is $\psi_F$ up to speed, to that of $\varphi'$; with (a) and the construction of Lemma 1.3 this is
+a homeomorphism of $M$ isotopic to the identity. $\square$
+
+*What survives an isotopy of $M$, and what does not.* Isotopic flows have isotopic closed orbits, so "the singular orbit $\sigma$"
+is a knot in $M$ that is well defined **up to isotopy**. The complement $M\setminus\sigma$ is then well defined up to a homeomorphism
+that extends to a homeomorphism of $M$ isotopic to the identity. Such a homeomorphism acts as the identity on $H^1(M)$, so it
+acts as the identity on $H^1(M\setminus\sigma)$ under the restriction isomorphism of Lemma 9.1. It is **not** unique up to isotopy
+of $M\setminus\sigma$: two choices differ by a homeomorphism of $M$ that maps $\sigma$ to itself and is isotopic to the identity in $M$,
+but possibly not rel $\sigma$ (it could drag $\sigma$ once around a loop). For classes, the only thing used in Part II, this
+ambiguity is invisible.
+
 References: D. Fried, *The geometry of cross sections to flows* (Topology 1982); C. McMullen, §6 below.
 
 ## 6. McMullen's Teichmüller polynomial
@@ -331,25 +418,63 @@ component $T$. A *slope* is an isotopy class of essential simple closed curves o
 *meridian* $\mu$ bounds a disc in $N(\gamma)$. Gluing a solid torus back so that a slope $s$ bounds the disc is *Dehn filling*
 along $s$; filling along the meridian gives back $X$, other slopes give (usually) different manifolds.
 
-**Lemma 9.1 (rational longitude).** Let $\beta\in H^1(X;\mathbb Z)$ with $\beta(\gamma)\neq0$. Then in $E$ the meridian $\mu$ is
-torsion in $H_1(E;\mathbb Z)$, and it is the **only** slope on $T$ with this property (the *rational longitude*). In particular
-$b_1(E)=b_1(X)$, and every homeomorphism $E\to E'$ between two such complements that maps $T$ to $T'$ extends to a homeomorphism
-of the fillings $X\to X'$.
+The point of this section: if we are only given the drilled manifold $E$ (for example as a triangulation, or as
+`o10_019758` from the census), can we tell which slope was the meridian, and so recover $X$? In our situation, yes. The meridian
+is the only slope that dies in the homology of $E$ (rationally). In the closed manifold $X$ the meridian is of course trivial,
+since it bounds a disc; the point is that it is already trivial, up to torsion, in $E$, where we can detect it without
+knowing $X$.
 
-*Proof.* Let $S$ be a surface dual to $\beta$, transverse to $\gamma$, meeting it algebraically $n=\beta(\gamma)\ne0$ times. Then
-$S\cap E$ is a surface in $E$ whose boundary on $T$ is homologous to $n\mu$ (each intersection point of $S$ with $\gamma$
-becomes a meridian circle). So $n\mu=0$ in $H_1(E)$. A longitude $\ell$ (a parallel copy of $\gamma$) has $\beta(\ell)=n\neq0$, so it
-is not torsion. Hence the image of $H_1(T;\mathbb Q)\to H_1(E;\mathbb Q)$ is the line spanned by $\ell$, and the kernel is exactly the
-line of $\mu$. Mayer–Vietoris for $X=E\cup N(\gamma)$ then gives $b_1(E)=b_1(X)$. A homeomorphism preserves torsion, so it maps
-the rational longitude to the rational longitude, i.e. meridian to meridian, and therefore extends over the solid tori. $\square$
+**Lemma 9.1 (rational longitudes).** Let $X$ be a closed orientable 3-manifold, $\gamma_1,\dots,\gamma_r\subset X$ disjoint knots,
+$E=X\setminus N(\gamma_1\cup\dots\cup\gamma_r)$ with boundary tori $T_i$, meridians $\mu_i$ and longitudes $\ell_i$ (parallel copies of $\gamma_i$).
+1. $\mu_i$ is zero in $H_1(E;\mathbb Q)$ if and only if there is a class $\beta\in H^1(X;\mathbb Q)$ with $\beta(\gamma_i)\ne0$ and
+   $\beta(\gamma_j)=0$ for all $j\ne i$; equivalently, $[\gamma_i]\notin\operatorname{span}\{[\gamma_j]:j\ne i\}$ in $H_1(X;\mathbb Q)$.
+2. If this holds, $\mu_i$ is the **only** slope on $T_i$ that is zero in $H_1(E;\mathbb Q)$ (the *rational longitude* of $T_i$).
+3. If it holds for all $i$, i.e. **the classes $[\gamma_1],\dots,[\gamma_r]$ are linearly independent in $H_1(X;\mathbb Q)$**, then restriction
+   $H^1(X;\mathbb Q)\to H^1(E;\mathbb Q)$ is an isomorphism, and $b_1(E)=b_1(X)$.
+
+*Proof.* (1) Put $X'=E\cup N(\gamma_i)=X\setminus N(\bigcup_{j\ne i}\gamma_j)$. A class on $E$ extends over the solid torus $N(\gamma_i)$ iff it
+vanishes on $\mu_i$, and the obstruction is measured by the exact sequence of the pair $(X',E)$:
+$$H^1(X')\to H^1(E)\xrightarrow{\ c\mapsto c(\mu_i)\ }H^2(X',E)\cong\mathbb Q\to H^2(X').$$
+(Excision gives $H^2(X',E)\cong H^2(N(\gamma_i),T_i)\cong\mathbb Q$.) The last map sends the generator to the Poincaré–Lefschetz dual of
+$\gamma_i$ in $H^2(X')\cong H_1(X',\partial X')$. So some class on $E$ is non-zero on $\mu_i$ (i.e. $\mu_i\ne0$ in $H_1(E;\mathbb Q)$) iff
+$[\gamma_i]=0$ in $H_1(X',\partial X';\mathbb Q)$. Over a field, $H_1(X',\partial X')$ is dual to $H^1(X',\partial X')$: the classes on $X'$ that
+vanish on $\partial X'$, i.e. on all $\mu_j,\ell_j$ for $j\ne i$. Those are exactly the restrictions of classes $\beta\in H^1(X)$ with
+$\beta(\gamma_j)=0$ for $j\ne i$. So $\mu_i$ dies rationally in $E$ iff such a $\beta$ has $\beta(\gamma_i)\ne0$.
+(2) Take $\beta$ from (1) and restrict it to $E$. Then $\beta(\mu_i)=0$ and $\beta(\ell_i)=\beta(\gamma_i)\ne0$, so every slope $p\mu_i+q\ell_i$
+with $q\neq0$ has $\beta$-value $q\beta(\gamma_i)\ne0$ and is not zero in $H_1(E;\mathbb Q)$.
+(3) Filling all $T_i$ along the meridians gives $X$, and $H_1(X)=H_1(E)/\langle\mu_1,\dots,\mu_r\rangle$ (van Kampen, or
+Mayer–Vietoris). If all $\mu_i$ are rationally zero, the quotient map is an isomorphism over $\mathbb Q$; dualise. $\square$
+
+*The one-knot case* ($r=1$): $\mu$ is torsion in $E$ iff $[\gamma]\ne0$ in $H_1(X;\mathbb Q)$. A direct proof: a surface $S$ dual to a
+class $\beta$ with $\beta(\gamma)=n\neq0$ meets $\gamma$ in $n$ points algebraically, and $S\cap E$ is a surface whose boundary is $n$
+meridian circles, so $n\mu=0$ in $H_1(E)$. With two knots this argument only gives $n_1\mu_1+n_2\mu_2=0$, which is why (1) needs
+the independence condition.
 
 *Example.* For a knot in $S^3$ ($b_1=0$, so the lemma does not apply) the meridian is not torsion: $H_1=\mathbb Z\mu$, and the
 torsion slope is the Seifert longitude. Here it is the other way round, because $\gamma$ itself is homologically essential.
 
-**Consequence.** For a fibration of $E$ whose fibre meets $T$, the boundary circles of the fibre on $T$ all have the slope on
-which the fibre class vanishes. By the lemma, every class vanishes on $\mu$: **all fibres of $E$ meet $T$ in meridians**, and
-filling the meridian fills in the punctures. In the cut chain, $\beta=[\Sigma]$ meets $\gamma_k$ in $|P_k|$ and $\sigma_k$ in $|Q_k|$ points, so
-both cusps behave like this: **the filling slopes are canonical**, and drilled manifolds determine their fillings.
+**Lemma 9.2 (filling is canonical).** In the situation of Lemma 9.1(3), let $X'\supset E'$ be another such pair. Every homeomorphism
+$h\colon E\to E'$ maps each meridian of $E$ to a meridian of $E'$ and extends to a homeomorphism $\bar h\colon X\to X'$ that maps
+the knots $\gamma_i$ onto the knots $\gamma'_j$ (in the order in which $h$ maps the tori). The extension is unique up to an isotopy
+supported in the solid tori, and $\bar h^*$ on $H^1$ corresponds to $h^*$ under the isomorphisms of Lemma 9.1(3).
+
+*Proof.* $h_*$ is an isomorphism $H_1(E;\mathbb Q)\to H_1(E';\mathbb Q)$ that commutes with the inclusions of the boundary tori:
+$h_*\circ\iota_{T_i}=\iota_{h(T_i)}\circ(h|_{T_i})_*$. So it maps the kernel of $H_1(T_i;\mathbb Q)\to H_1(E;\mathbb Q)$ onto the kernel for $h(T_i)$.
+By Lemma 9.1(2) these kernels are the lines of the meridians, so $h(\mu_i)$ is isotopic on $h(T_i)$ to $\pm$ a meridian.
+Isotope $h$ near $\partial E$ so that $h(\mu_i)$ is exactly a meridian circle. A solid torus is a meridian disc $D$ times an
+interval, glued up: extend $h$ over $D$ by coning from the centre (Alexander's trick), and then over the remaining 3-ball, again
+by coning. Two extensions differ by a homeomorphism of the solid torus that is the identity on the boundary, and Alexander's
+trick isotopes it to the identity rel boundary. The cores are mapped to the cores. The statement about $H^1$ holds because
+restriction commutes with $\bar h$. $\square$
+
+So the drilled manifold determines the closed manifold and the knots, and an identification of drilled manifolds determines
+one of closed manifolds. This is what "the filling slopes are canonical" means.
+
+**Consequence.** For a fibration of $E$ whose fibre meets $T_i$, the boundary circles of the fibre on $T_i$ all have the slope on
+which the fibre class vanishes. Under Lemma 9.1, every class vanishes on $\mu_i$, so **all fibres of $E$ meet $T_i$ in
+meridians**, and filling the meridian fills in the punctures. In the cut chain, $[\Sigma]$ meets $\gamma_k$ in $|P_k|$ and $\sigma_k$ in
+$|Q_k|$ points, and $[\gamma_k],[\sigma_k]$ are independent in $H_1(M_f;\mathbb Q)$ (§11, Lemma 11.3), so Lemmas 9.1 and 9.2 apply to
+both cusps of $\dot M_k$ at once.
 
 ## 10. Veering triangulations and Agol's construction
 
@@ -396,6 +521,23 @@ above): $\alpha$ is in the open cone iff $\alpha>0$ on every directed cycle.
 The directed cycles of the dual graph play the role of Fried's homology directions: they are closed curves transverse to the
 2-skeleton and positively transverse to every fibre in the face.
 
+**How precisely "depends only on the face" holds.**
+- *Combinatorially.* The triangulation is a finite list of tetrahedra and face gluings. "Depends only on $(M,F)$" means: two
+  pseudo-Anosovs in the same face (of the same manifold, or of homeomorphic manifolds via a homeomorphism that maps face to face)
+  give **isomorphic** lists. This is the theorem of Agol and Minsky–Taylor quoted in 10.1. Behind it is Lemma 5.5: both
+  monodromies are first-return maps of one flow $\psi_F$, and Guéritaud builds the triangulation from the stable and unstable
+  foliations of that flow, without choosing a fibre.
+- *Inside $M$.* The triangulation sits in $M$ up to isotopy: Agol's construction realises it in the mapping torus of the given
+  map, and Lemma 5.5 moves it into $M$ by a homeomorphism isotopic to the identity.
+- *Isomorphisms give homeomorphisms.* A combinatorial isomorphism $V\to V'$ (tetrahedra to tetrahedra, faces to faces) defines a
+  homeomorphism of the underlying cusped manifolds by mapping each tetrahedron affinely onto its image. Two homeomorphisms that
+  realise the same isomorphism are isotopic (straight-line isotopy in each truncated tetrahedron).
+- *Co-orientation.* An isomorphism that keeps the upward co-orientation of the faces maps carried classes to carried classes,
+  hence fibred face to fibred face (Theorem 10.2). By Lemma 5.5 it then maps the face flow to the face flow, up to isotopy.
+  By Corollary 2.3, a homeomorphism of hyperbolic manifolds is isotopic to one of finitely many isometries. So among all
+  homeomorphisms $\dot M\to\dot M'$, at most finitely many preserve the veering triangulation with its co-orientation. When there is
+  exactly one, as in Computation 12.4, the identification is forced: no choice is involved.
+
 *Example.* For the once-punctured torus, Agol's triangulation of the monodromy $R^{a_1}L^{b_1}\cdots$ is the monodromy
 (Floyd–Hatcher) triangulation with one tetrahedron per letter; `m004` = $RL$ has two.
 
@@ -420,6 +562,62 @@ The directed cycles of the dual graph play the role of Fried's homology directio
 - **3-manifolds.** $\gamma_k,\sigma_k\subset M_f$ the suspensions of $P_k,Q_k$; $M_k=M_f\setminus\gamma_k$ (the mapping torus of $\varphi_k$),
   $\dot M_k=M_f\setminus(\gamma_k\cup\sigma_k)$ (fully punctured). In $\dot M_k$ the cusp $c_p$ (around $\gamma_k$) is the *puncture
   cusp*, $c_s$ (around $\sigma_k$) the *singular cusp*.
+
+### What is identified with what
+
+Every stage has its own homeomorphism $\varphi_k$, its own suspension flow $\psi_k$ and its own mapping torus. The bullet above
+puts all of them into **one** manifold $M_f$. This subsection says how, and which statements are literal and which only hold up
+to isotopy.
+
+**(I1) Each stage in $M_f$.** $\varphi_k$ extends over the punctures (as 1-prongs) to a homeomorphism $\bar\varphi_k$ of $\Sigma$, isotopic
+to $f$ (it is a representative of the closed class). Lemma 1.3 gives $\Psi_k\colon M_f\to M_{\bar\varphi_k}$, unique up to isotopy and
+with $\Psi_k^*[\Sigma]=[\Sigma]$. Define
+$$\gamma_k=\Psi_k^{-1}(\text{suspension of }P_k),\qquad \sigma_k=\Psi_k^{-1}(\text{suspension of }Q_k),\qquad \psi_k=\Psi_k^{-1}\circ(\text{suspension flow})\circ\Psi_k.$$
+These are knots and a flow in $M_f$, well defined up to an isotopy of $M_f$. So: **one closed manifold, one fibre class
+$[\Sigma]$, but at each stage a different flow $\psi_k$ and different knots.** $\gamma_k$ is the 1-prong orbit and $\sigma_k$ the
+3-prong orbit of the same flow $\psi_k$. (The algorithm itself gives $\varphi_k$ only up to conjugation by homeomorphisms isotopic to
+the identity rel $P_k$. By Lemma 1.3 this changes $\gamma_k,\sigma_k,\psi_k$ only by an isotopy of $M_f$.)
+
+**Lemma 11.2 (the next puncture orbit is the old singular orbit).** $\gamma_{k+1}$ is isotopic to $\sigma_k$ in $M_f$.
+
+*Proof.* By construction of the cut (port notes 15, 26), $\bar\varphi_{k+1}$ is isotopic to $\bar\varphi_k$ rel $Q_k=P_{k+1}$. Lemma 1.3 (relative
+version) gives $\Psi\colon M_{\bar\varphi_k}\to M_{\bar\varphi_{k+1}}$ mapping the suspension of $Q_k$ to the suspension of $P_{k+1}$. Now
+$\Psi_{k+1}^{-1}\Psi\Psi_k$ is a homeomorphism $M_f\to M_f$ of the kind built in Lemma 1.3 (from $f$ to itself), hence isotopic to
+the one built from the constant isotopy, which is the identity. So $\gamma_{k+1}=\Psi_{k+1}^{-1}\Psi\Psi_k(\sigma_k)$ is isotopic to
+$\sigma_k$. $\square$
+
+So each knot is an orbit of **two** consecutive flows: $\sigma_k\simeq\gamma_{k+1}$ is the singular orbit of $\psi_k$ and the puncture
+orbit of $\psi_{k+1}$. The flows themselves differ: $\psi_k$ and $\psi_{k+1}$ are not isotopic, since their 1-prong orbits $\gamma_k$ and
+$\gamma_{k+1}$ are not isotopic (already their homology classes differ: $[\Sigma](\gamma_k)=|P_k|\ne|P_{k+1}|$).
+
+**(I2) The drilled manifolds.** $M_k$ and $\dot M_k$ are complements of these knots, so they are defined up to homeomorphisms
+that extend to homeomorphisms of $M_f$ isotopic to the identity. Such homeomorphisms act trivially on $H^1(M_f)$, hence (Lemma
+9.1(3)) trivially on $H^1(M_k)$ and $H^1(\dot M_k)$. **On cohomology, everything is canonical.**
+
+**(I3) The veering triangulation $V_k$** is built from the train track of $\varphi_k$ alone (§15), before the algorithm runs on the
+next stage. It triangulates the fully punctured mapping torus, i.e. $\dot M_k$, which already contains the next puncture orbit
+$\sigma_k\simeq\gamma_{k+1}$ as its singular cusp. So **one stage's data sees two consecutive puncture curves.** That is why the
+two-cusped $\dot M_k$, and not $M_k$, is the right object to compare.
+
+**(I4) Identifying stages.** For stages $j,k$, a co-orientation preserving isomorphism $V_j\to V_k$ gives a homeomorphism
+$h\colon\dot M_j\to\dot M_k$, unique up to isotopy (§10). In Computation 12.4 there is exactly one such isomorphism, so $h$ involves no
+choice. By Lemma 11.3 and Lemma 9.2, $h$ extends to a homeomorphism $\bar h\colon M_f\to M_f$ with $\bar h(\gamma_j)=\gamma_k$ and
+$\bar h(\sigma_j)=\sigma_k$ (Computation 12.4 shows that $h$ maps $c_p$ to $c_p$). **$\bar h$ is not isotopic to the identity**: it acts
+non-trivially on $H^1(M_f)$ (§14). By §10, $h$ maps the face flow of $\dot M_j$ to that of $\dot M_k$, up to isotopy: **the flows
+$\psi_j$ and $\psi_k$ are not isotopic, but they are conjugate**, by a homeomorphism of $M_f$ that moves the knots.
+
+**(I5) Classes.** All $H^1$ are identified with $H^1(M_f;\mathbb Q)\cong\mathbb Q^2$ by restriction (Lemma 9.1(3)). The model is stage p2;
+its fibre class is $e_1:=[\Sigma]$. Stage $k$ in model coordinates is $\bar h_k^*[\Sigma]$, where $h_k\colon\dot M_{\rm model}\to\dot M_k$ is
+the isomorphism of (I4).
+
+**Lemma 11.3 (independence of the two knots).** For every computed stage, $[\gamma_k]$ and $[\sigma_k]$ are linearly independent in
+$H_1(M_f;\mathbb Q)$. Hence Lemmas 9.1 and 9.2 apply to both cusps of $\dot M_k$: both meridians are torsion in $H_1(\dot M_k)$, the
+meridians are the canonical filling slopes, and $H^1(M_f;\mathbb Q)\to H^1(\dot M_k;\mathbb Q)$ is an isomorphism.
+
+*Proof.* $H_1(M_f)=H_1(\dot M_k)/\langle\mu_p,\mu_s\rangle$. SnapPy and our cohomology code both give $b_1(\dot M_k)=2=b_1(M_f)$ (Computation
+12.3). So the quotient map is an isomorphism over $\mathbb Q$, both meridians are rationally zero, and Lemma 9.1(1) turns this into the
+independence. (In model coordinates: $[\gamma]\mapsto(6,1)$ and $[\sigma]\mapsto(10,1)$, see Computation 12.4, with determinant $-4\ne0$.)
+$\square$
 
 ## 12. What the computations show for the example
 
@@ -465,6 +663,16 @@ $$C(V)=\{a\,e_1+b\,e_2:\ a>0,\ b>-6a\}.$$
 The Thurston norm on it is $x_{\dot M}(a,b)=18a+2b$ (the fully punctured fibre has $|\chi|=2P+6$); on $M=$ `o10_019758` it is
 $x_M(a,b)=8a+b$ ($|\chi(\Sigma\setminus P)|=P+2$).
 
+*How $e_2$ is chosen, and the values on the cusps.* The script takes $e_1$ = the fibre cocycle of $V$ and $e_2$ = the first
+cocycle of a computed basis of $H^1$ that is independent of $e_1$; a priori this is an arbitrary choice. It is pinned down by
+the data: the classes of consecutive stages differ by $4e_2$, so $e_2=\tfrac14(\text{class of stage }k+1-\text{class of stage }k)$ is
+intrinsic. Its meaning is Proposition 14.8. Evaluate on the core curves $\ell_p,\ell_s$ of the model's two cusps. If $h_k$ maps $c_p$
+to $c_p$, then $\bar h_k^*[\Sigma](\ell_p)=[\Sigma](\gamma_k)=P$, so $e_1(\ell_p)+(P-6)e_2(\ell_p)=P$ for all stages, and therefore
+$$e_1(\ell_p)=6,\quad e_2(\ell_p)=1,\qquad e_1(\ell_s)=10,\quad e_2(\ell_s)=1 \quad(\text{from }|Q|=P+4).$$
+The isomorphisms do map $c_p$ to $c_p$. For $k=$ p2 the isomorphism is the identity, so $e_1(\ell_p)=6$. If $h_k$ swapped the cusps for
+some stage, then $6+(P-6)e_2(\ell_p)$ would have to equal $P+4$ there and $P$ at the others. At $P=2$ and $P=10$ this forces
+$e_2(\ell_p)\in\{0,1\}$ and $e_2(\ell_p)\in\{1,2\}$, so $e_2(\ell_p)=1$, and then no stage with $P\ne6$ can be swapped.
+
 ## 13. Elementary facts
 
 **Proposition 13.1 (+4 per move).** If at stage $k$ all punctures are 1-prongs and all singularities 3-prongs, then $|Q_k|=|P_k|+4$.
@@ -507,6 +715,7 @@ This is the precise meaning of "**reducibility is never detected because the pun
 torus**". On the surface: there is no homeomorphism isotopic to $\varphi_k$ that keeps $P_k$ invariant *and* preserves a curve
 isotopic to $\delta$ (in $\Sigma$) that avoids $P_k$. In the 3-manifold: every knot $\gamma_k$ of the chain meets the JSJ torus
 essentially. The converse, and much more, follows from Computation 12.3: every $M_k$ is the hyperbolic manifold `o10_019758`.
+The reason for "essentially" is homological: every $\gamma_k$ meets $T_\delta$ algebraically once (Corollary 14.9).
 
 ## 14. A cut in 3-manifold terms, and the proof
 
@@ -525,9 +734,10 @@ class of $\varphi_k$ rel $Q_k$ is the monodromy of $M_f\setminus\sigma_k$ in the
 (which gives back $M_f\setminus\sigma_k$ from $\dot M_k$) is determined by $\dot M_k$ alone. Every step is defined topologically, so
 an isomorphism of stage-$k$ data induces one of stage-$(k+1)$ data. $\square$
 
-**Lemma 14.2 (filling a singular orbit keeps the cone).** Let $N$ be hyperbolic with fibred face $F$, flow $\psi_F$, and a singular
-closed orbit $\sigma$ with $\langle\alpha,\sigma\rangle\neq0$. Then, under the isomorphism $H^1(N;\mathbb R)\cong H^1(N\setminus\sigma;\mathbb R)$ of Lemma 9.1,
-the cone over $F$ equals the cone over the fibred face of $N\setminus\sigma$ that contains the punctured fibres.
+**Lemma 14.2 (filling a singular orbit keeps the cone).** Let $N=X\setminus N(\gamma)$ be hyperbolic, for a closed $X$ and a knot $\gamma$,
+with fibred face $F$, flow $\psi_F$, and a singular closed orbit $\sigma$ such that $[\gamma],[\sigma]$ are independent in $H_1(X;\mathbb Q)$
+(in the chain: Lemma 11.3). Then, under the isomorphism $H^1(N;\mathbb R)\cong H^1(N\setminus\sigma;\mathbb R)$ of Lemma 9.1(3), the cone over
+$F$ equals the cone over the fibred face of $N\setminus\sigma$ that contains the punctured fibres.
 
 *Proof.* Let $\dot\psi$ be $\psi_F$ restricted to $\dot N=N\setminus\sigma$; it is the suspension flow of the monodromies punctured at their
 singularities on $\sigma$, so it is again a pseudo-Anosov flow, and its face $\dot F$ is the one containing the punctured fibres.
@@ -547,6 +757,11 @@ successors; the successor of the model class $\alpha$ depends only on which fibr
 *Proof.* The first part is Lemma 14.1. For the second: in $N^\circ:=\dot M(c_p\text{ filled})$ the successor is the monodromy of
 the class $\alpha$; by Theorem 5.4 it is the first-return map of the flow $\psi_{F'}$ of the face $F'$ containing $\alpha$. Its
 singular orbits, hence the next drilled manifold $N^\circ\setminus\sigma'$ and its veering triangulation, are those of $F'$. $\square$
+
+*"The same" here is meant literally* (sense 1 of §5). Fix one flow $\psi_{F'}$ on $N^\circ$. Its singular orbit $\sigma'$ is one fixed
+knot in $N^\circ$, and $N^\circ\setminus\sigma'$ is one fixed manifold. For each $\alpha$ in the cone, the successor computed by the algorithm
+agrees with the first-return map of $\psi_{F'}$ only up to an isotopy of $N^\circ$ (Lemma 5.5). That isotopy acts trivially on
+cohomology (§5), so the successor's class, read in $H^1(N^\circ\setminus\sigma')$, is $\alpha$ itself.
 
 **Lemma 14.4 (prongs are constant on a face).** In the situation of Lemma 9.1, the number of prongs at each puncture along a
 cusp is the same for all fibres in a fibred face.
@@ -598,9 +813,11 @@ successor of a model class lives (Lemma 14.1).
    veering triangulation $V'$.
 3. *The transition is a fixed shear.* Let $h\colon V\to V'$ be the unique co-orientation preserving isomorphism (Computation
    12.4) and $T=h^*\circ\iota$, where $\iota\colon H^1(\dot M;\mathbb Q)\to H^1(\dot M';\mathbb Q)$ is the natural isomorphism through $H^1(N^\circ)$
-   (Lemma 9.1, twice). The successor of $e_1+be_2$ has model class $T(e_1+be_2)$, and the computations give
+   (Lemma 9.1(3), twice). The successor of $e_1+be_2$ has model class $T(e_1+be_2)$, and the computations give
    $T(e_1+be_2)=e_1+(b+4)e_2$ for $b\in B$. A linear map is determined by two independent values:
-   $T(e_1)=e_1+4e_2$ and $T(e_2)=e_2$.
+   $T(e_1)=e_1+4e_2$ and $T(e_2)=e_2$. In terms of $M_f$: $\iota$ is induced by inclusions inside $M_f$, so it is the identity on
+   $H^1(M_f)$, and $h$ extends to $\bar h\colon M_f\to M_f$ (Lemma 9.2) with $\bar h(\gamma)=\sigma$, $\bar h(\sigma)=\sigma'$. Hence
+   **$T=\bar h^*$ on $H^1(M_f)$.**
 4. *The face $F'$ is large.* By Lemma 14.2 and Theorem 10.2, the cone over $F'$ (in $H^1(N^\circ)\cong H^1(\dot M')$) is the cone
    carried by $V'$, which is $h_*C(V)$. In model coordinates: $F'=T^{-1}(C(V))=\{a>0,\ b+4a>-6a\}=\{a>0,\ b>-10a\}$, which
    contains $e_1+be_2$ for **all** $b>-10$.
@@ -612,6 +829,69 @@ successor of a model class lives (Lemma 14.1).
      again with a single orbit to cut; the next stage has model class $T\alpha=e_1+(b+4)e_2$, again in the range.
 
    By induction the move is needed at every stage. $\square$
+
+### The two pictures, and what $e_1$ and $e_2$ are
+
+**14.7 Two equivalent pictures.** The same data can be read in two ways.
+- **Picture A (fixed class, moving knots).** In $M_f$ with each stage's own embedding (I1), every stage has the fibre class
+  $[\Sigma]$, and the knots move: $\gamma_1,\gamma_2=\sigma_1,\gamma_3=\sigma_2,\dots$ with $\langle[\Sigma],\gamma_k\rangle=|P_k|$.
+- **Picture B (fixed knots, moving class).** Pull everything back to the model by $\bar h_k$ (I4). The knots become the model's
+  $\gamma,\sigma$, fixed once and for all, and the class becomes $\bar h_k^*[\Sigma]=e_1+(|P_k|-6)e_2$.
+
+They are related by $\langle\bar h_k^*[\Sigma],\gamma\rangle=\langle[\Sigma],\bar h_k(\gamma)\rangle=\langle[\Sigma],\gamma_k\rangle=|P_k|$. Picture B is possible only
+because $\bar h_k$ is **not** isotopic to the identity: an identification isotopic to the identity would fix $[\Sigma]$. So we
+need to know what these self-homeomorphisms of $M_f$ are. Since $\dot M$ is hyperbolic, Corollary 2.3 allows only finitely many
+of them per pair of stages; but each one maps one drilled manifold onto a *different* one ($\gamma\mapsto\sigma$), so iterating it
+is not a self-map of a hyperbolic manifold, and rigidity does not bound its order. On $M_f$ it has infinite order.
+
+**Proposition 14.8 ($e_2$ is the JSJ torus, and a cut is a torus twist).** Let $t\in H^1(M_f;\mathbb Z)$ be the class dual to the JSJ
+torus $T_\delta$ (§2, §11), in the model's embedding. Then:
+1. $e_2=\pm t$.
+2. Every knot of the chain meets $T_\delta$ algebraically once: $\langle t,\gamma_k\rangle=\pm1$ and $\langle t,\sigma_k\rangle=\pm1$.
+3. On $H^1(M_f)$, the step $T$ is the action of a **torus twist** along $T_\delta$: for a curve $c\subset T_\delta$, the twist
+   $\tau_c$ is supported in a collar $T_\delta\times[0,1]$, where it is $(p,s)\mapsto(p+s\cdot c,\,s)$. It acts by
+   $\tau_c^*\alpha=\alpha+\alpha(c)\,t$, and $T=\tau_c^*$ for any $c\subset T_\delta$ with $[\Sigma](c)=\pm4$ (sign as in 1).
+
+*Proof.* (1) $\bar h$ (from Theorem 14.6, step 3) is a homeomorphism of $M_f$. The JSJ torus is unique up to isotopy, so
+$\bar h(T_\delta)$ is isotopic to $T_\delta$, possibly with the opposite orientation, and $T(t)=\bar h^*t=\pm t$. So $t$ is an eigenvector
+of $T$. But $T$ is a non-trivial shear, whose only eigenvectors are the multiples of $e_2$. So $t=\lambda e_2$ for some
+$\lambda\in\mathbb Q$. Now $\lambda=t(\ell_p)=\langle t,\gamma\rangle\in\mathbb Z$, as $e_2(\ell_p)=1$ (Computation 12.4). The class $t$ takes the value $1$ on a
+loop in a fibre that crosses $\delta$ once ($\delta$ is non-separating), so $e_2$ takes the value $1/\lambda$ there. But $e_2$ is integral:
+it belongs to the integral basis dual to $X,T$ (Conjecture 16.6). Restriction from $M_f$ to $\dot M$ is an isomorphism on
+$H^1(\,\cdot\,;\mathbb Z)$ as well, since the kernel of $H_1(\dot M)\to H_1(M_f)$ is generated by the torsion meridians. Hence $\lambda=\pm1$.
+(2) $\bar h_k$ is a homeomorphism of $M_f$, so it also preserves $T_\delta$ up to isotopy: $\bar h_k^*t=\pm t$. Then
+$\langle t,\gamma_k\rangle=\langle t,\bar h_k(\gamma)\rangle=\langle\bar h_k^*t,\gamma\rangle=\pm\langle t,\gamma\rangle=\pm e_2(\ell_p)=\pm1$. The same for $\sigma_k$, with $e_2(\ell_s)=1$.
+(3) In the collar, a cycle that crosses $T_\delta$ once picks up one copy of $c$: $(\tau_c)_*z=z+\langle t,z\rangle\,c$. Dualise:
+$\tau_c^*\alpha(z)=\alpha(z)+\langle t,z\rangle\,\alpha(c)$. With $t=\varepsilon e_2$, the map $\tau_c^*$ fixes $e_2$ (as $t(c)=0$ for a curve on $T_\delta$)
+and sends $e_1=[\Sigma]$ to $e_1+\varepsilon[\Sigma](c)\,e_2$. This equals $T$ when $\varepsilon[\Sigma](c)=4$. $\square$
+
+*Picture of the classes.* In $M_f$ with the model's embedding:
+- **$e_1=[\Sigma]$** is the fibre of the model stage.
+- **$e_2$ is the JSJ torus $T_\delta$**, the suspension of the curve $\delta$ along which $f$ twists. It lies on the boundary of
+  the fibred cone and is not a fibre. In the drilled manifolds it is a punctured torus (each knot crosses it once). This matches
+  the computed norms: $x_{\dot M}(e_2)=2$ (twice-punctured torus) and $x_M(e_2)=1$ (once-punctured torus).
+- **The stage class $e_1+b\,e_2$** is represented by the oriented double-curve sum of $\Sigma$ and $b$ parallel copies of $T_\delta$.
+  They meet along $b$ copies of $\delta$, and the cut-and-paste gives a closed surface with
+  $\chi=\chi(\Sigma)+b\,\chi(T^2)=-2$: again $\chi=-2$, as it must be, because it represents the same class as the stage's fibre
+  $\Sigma$ seen from the model, $\bar h_k^{-1}(\Sigma)$ (copies with the opposite orientation for $b<0$). The fixed knot $\gamma$ meets $\Sigma$ six times and each torus copy once, so it meets the surface $6+b=|P|$ times.
+- **Each cut adds four copies of the JSJ torus to the fibre.** Equivalently, it pushes the fibre four times around through
+  $T_\delta$: that is the torus twist of (3).
+
+*Is $T$ induced by $f$?* No. On $M_f$, the map induced by $f$ is $(x,s)\mapsto(f(x),s)\sim(x,s+1)$, the time-1 map of the suspension
+flow, which is isotopic to the identity (§2) and acts trivially on $H^1(M_f)$. The $4\times4$ matrix $f_*$ of Computation 11.1
+acts on $H_1(\Sigma)$, i.e. inside one fibre. It enters only through Lemma 1.2: $b_1(M_f)=2$, and the rank-1 defect of $f_*^4-I$
+is what produces the torus $T_\delta$ in the first place. The twist $T$ lives "across" the fibres.
+
+*Where the 4 comes from.* Within this proof, from the index formula: $T(e_1)(\ell_p)=[\Sigma](\sigma)=|Q|=|P|+4$
+(Proposition 13.1, $4=4g-4$). There is a second natural 4 on $T_\delta$. $f$ is periodic of order 4 on $\Sigma\setminus\delta$, and a
+non-trivial orientation-preserving periodic map cannot fix a boundary circle pointwise. So the points of $\delta$ have period
+exactly 4, and the regular Seifert fibres of the piece $M_f\setminus T_\delta$ meet $T_\delta$ in curves $c$ with $[\Sigma](c)=4$. So on
+$H^1$, $T$ is the twist along the **Seifert fibre direction** of the JSJ torus. On $H^1$ only $[\Sigma](c)$ matters: twists along
+$c$ and along $c+m\delta$ act identically. Whether the two 4s are related, and whether $\bar h$ itself is isotopic to such a twist
+(not just equal to it on $H^1$), is open (Question 5 in §16). Genus 2 cannot tell them apart, because $4g-4=4$.
+
+**Corollary 14.9 (homological reason for Lemma 13.4).** No $\gamma_k$ can be isotoped off $T_\delta$, because its algebraic
+intersection number with $T_\delta$ is $\pm1$ (Proposition 14.8(2)), and algebraic intersection numbers are invariant under isotopy.
 
 **What is computed, and how reliable it is.**
 
@@ -716,8 +996,11 @@ $V$ (§6).
   found such families as fibrations of the magic manifold. Brinkmann's family has $\lambda\to1$ with growing genus instead.
 - **The two ends of the cone.** At $b\to-6$ ($P\to0$) the fibre stops meeting $\gamma$; at $b\to\infty$ the class approaches $e_2$. Both
   are boundary rays, where $\lambda\to1$. The cut is the shear $b\mapsto b+4$ towards the second one.
-- **The cusp swap.** $\dot M$ has an isometry exchanging its cusps. With Lemma 9.1 this gives directly
-  $M_f\setminus\gamma_k\cong M_f\setminus\sigma_k$, i.e. $M_k\cong M_{k+1}$ (the manifold, not yet the class).
+- **The cusp swap.** $\dot M_k$ has an isometry $s$ exchanging its cusps. By Lemma 9.2, $s$ maps meridian to meridian, so it
+  extends over the filled cusps. Filling $c_s$ gives $M_f\setminus\gamma_k=M_k$, filling $c_p$ gives $M_f\setminus\sigma_k=M_{k+1}$
+  (Lemma 11.2), and the extension of $s$ maps the first onto the second: $M_k\cong M_{k+1}$ (the manifold, not yet the class).
+  This is a different kind of identification from $\bar h$ of Theorem 14.6, which maps the puncture cusp to the puncture cusp
+  (Computation 12.4) and is the one used in the proof.
 
 **Conjecture 16.7 (general picture).**
 1. Along an endless chain, $\lambda_k\to e^{h(f)}$ (the bound of Lemma 16.4), geometrically fast.
@@ -730,6 +1013,9 @@ $V$ (§6).
 2. Can the self-similarity be seen on the surface, as an explicit braid of $Q$ in $\Sigma$ that reproduces itself?
 3. For the persistent-orbit chains (16.3): are their stages also fibrations of one manifold, with a shear by $4+2s$?
 4. Can one detect an endless chain early (for example from the period pattern of the orbits) and switch to another choice?
+5. Is the step homeomorphism $\bar h$ of $M_f$ (Theorem 14.6) isotopic to a torus twist along $T_\delta$, or does it only act like one
+   on $H^1$ (Proposition 14.8)? Is the shear $4$ the Euler-characteristic $4g-4$ or the order of $f$ on $\Sigma\setminus\delta$? A genus-3
+   example would separate the two.
 
 ---
 
@@ -740,24 +1026,30 @@ $V$ (§6).
 - J. Birman, *Mapping class groups and their relationship to braid groups*, Comm. Pure Appl. Math. 22 (1969).
 - P. Brinkmann, *A note on pseudo-Anosov maps with small growth rate*, Experiment. Math. 13 (2004). [arXiv:math/0309411](https://arxiv.org/abs/math/0309411)
 - M. Culler, N. Dunfield, M. Goerner, J. Weeks, *SnapPy*, a computer program for studying the geometry and topology of 3-manifolds.
+- C. J. Earle, J. Eells, *A fibre bundle description of Teichmüller theory*, J. Differential Geom. 3 (1969).
 - B. Farb, D. Margalit, *A primer on mapping class groups*, Princeton (2012).
 - A. Fathi, F. Laudenbach, V. Poénaru, *Travaux de Thurston sur les surfaces*, Astérisque 66–67 (1979); English translation *Thurston's work on surfaces*, Princeton (2012).
 - D. Fried, *The geometry of cross sections to flows*, Topology 21 (1982); *Flow equivalence, hyperbolic systems and a new zeta function for flows*, Comment. Math. Helv. 57 (1982).
 - F. Guéritaud, *Veering triangulations and Cannon–Thurston maps*, J. Topol. 9 (2016).
+- M.-E. Hamstrom, *Homotopy groups of the space of homeomorphisms on a 2-manifold*, Illinois J. Math. 10 (1966).
 - C. Hodgson, H. Rubinstein, H. Segerman, S. Tillmann, *Veering triangulations admit strict angle structures*, Geom. Topol. 15 (2011).
 - A. Issa, *Veering triangulations and the Bestvina–Handel algorithm*, Master's thesis, University of Melbourne.
 - W. Jaco, P. Shalen, *Seifert fibered spaces in 3-manifolds*, Mem. Amer. Math. Soc. 220 (1979); K. Johannson, *Homotopy equivalences of 3-manifolds with boundaries*, LNM 761 (1979).
 - E. Kin, S. Kojima, M. Takasawa, *Minimal dilatations of pseudo-Anosovs generated by the magic 3-manifold and their asymptotic behavior*, Algebr. Geom. Topol. 13 (2013).
 - I. Kra, *On the Nielsen–Thurston–Bers type of some self-maps of Riemann surfaces*, Acta Math. 146 (1981).
 - M. Landry, Y. Minsky, S. Taylor, *A polynomial invariant for veering triangulations*, J. Eur. Math. Soc. (2023); *Flows, growth rates, and the veering polynomial*, Ergodic Theory Dynam. Systems (2023).
+- F. Laudenbach, S. Blank, *Isotopie de formes fermées en dimension trois*, Invent. Math. 54 (1979).
 - C. McMullen, *Polynomial invariants for fibered 3-manifolds and Teichmüller geodesics for foliations*, Ann. Sci. École Norm. Sup. 33 (2000).
 - Y. Minsky, S. Taylor, *Fibered faces, veering triangulations, and the arc complex*, Geom. Funct. Anal. 27 (2017).
+- G. D. Mostow, *Quasi-conformal mappings in n-space and the rigidity of hyperbolic space forms*, Publ. Math. IHÉS 34 (1968).
 - J.-P. Otal, *The hyperbolization theorem for fibered 3-manifolds*, SMF/AMS Texts and Monographs 7 (2001).
 - A. Parlak, *Computation of the taut, the veering and the Teichmüller polynomials*, Experiment. Math. (2021).
 - R. Penner, *Bounds on least dilatations*, Proc. Amer. Math. Soc. 113 (1991).
+- G. Prasad, *Strong rigidity of Q-rank 1 lattices*, Invent. Math. 21 (1973).
 - P. Scott, *The geometries of 3-manifolds*, Bull. London Math. Soc. 15 (1983).
 - W. Thurston, *A norm for the homology of 3-manifolds*, Mem. Amer. Math. Soc. 339 (1986); *Hyperbolic structures on 3-manifolds II*, [arXiv:math/9801045](https://arxiv.org/abs/math/9801045).
 - C.-Y. Tsai, *The asymptotic behavior of least pseudo-Anosov dilatations*, Geom. Topol. 13 (2009).
+- F. Waldhausen, *On irreducible 3-manifolds which are sufficiently large*, Ann. of Math. 87 (1968).
 
 ## Reproducing the computations
 
