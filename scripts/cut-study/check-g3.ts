@@ -11,6 +11,6 @@ for (const [name, text] of Object.entries(maps)) {
   console.log(name, fs.checkIntegrity().join(";") || "OK");
 }
 for (const k of ["k₁", "k₂"]) {
-  const fs = buildExample({ id: "", family: "", genus: 3, polygon: g3, reversed: [], maps: [{ name: "x", text: (maps as any)[`D_${k}`] }, { name: "y", text: (maps as any)[`D_${k}⁻¹`] }] });
+  const fs = buildExample({ id: "", family: "", genus: 3, polygon: g3, reversed: [], maps: [{ name: "x", text: (maps as Record<string, string>)[`D_${k}`] }, { name: "y", text: (maps as Record<string, string>)[`D_${k}⁻¹`] }] });
   console.log(k, fs.g.toString().replace(/\n/g, " | "));
 }

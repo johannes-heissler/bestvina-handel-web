@@ -35,7 +35,6 @@ const quantiles = (xs, qs = [0, 0.25, 0.5, 0.75, 0.9, 1]) => {
   const s = [...xs].sort((a, b) => a - b);
   return s.length === 0 ? [] : qs.map((q) => s[Math.round(q * (s.length - 1))]);
 };
-const mean = (xs) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : NaN);
 const familyOf = new Map(roots.map((r) => [r.example, r.family]));
 const genusOf = new Map(roots.map((r) => [r.example, r.genus]));
 

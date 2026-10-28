@@ -288,7 +288,7 @@ export function nodeInfo(fs: FibredSurface): NodeInfo {
 
 /** The outcome after a run of the autopilot: another decision, or a leaf. */
 export function outcomeOf(surface: FibredSurface, stoppedAt: Suggestion) {
-  let track: { growth?: number; punctures?: number; shape?: ReturnType<typeof trackShape>; trackError?: string } = {};
+  let track: { growth?: number; punctures?: number; shape?: ReturnType<typeof trackShape>; trackError?: string };
   try {
     const tt = trainTrack(surface);
     track = { growth: tt.growth, punctures: punctureCount(tt), shape: trackShape(tt) };

@@ -13,7 +13,7 @@
  * Triangles are identified by their cusp (the corner between the two small edges): splitting keeps the cusps of the
  * complementary regions, and φ permutes them as it permutes the cusps of τ (computed from g_τ).
  */
-import type { OrientedEdge, Edge, Vertex } from "../../src/graph/ribbon-graph";
+import type { OrientedEdge } from "../../src/graph/ribbon-graph";
 import type { TrainTrack } from "../../src/fibred/train-track";
 
 // ─── A trivalent ribbon graph with weights (dual: an ideal triangulation of S°) ─────────────────────
@@ -104,7 +104,7 @@ export function trivalentTrack(tt: TrainTrack): TrackData {
       const firstSide = star.filter((h) => isReal.get(h) === isReal.get(star[0] as number));
       return { a: firstSide, b: star.slice(firstSide.length) };
     };
-    let { a, b } = sides();
+    const { a, b } = sides();
     if (a.length === 0 || b.length === 0) throw new Error(`Switch ${s.name} has an empty side`);
     // Comb: merge the first two half-edges of a side into a new branch towards a new switch.
     while (a.length + b.length > 3) {
@@ -314,7 +314,7 @@ export function agol(data: TrackData, maxLayers = 20000, tol = 1e-9): { n: numbe
         seen.add(h).add(T.twin[h] as number);
       }
     }
-    for (const h of toFlip) onFlip ? onFlip(h) : flip(h);
+    for (const h of toFlip) (onFlip ?? flip)(h);
     if (record) flips.push(toFlip.map((e) => ({ e })));
     // Rescale to keep magnitudes near 1.
     let m2 = 0;
@@ -465,7 +465,6 @@ export function veeringTriangulation(build: () => TrackData): Veering & { data: 
     return f.halves[i] !== L && f.halves[(i + 1) % 3] !== L;
   }) as number;
   void bottomFaces;
-  const topByLabel = new Map([...faces.values()].map((f) => [f.label, f]));
   const bottomCusp = new Map<string, number>();
   // The cusp corner of a first-layer face, computed before it was flipped: recompute from its stored large side.
   for (const [label, f] of bottomFaces) bottomCusp.set(label, (f as Face & { cusp?: number }).cusp ?? -1);

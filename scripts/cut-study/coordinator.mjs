@@ -81,7 +81,9 @@ function launch(entry) {
     try {
       unlinkSync(jobPath);
       if (existsSync(resultPath)) unlinkSync(resultPath);
-    } catch {}
+    } catch {
+      // The files may already be gone.
+    }
     entry.resolve({ ...result, wallMs: Date.now() - started });
     pump();
   });

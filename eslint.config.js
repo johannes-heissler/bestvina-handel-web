@@ -32,4 +32,23 @@ export default tseslint.config(
     files: ["src/render/**/*.ts", "src/ui/**/*.ts", "src/main.ts"],
     rules: { "no-restricted-imports": "off" },
   },
+  {
+    // Research scripts run with Node; like tests, they may assert that a value exists.
+    files: ["scripts/**"],
+    languageOptions: {
+      globals: {
+        console: "readonly",
+        process: "readonly",
+        performance: "readonly",
+        setTimeout: "readonly",
+        clearTimeout: "readonly",
+        setInterval: "readonly",
+      },
+    },
+    rules: {
+      "@typescript-eslint/no-non-null-assertion": "off",
+      // Destructuring to leave out fields: const { a, b, ...rest } = r.
+      "@typescript-eslint/no-unused-vars": ["error", { ignoreRestSiblings: true }],
+    },
+  },
 );

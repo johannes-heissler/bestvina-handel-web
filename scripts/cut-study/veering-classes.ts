@@ -10,7 +10,7 @@ const build = (file: string) => {
   const tt = trainTrack(fs);
   const v = veeringTriangulation(() => trivalentTrack(tt));
   const punctures = tt.boundaryWords().filter((b) => !b.infinitesimal).length;
-  return { v, λ: tt.growth, punctures, name: file.split(/[\/]/).slice(-2).join("/") };
+  return { v, λ: tt.growth, punctures, name: file.split(/[/]/).slice(-2).join("/") };
 };
 const [modelFile, ...files] = process.argv.slice(2) as [string, ...string[]];
 const model = build(modelFile);

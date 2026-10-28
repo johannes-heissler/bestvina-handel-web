@@ -103,7 +103,6 @@ function divmod(a, b) {
   return { q: trim(q), r: trim(r) };
 }
 const isZero = (a) => trim(a).every((x) => x === 0n);
-function mulPoly(a, b) { const c = new Array(a.length + b.length - 1).fill(0n); a.forEach((x, i) => b.forEach((y, j) => (c[i + j] += x * y))); return c; }
 
 const cyclotomic = new Map();
 export function phi(m) {
