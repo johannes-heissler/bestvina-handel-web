@@ -6,20 +6,29 @@
  */
 
 /**
- * The name of the inverse edge: lowercase if the first letter of `name` is uppercase, otherwise
- * uppercase. The C# `ReverseUpper`, which crashed for names without a letter.
+ * The name of the inverse edge: the part before the indices in lowercase if its first letter is uppercase, otherwise
+ * in uppercase; the indices keep their case ("b_a" ↔ "B_a"). The C# `ReverseUpper`, which crashed for names without a
+ * letter.
  *
- * @throws Error if `name` contains no letter, since its inverse couldn't be told apart from it.
+ * @throws Error if `name` contains no letter before its indices, since its inverse couldn't be told apart from it.
  */
 export function invertName(name: string): string {
-  const firstLetter = [...name].find((c) => c.toLowerCase() !== c.toUpperCase());
-  if (firstLetter === undefined) throw new Error(`The edge name "${name}" contains no letter`);
-  return firstLetter === firstLetter.toUpperCase() ? name.toLowerCase() : name.toUpperCase();
+  const main = withoutIndices(name);
+  const inverted = isForwardName(name) ? main.toUpperCase() : main.toLowerCase();
+  return inverted + name.slice(main.length);
 }
 
-/** Whether `name` denotes a forward orientation, i.e. its first letter is lowercase. */
+/** Whether `name` denotes a forward orientation, i.e. its first letter (before the indices) is lowercase. */
 export function isForwardName(name: string): boolean {
-  return invertName(name) !== name.toLowerCase();
+  const firstLetter = [...withoutIndices(name)].find((c) => c.toLowerCase() !== c.toUpperCase());
+  if (firstLetter === undefined) throw new Error(`The edge name "${name}" contains no letter`);
+  return firstLetter !== firstLetter.toUpperCase();
+}
+
+/** The name without its indices: "b_a_1" → "b". */
+export function withoutIndices(name: string): string {
+  const i = name.indexOf("_");
+  return i < 0 ? name : name.slice(0, i);
 }
 
 /*
@@ -125,6 +134,9 @@ function bijectiveBase(k: number, digits: string): string {
 
 // ─── Lists of names ─────────────────────────────────────────────────────────────────────────
 
+/** The letters that {@link EDGE_NAMES} leaves out. */
+const RESERVED_EDGE_NAMES: ReadonlySet<string> = new Set("efgμσλ");
+
 /**
  * Names for new edges, in order of preference. As in C#, e, f and g are left out (they denote edges and maps in the
  * text). Unlike C#, μ, σ and λ are left out as well, since they denote the inverse marking, the cyclic order and the
@@ -168,4 +180,29 @@ export function freeName(existing: Iterable<string>, name: string): string {
   let candidate = name;
   while (used.has(nameKey(candidate))) candidate += "_1";
   return candidate;
+}
+
+/**
+ * New names for the edges `names` (forward, stored form) that have indices: the first edge with a given name before
+ * the indices gets just that name ("b_5" → "b"), unless an edge without indices has it or it is reserved (e, f, g, …);
+ * the others get the first unused names of `fresh` ("b_27" → "a"). Edges without indices keep their names. The result
+ * maps each old name that changes to its new one, in the order of `names`.
+ */
+export function tidiedNames(names: readonly string[], fresh: readonly string[]): Map<string, string> {
+  const indexed = names.filter((name) => withoutIndices(name) !== name);
+  const used = new Set(names.filter((name) => withoutIndices(name) === name).map(nameKey));
+  const renamed = new Map<string, string>();
+  for (const name of indexed) {
+    const main = withoutIndices(name);
+    if (used.has(nameKey(main)) || RESERVED_EDGE_NAMES.has(main)) continue;
+    used.add(nameKey(main));
+    renamed.set(name, main);
+  }
+  // Only now the fresh names, so that they don't take a name that drops its indices.
+  for (const name of indexed.filter((x) => !renamed.has(x))) {
+    const next = firstUnusedName(fresh, used);
+    used.add(nameKey(next));
+    renamed.set(name, next);
+  }
+  return new Map(indexed.map((name) => [name, renamed.get(name) as string]));
 }

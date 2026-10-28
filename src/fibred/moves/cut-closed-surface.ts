@@ -9,7 +9,7 @@
 import { CombinatorialMap } from "../../graph/combinatorial-map";
 import { Color } from "../../math/color";
 import { EdgePath } from "../../graph/edge-path";
-import { letterIndex } from "../../graph/names";
+import { EDGE_NAMES, letterIndex, tidiedNames } from "../../graph/names";
 import type { Edge, OrientedEdge, Vertex } from "../../graph/ribbon-graph";
 import {
   cut,
@@ -519,7 +519,31 @@ export function cutClosedSurface(tt: TrainTrack, option: CutOption, remarking?: 
   );
   if (remarking !== undefined) surface = finishRemarking(surface, remarking);
   mergeAllValenceTwoLines(surface, "Removing B left valence-2 lines.");
+  renameStrips(surface);
   return { surface, prong: option.prong, realBranches: option.realBranches, cut: full };
+}
+
+/**
+ * The last step of the cut: the strips are pieces of branches of τ and of the polygons, with indices that mean nothing
+ * any more after the merges. They get plain names (see {@link tidiedNames}), in one narrated step.
+ */
+function renameStrips(surface: FibredSurface): void {
+  const renamed = tidiedNames(surface.graph.edges.map((e) => e.name), EDGE_NAMES);
+  if (renamed.size === 0) return;
+  narrate(
+    [
+      "Rename the strips: ",
+      ...[...renamed].flatMap(([from, to], i): TextPart[] => [
+        ...(i === 0 ? [] : [", "]),
+        { strip: from },
+        " → ",
+        { strip: to },
+      ]),
+      ".",
+    ],
+    { before: keepingStates() ? surface.copy() : undefined },
+  );
+  for (const e of surface.graph.edges) e.name = renamed.get(e.name) ?? e.name;
 }
 
 /** The step of blowing up the junctions of the new punctures into their polygons, for the narration. */

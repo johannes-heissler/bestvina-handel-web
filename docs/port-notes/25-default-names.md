@@ -92,3 +92,16 @@ generated name should either come from a list of letters, or carry its index as 
 - τ: switch and infinitesimal branch names; `junctionPartName` with overflow past z.
 - Chord labels in the chart decorations and in the SVG.
 - A version-3 session file replays with the old names (v0, α, `b@1`, ε1).
+
+## Update: inverse names with indices, and plain names after the cut (2026-10-28)
+
+Asked by the author, in the conversation:
+
+- **Inverses.** Only the name before the indices changes case: the inverse of `b_a` is `B_a` (it was `B_A`), and of
+  `w_γ_1` it is `W_γ_1`. `invertName` and `isForwardName` look only at that part. The fixtures in
+  `closed-surface-fixtures.ts` were rewritten to this spelling.
+- **After the cut**, the strips are pieces of branches of τ with indices that mean nothing after the merges
+  (`b_5` with no `b`, next to `b_27`). The cut ends with one narrated step "Rename the strips: b_5 → b, b_27 → a, …"
+  (`tidiedNames`): the first strip with a given name before its indices gets just that name, unless a strip without
+  indices has it or it is reserved (e, f, g, μ, σ, λ); the others get the first free names of `EDGE_NAMES`. No
+  compatibility: no saved session or link refers to strip names after a cut.

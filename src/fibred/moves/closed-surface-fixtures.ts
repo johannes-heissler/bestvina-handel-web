@@ -84,14 +84,14 @@ export const awayFromQ = (): FibredSurface =>
   build(
     [
       ["v_4_b", ["A", "w_γ_1", "u_4", "A_2", "X"]],
-      ["v_5_c", ["s_γ_1", "c_15", "u_3", "W_Γ_1"]],
+      ["v_5_c", ["s_γ_1", "c_15", "u_3", "W_γ_1"]],
       ["w", ["D", "a", "C"]],
       ["v", ["U_4", "U_3", "c"]],
       ["q", ["Z_9", "a_2", "d"]],
-      ["r", ["S_Γ_1", "z_9", "b"]],
+      ["r", ["S_γ_1", "z_9", "b"]],
       ["p", ["C_15", "B", "x"]],
     ],
-    "s_γ_1 ↦ x u_4 c a X B z_9 d C U_3 c_15 x A_2, c_15 ↦ x A_2 d a w_γ_1 s_γ_1, w_γ_1 ↦ u_4 c a X B z_9 d C U_3 c_15 x A_2 d a w_γ_1 s_γ_1 b x u_4 c a X B z_9 d C U_3 c_15 x A_2 d a w_γ_1 s_γ_1 b, u_4 ↦ u_4 c a X B z_9 d C U_3 c_15 x A_2 d a w_γ_1 s_γ_1 b x u_4 c a X B z_9 d C U_3 c_15 x A_2 d a w_γ_1, a ↦ a X B z_9 d a, c ↦ u_3 c, d ↦ c a X B z_9 d, a_2 ↦ U_3 W_Γ_1 A D a_2 X C_15 u_3 c D Z_9 b x A C U_4 X B S_Γ_1 W_Γ_1 A D a_2 X C_15 u_3 c D Z_9 b x A C U_4, z_9 ↦ d a u_4, b ↦ Z_9, x ↦ b x, u_3 ↦ C_15",
+    "s_γ_1 ↦ x u_4 c a X B z_9 d C U_3 c_15 x A_2, c_15 ↦ x A_2 d a w_γ_1 s_γ_1, w_γ_1 ↦ u_4 c a X B z_9 d C U_3 c_15 x A_2 d a w_γ_1 s_γ_1 b x u_4 c a X B z_9 d C U_3 c_15 x A_2 d a w_γ_1 s_γ_1 b, u_4 ↦ u_4 c a X B z_9 d C U_3 c_15 x A_2 d a w_γ_1 s_γ_1 b x u_4 c a X B z_9 d C U_3 c_15 x A_2 d a w_γ_1, a ↦ a X B z_9 d a, c ↦ u_3 c, d ↦ c a X B z_9 d, a_2 ↦ U_3 W_γ_1 A D a_2 X C_15 u_3 c D Z_9 b x A C U_4 X B S_γ_1 W_γ_1 A D a_2 X C_15 u_3 c D Z_9 b x A C U_4, z_9 ↦ d a u_4, b ↦ Z_9, x ↦ b x, u_3 ↦ C_15",
   );
 
 /**
@@ -102,14 +102,14 @@ export const awayFromQ = (): FibredSurface =>
 export const falseCorner = (): FibredSurface =>
   build(
     [
-      ["v_12", ["b", "V_1_Α", "q_β", "Q_Γ", "P_Γ", "r_α", "T_Δ", "B", "z"]],
-      ["w", ["U", "v_1_α", "S_Δ"]],
+      ["v_12", ["b", "V_1_α", "q_β", "Q_γ", "P_γ", "r_α", "T_δ", "B", "z"]],
+      ["w", ["U", "v_1_α", "S_δ"]],
       ["q", ["p_γ", "C", "r_δ"]],
       ["r", ["q_γ", "D", "c"]],
-      ["s", ["Q_Β", "X", "d"]],
+      ["s", ["Q_β", "X", "d"]],
       ["t", ["t_δ", "Y", "x"]],
       ["v_2", ["s_δ", "Z", "y"]],
-      ["v_1", ["R_Α", "R_Δ", "u"]],
+      ["v_1", ["R_α", "R_δ", "u"]],
     ],
-    "v_1_α ↦ v_1_α b z y x d c r_δ u v_1_α b r_α u S_Δ Z b z y x d c r_δ u v_1_α, b ↦ b z y x d c r_δ u v_1_α b z y x d c r_δ u v_1_α b r_α u S_Δ Z b z y x d c r_δ u v_1_α b z y x d c r_δ u v_1_α b, r_α ↦ r_α u v_1_α b T_Δ Y, z ↦ z y, q_β ↦ Q_Γ, r_δ ↦ u v_1_α b r_α u S_Δ, p_γ ↦ R_Α, c ↦ r_δ, q_γ ↦ p_γ, d ↦ c, x ↦ d, t_δ ↦ Q_Β V_1_Α U R_Δ C D X Y Z B z s_δ U R_Α B V_1_Α U R_Δ C D X Y Z B V_1_Α U R_Δ C D X Y Z B z s_δ U R_Α B V_1_Α U R_Δ C D X Y Z B V_1_Α U R_Δ C D X Y Z B V_1_Α U R_Δ C D X Y Z B z s_δ U R_Α B V_1_Α U R_Δ C D X Y Z B V_1_Α U R_Δ C D X Y Z B z y t_δ B V_1_Α U R_Α, s_δ ↦ t_δ B V_1_Α U R_Α B V_1_Α U R_Δ C D X Y Z B V_1_Α U R_Δ C D X Y Z B z s_δ U R_Α B V_1_Α U R_Δ C D X Y Z B V_1_Α U R_Δ C D X Y Z B V_1_Α U R_Δ C D X Y Z B z s_δ U R_Α B V_1_Α U R_Δ C D X Y Z B V_1_Α, y ↦ x, u ↦ Z b z y x d c r_δ u",
+    "v_1_α ↦ v_1_α b z y x d c r_δ u v_1_α b r_α u S_δ Z b z y x d c r_δ u v_1_α, b ↦ b z y x d c r_δ u v_1_α b z y x d c r_δ u v_1_α b r_α u S_δ Z b z y x d c r_δ u v_1_α b z y x d c r_δ u v_1_α b, r_α ↦ r_α u v_1_α b T_δ Y, z ↦ z y, q_β ↦ Q_γ, r_δ ↦ u v_1_α b r_α u S_δ, p_γ ↦ R_α, c ↦ r_δ, q_γ ↦ p_γ, d ↦ c, x ↦ d, t_δ ↦ Q_β V_1_α U R_δ C D X Y Z B z s_δ U R_α B V_1_α U R_δ C D X Y Z B V_1_α U R_δ C D X Y Z B z s_δ U R_α B V_1_α U R_δ C D X Y Z B V_1_α U R_δ C D X Y Z B V_1_α U R_δ C D X Y Z B z s_δ U R_α B V_1_α U R_δ C D X Y Z B V_1_α U R_δ C D X Y Z B z y t_δ B V_1_α U R_α, s_δ ↦ t_δ B V_1_α U R_α B V_1_α U R_δ C D X Y Z B V_1_α U R_δ C D X Y Z B z s_δ U R_α B V_1_α U R_δ C D X Y Z B V_1_α U R_δ C D X Y Z B V_1_α U R_δ C D X Y Z B z s_δ U R_α B V_1_α U R_δ C D X Y Z B V_1_α, y ↦ x, u ↦ Z b z y x d c r_δ u",
   );

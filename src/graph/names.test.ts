@@ -5,10 +5,13 @@ import {
   EDGE_NAMES,
   freeName,
   greekIndex,
+  invertName,
+  isForwardName,
   letterIndex,
   nameKey,
   nameParts,
   PERIPHERAL_EDGE_NAMES,
+  tidiedNames,
   VERTEX_NAMES,
 } from "./names";
 
@@ -44,6 +47,34 @@ describe("indices in names", () => {
       "aaa",
     ]);
     expect([0, 1, 23, 24].map(greekIndex)).toEqual(["α", "β", "ω", "αα"]);
+  });
+});
+
+describe("inverse names", () => {
+  it("swap the case of the name before its indices, not of the indices", () => {
+    expect(invertName("a")).toBe("A");
+    expect(invertName("Ab")).toBe("ab");
+    expect(invertName("b_a")).toBe("B_a");
+    expect(invertName("B_a")).toBe("b_a");
+    expect(invertName("w_γ_1")).toBe("W_γ_1");
+    expect(invertName("c_15")).toBe("C_15");
+    expect(isForwardName("b_a")).toBe(true);
+    expect(isForwardName("B_a")).toBe(false);
+    expect(() => invertName("_a")).toThrow();
+  });
+});
+
+describe("tidied names", () => {
+  it("drop indices where the name before them is free, and give fresh names to the others", () => {
+    const renamed = tidiedNames(["b_5", "y", "b_27", "y_2", "e_3", "c_1_a"], ["a", "b", "c", "d", "x"]);
+    expect([...renamed]).toEqual([
+      ["b_5", "b"],
+      ["b_27", "a"],
+      ["y_2", "d"], // y is taken, and so are a, b and c
+      ["e_3", "x"], // e is reserved
+      ["c_1_a", "c"],
+    ]);
+    expect(tidiedNames(["a", "b"], ["a"]).size).toBe(0);
   });
 });
 

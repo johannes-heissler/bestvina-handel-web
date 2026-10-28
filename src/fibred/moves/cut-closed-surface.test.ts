@@ -87,6 +87,9 @@ describe("closed surfaces: cutting along a singular leaf (the thesis's move)", (
     expect(surface.checkIntegrity()).toEqual([]);
     expect(surface.g.preservesBoundaryWords()).toBe(true);
     expect(surface.graph.vertices).toHaveLength(6);
+    // The pieces of the branches of τ get plain names at the end.
+    expect(texts.at(-1)).toMatch(/^Rename the strips: /);
+    for (const e of surface.graph.edges) expect(e.name).not.toContain("_");
   });
 
   it("reaches the same growth when cutting at the singularity q (period 2)", { timeout: 30_000 }, () => {

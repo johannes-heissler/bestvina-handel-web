@@ -125,8 +125,8 @@ describe("the timeline of a cut on the point push", () => {
 
   it("draws the states after a cut without a model for the new G₀ as ribbon graphs (surface not marked closed)", () => {
     const session = atEnd();
-    // (cut in one go; then the valence-2 lines are merged before removing B, port note 28)
-    expect(drawsEveryMoment(session, cutFrom(session)).steps).toHaveLength(4);
+    // (cut in one go; then the valence-2 lines are merged before removing B, port note 28; then the strips are renamed)
+    expect(drawsEveryMoment(session, cutFrom(session)).steps).toHaveLength(5);
   });
 
   it("shows the cut branch by branch in the compact polygon after marking the surface as closed", () => {

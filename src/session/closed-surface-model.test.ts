@@ -74,8 +74,8 @@ describe("closed-surface moves in the original polygon", () => {
       // The state with p filled in and the wall comes before the slide, as a step of its own.
       const walled = preview.steps.map((step) => modelOfSpine(step.after.spine0));
       expect(walled.some((m) => m?.kind === "polygon" && m.closed && (m.points ?? []).length > 0)).toBe(true);
-      // The slide comes last, except for merging the valence-2 lines that are left (port note 28).
-      expect(lastBeforeMerging(preview.steps)).toMatch(/^Slide the new puncture/);
+      // The slide comes last, except for merging the valence-2 lines that are left (port note 28) and renaming the strips.
+      expect(lastBeforeTidying(preview.steps)).toMatch(/^Slide the new puncture/);
       // Every state of the narration can be drawn, and the cut shows several of them.
       for (const step of preview.steps) drawable(step.after, before.model);
       // … with μ tight at every junction (the slits split switches, whose parts may all lie across one chord).
@@ -151,7 +151,7 @@ describe("cutting again (port note 26)", () => {
     // The walled state: P filled in (the vertex and the point), then the walls contracted.
     const models = preview.steps.map((step) => modelOfSpine(step.after.spine0) as PolygonModel | undefined);
     expect(models.some((m) => m?.closed && m.filled?.length === 1)).toBe(true);
-    expect(lastBeforeMerging(preview.steps)).toMatch(/^Contract the walls/);
+    expect(lastBeforeTidying(preview.steps)).toMatch(/^Contract the walls/);
     const result = modelOfSpine(preview.surface!.spine0) as PolygonModel;
     expect(result).toMatchObject({ kind: "polygon", closed: false });
     expect(result.filled).toBeUndefined();
@@ -175,8 +175,8 @@ describe("cutting again (port note 26)", () => {
   }, 300_000);
 });
 
-/** The text of the last step that doesn't merge valence-2 lines. */
-function lastBeforeMerging(steps: readonly { readonly text: Text }[]): string {
+/** The text of the last step that neither merges valence-2 lines nor renames the strips. */
+function lastBeforeTidying(steps: readonly { readonly text: Text }[]): string {
   const texts = steps.map((step) => plainText(step.text));
-  return texts.findLast((t) => !/^Merge the (\d+ )?valence-2 lines? /.test(t)) ?? "";
+  return texts.findLast((t) => !/^(Merge the (\d+ )?valence-2 lines? |Rename the strips: )/.test(t)) ?? "";
 }
